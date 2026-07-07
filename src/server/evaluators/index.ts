@@ -2,12 +2,14 @@ import { getDb } from '../db'
 import { getListings } from '../scan'
 import { basicEvaluators } from './basic'
 import { transitEvaluators } from './transit'
+import { esoEvaluators } from './eso'
 import type { EvalResult, Evaluator } from './types'
 import type { ListingRow } from '../scan'
 
 export const allEvaluators: Array<Evaluator> = [
   ...basicEvaluators,
   ...transitEvaluators,
+  ...esoEvaluators,
 ]
 
 export interface EvaluationRow {

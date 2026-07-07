@@ -292,6 +292,8 @@ const BADGE_ABBREV: Record<string, string> = {
   purpose: 'Pu',
   walk_to_stop: 'Wk',
   commute: 'Cm',
+  eso_cost: 'El',
+  budget: 'Bd',
 }
 
 function RequirementBadge(props: {

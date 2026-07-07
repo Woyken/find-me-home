@@ -21,8 +21,10 @@
     "@tanstack/solid-router-devtools": "^2.0.0-beta.18",
     "@tanstack/solid-router-ssr-query": "^2.0.0-beta.24",
     "@tanstack/solid-start": "^2.0.0-beta.24",
+    "@types/proj4": "^2.5.6",
     "better-sqlite3": "^12.11.1",
     "cheerio": "^1.2.0",
+    "proj4": "^2.20.9",
     "solid-js": "^2.0.0-beta.15",
     "tailwindcss": "^4.1.18"
   },
