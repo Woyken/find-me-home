@@ -1,11 +1,13 @@
 import { createFileRoute } from '@tanstack/solid-router'
-import { For, Show, createSignal, onCleanup } from 'solid-js'
+import { For, Show, createMemo, createSignal, onCleanup } from 'solid-js'
 import {
   addAruodasPaste,
   fetchListings,
+  startEvaluation,
   startScan,
 } from '../server-functions/listings'
 import type { ListingRow } from '../server/scan'
+import type { EvaluationRow } from '../server/evaluators'
 
 export const Route = createFileRoute('/')({
   loader: () => fetchListings(),
@@ -20,10 +22,18 @@ const SOURCE_COLORS: Record<string, string> = {
   'aruodas-manual': 'bg-rose-100 text-rose-800',
 }
 
+const STATUS_STYLES: Record<string, string> = {
+  pass: 'bg-emerald-500 text-white',
+  fail: 'bg-red-500 text-white',
+  warn: 'bg-amber-400 text-black',
+  unknown: 'bg-gray-200 text-gray-500',
+}
+
 function Dashboard() {
   const initial = Route.useLoaderData()
   const [data, setData] = createSignal(initial())
   const [scanBusy, setScanBusy] = createSignal(false)
+  const [evalBusy, setEvalBusy] = createSignal(false)
   const [showPaste, setShowPaste] = createSignal(false)
 
   let pollTimer: ReturnType<typeof setInterval> | undefined
@@ -31,10 +41,11 @@ function Dashboard() {
   const refresh = async () => {
     const fresh = await fetchListings()
     setData(fresh)
-    if (!fresh.scanRunning && pollTimer) {
+    if (!fresh.scanRunning && !fresh.evaluating && pollTimer) {
       clearInterval(pollTimer)
       pollTimer = undefined
       setScanBusy(false)
+      setEvalBusy(false)
     }
   }
 
@@ -50,6 +61,25 @@ function Dashboard() {
     await startScan()
     startPolling()
   }
+
+  const onEvaluate = async () => {
+    setEvalBusy(true)
+    await startEvaluation()
+    startPolling()
+  }
+
+  const evalsByListing = createMemo(() => {
+    const m = new Map<number, Map<string, EvaluationRow>>()
+    for (const e of data().evaluations) {
+      let inner = m.get(e.listing_id)
+      if (!inner) {
+        inner = new Map()
+        m.set(e.listing_id, inner)
+      }
+      inner.set(e.requirement, e)
+    }
+    return m
+  })
 
   const scanStats = () => {
     const raw = data().lastScan?.stats_json
@@ -81,6 +111,13 @@ function Dashboard() {
             onClick={() => setShowPaste((v) => !v)}
           >
             Paste aruodas listing
+          </button>
+          <button
+            class="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+            disabled={evalBusy() || data().evaluating}
+            onClick={onEvaluate}
+          >
+            {evalBusy() || data().evaluating ? 'Evaluating…' : 'Evaluate'}
           </button>
           <button
             class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
@@ -151,12 +188,19 @@ function Dashboard() {
                   <th class="px-3 py-2">Purpose</th>
                   <th class="px-3 py-2">Cadastral</th>
                   <th class="px-3 py-2">Coords</th>
+                  <th class="px-3 py-2">Requirements</th>
                   <th class="px-3 py-2">Source</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
                 <For each={data().listings}>
-                  {(l) => <ListingTableRow listing={l} />}
+                  {(l) => (
+                    <ListingTableRow
+                      listing={l}
+                      requirements={data().requirements}
+                      evals={evalsByListing().get(l.id)}
+                    />
+                  )}
                 </For>
               </tbody>
             </table>
@@ -167,7 +211,11 @@ function Dashboard() {
   )
 }
 
-function ListingTableRow(props: { listing: ListingRow }) {
+function ListingTableRow(props: {
+  listing: ListingRow
+  requirements: Array<{ requirement: string; label: string; hard: boolean }>
+  evals: Map<string, EvaluationRow> | undefined
+}) {
   const l = props.listing
   const pricePerAre = () =>
     l.price_eur != null && l.area_ares ? l.price_eur / l.area_ares : null
@@ -218,6 +266,15 @@ function ListingTableRow(props: { listing: ListingRow }) {
         </Show>
       </td>
       <td class="px-3 py-2">
+        <div class="flex flex-wrap gap-1">
+          <For each={props.requirements}>
+            {(req) => (
+              <RequirementBadge meta={req} row={props.evals?.get(req.requirement)} />
+            )}
+          </For>
+        </div>
+      </td>
+      <td class="px-3 py-2">
         <span
           class={`rounded px-2 py-0.5 text-xs ${SOURCE_COLORS[l.source] ?? 'bg-gray-100'}`}
         >
@@ -225,6 +282,47 @@ function ListingTableRow(props: { listing: ListingRow }) {
         </span>
       </td>
     </tr>
+  )
+}
+
+const BADGE_ABBREV: Record<string, string> = {
+  size: 'Sz',
+  price: '€',
+  radius: 'Km',
+  purpose: 'Pu',
+  walk_to_stop: 'Wk',
+  commute: 'Cm',
+}
+
+function RequirementBadge(props: {
+  meta: { requirement: string; label: string; hard: boolean }
+  row: EvaluationRow | undefined
+}) {
+  const status = () => props.row?.status ?? 'unknown'
+  const tooltip = () => {
+    if (!props.row) return `${props.meta.label}: not evaluated yet`
+    let evidence = ''
+    try {
+      const items = JSON.parse(props.row.evidence_json ?? '[]') as Array<{
+        source: string
+        detail: string
+      }>
+      evidence = items.map((i) => `[${i.source}] ${i.detail}`).join('\n')
+    } catch {
+      /* ignore */
+    }
+    return `${props.meta.label}: ${props.row.status.toUpperCase()}${props.row.value ? ` — ${props.row.value}` : ''}\nconfidence: ${props.row.confidence ?? '?'}\n${evidence}`
+  }
+  return (
+    <span
+      class={`cursor-help rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold ${STATUS_STYLES[status()] ?? STATUS_STYLES.unknown}`}
+      title={tooltip()}
+    >
+      {BADGE_ABBREV[props.meta.requirement] ?? props.meta.requirement.slice(0, 2)}
+      <Show when={props.row?.value && status() !== 'unknown'}>
+        <span class="ml-1 font-normal">{props.row!.value}</span>
+      </Show>
+    </span>
   )
 }
 

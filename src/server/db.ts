@@ -68,5 +68,12 @@ function migrate(d: Database.Database) {
       evaluated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(listing_id, requirement)
     );
+
+    -- Cache for expensive per-coordinate lookups (Trafi routing, GIS, ...)
+    CREATE TABLE IF NOT EXISTS geo_cache (
+      key TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `)
 }
