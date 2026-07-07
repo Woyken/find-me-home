@@ -14,7 +14,7 @@
  * Research report: session 54870476/files/research-eso.md
  */
 import proj4 from 'proj4'
-import { getDb } from './db'
+import { geoCacheGet, geoCachePut } from './gis'
 
 // LKS94 / Lithuania TM (EPSG:3346)
 proj4.defs(
@@ -176,24 +176,11 @@ const cacheKey = (lat: number, lng: number) =>
   `eso:${lat.toFixed(4)},${lng.toFixed(4)}`
 
 function cacheGet(key: string): NearestNode | null | undefined {
-  const row = getDb()
-    .prepare(
-      `SELECT value_json FROM geo_cache
-       WHERE key = ? AND created_at > datetime('now', '-30 days')`,
-    )
-    .get(key) as { value_json: string } | undefined
-  return row ? (JSON.parse(row.value_json) as NearestNode | null) : undefined
+  return geoCacheGet<NearestNode>(key)
 }
 
 function cachePut(key: string, value: NearestNode | null) {
-  getDb()
-    .prepare(
-      `INSERT INTO geo_cache (key, value_json, created_at)
-       VALUES (?, ?, datetime('now'))
-       ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json,
-                                      created_at = excluded.created_at`,
-    )
-    .run(key, JSON.stringify(value))
+  geoCachePut(key, value)
 }
 
 async function findNearestNode(

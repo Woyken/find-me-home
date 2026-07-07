@@ -3,6 +3,12 @@ import { getListings } from '../scan'
 import { basicEvaluators } from './basic'
 import { transitEvaluators } from './transit'
 import { esoEvaluators } from './eso'
+import { crimeEvaluators } from './crime'
+import { treesEvaluators } from './trees'
+import { waterEvaluators } from './water'
+import { legalEvaluators } from './legal'
+import { noiseEvaluators } from './noise'
+import { livabilityEvaluators } from './livability'
 import type { EvalResult, Evaluator } from './types'
 import type { ListingRow } from '../scan'
 
@@ -10,6 +16,12 @@ export const allEvaluators: Array<Evaluator> = [
   ...basicEvaluators,
   ...transitEvaluators,
   ...esoEvaluators,
+  ...crimeEvaluators,
+  ...treesEvaluators,
+  ...waterEvaluators,
+  ...legalEvaluators,
+  ...noiseEvaluators,
+  ...livabilityEvaluators,
 ]
 
 export interface EvaluationRow {

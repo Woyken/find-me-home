@@ -294,6 +294,12 @@ const BADGE_ABBREV: Record<string, string> = {
   commute: 'Cm',
   eso_cost: 'El',
   budget: 'Bd',
+  crime: 'Cr',
+  trees: 'Tr',
+  water_sewage: 'Wa',
+  legal_flags: 'Lg',
+  noise: 'Ns',
+  livability: 'Lv',
 }
 
 function RequirementBadge(props: {
@@ -302,7 +308,8 @@ function RequirementBadge(props: {
 }) {
   const status = () => props.row?.status ?? 'unknown'
   const tooltip = () => {
-    if (!props.row) return `${props.meta.label}: not evaluated yet`
+    const kind = props.meta.hard ? 'hard' : 'soft'
+    if (!props.row) return `${props.meta.label} (${kind}): not evaluated yet`
     let evidence = ''
     try {
       const items = JSON.parse(props.row.evidence_json ?? '[]') as Array<{
@@ -313,14 +320,17 @@ function RequirementBadge(props: {
     } catch {
       /* ignore */
     }
-    return `${props.meta.label}: ${props.row.status.toUpperCase()}${props.row.value ? ` — ${props.row.value}` : ''}\nconfidence: ${props.row.confidence ?? '?'}\n${evidence}`
+    return `${props.meta.label} (${kind}): ${props.row.status.toUpperCase()}${props.row.value ? ` — ${props.row.value}` : ''}\nconfidence: ${props.row.confidence ?? '?'}\n${evidence}`
   }
   return (
     <span
-      class={`cursor-help rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold ${STATUS_STYLES[status()] ?? STATUS_STYLES.unknown}`}
+      class={`cursor-help rounded px-1.5 py-0.5 font-mono text-[10px] ${props.meta.hard ? 'font-bold' : 'font-normal'} ${STATUS_STYLES[status()] ?? STATUS_STYLES.unknown}`}
       title={tooltip()}
     >
-      {BADGE_ABBREV[props.meta.requirement] ?? props.meta.requirement.slice(0, 2)}
+      <span class="font-semibold">
+        {BADGE_ABBREV[props.meta.requirement] ??
+          props.meta.requirement.slice(0, 2)}
+      </span>
       <Show when={props.row?.value && status() !== 'unknown'}>
         <span class="ml-1 font-normal">{props.row!.value}</span>
       </Show>
