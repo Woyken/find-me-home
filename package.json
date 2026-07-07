@@ -1,0 +1,49 @@
+{
+  "name": "find-me-home",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev --port 3000",
+    "generate-routes": "tsr generate",
+    "build": "vite build",
+    "start": "node .output/server/index.mjs",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "lint": "eslint",
+    "format": "prettier --write . && eslint --fix",
+    "check": "prettier --check ."
+  },
+  "dependencies": {
+    "@solidjs/web": "^2.0.0-beta.15",
+    "@tailwindcss/vite": "^4.1.18",
+    "@tanstack/router-plugin": "^1.133.21",
+    "@tanstack/solid-router": "^2.0.0-beta.23",
+    "@tanstack/solid-router-devtools": "^2.0.0-beta.18",
+    "@tanstack/solid-router-ssr-query": "^2.0.0-beta.24",
+    "@tanstack/solid-start": "^2.0.0-beta.24",
+    "better-sqlite3": "^12.11.1",
+    "cheerio": "^1.2.0",
+    "solid-js": "^2.0.0-beta.15",
+    "tailwindcss": "^4.1.18"
+  },
+  "devDependencies": {
+    "@solidjs/testing-library": "^0.8.10",
+    "@tanstack/devtools-vite": "latest",
+    "@tanstack/eslint-config": "latest",
+    "@tanstack/router-cli": "^1.133.21",
+    "@types/better-sqlite3": "^7.6.13",
+    "eslint": "^9.20.0",
+    "jsdom": "^28.1.0",
+    "prettier": "^3.8.1",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.0",
+    "vite-plugin-solid": "^3.0.0-next.5",
+    "vitest": "^4.1.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "lightningcss"
+    ]
+  }
+}
