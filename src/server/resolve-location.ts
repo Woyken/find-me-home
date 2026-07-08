@@ -2,19 +2,22 @@
  * Unified location resolver.
  *
  * A listing may arrive with only a cadastral number, only an address, or only
- * coordinates. Given any one of these, `resolveListingLocation` fills in the
- * others by chaining the existing building blocks:
- *   address  → geocodeAddress (Regia exact / Nominatim approx)
- *   cadastral↔coords↔boundary → resolveBoundaryForListing
- *   coords   → reverseGeocode (approximate address)
+ * coordinates. Anchors are tried in order of authority:
+ *   1. cadastral number  -> parcel polygon (authoritative)
+ *   2. coordinates       -> point-in-parcel lookup (any confidence)
+ *   3. address           -> Regia exact geocode -> point-in-parcel lookup
  *
- * It only fills MISSING data and never overwrites existing user/scraper values.
- * Each external step is wrapped so one failure (e.g. Regia down) doesn't abort
- * the rest.
+ * The first anchor that resolves a parcel wins, and the values derived from it
+ * (coordinates, cadastral number, reverse-geocoded address) OVERRIDE the
+ * listing's other location fields. When no parcel can be resolved the resolver
+ * still fills what it can (geocoded coordinates, reverse-geocoded address)
+ * without inventing data.
  */
 import { getDb } from './db'
-import { resolveBoundaryForListing } from './boundaries'
+import { resolveByCadastral, resolveByPoint } from './boundaries'
 import { geocodeAddress, reverseGeocode, setOverrides } from './overrides'
+import type { BoundaryResult } from './boundaries'
+import type { GeocodeCandidate } from './overrides'
 
 const log = (msg: string) => console.log(`[resolve-location] ${msg}`)
 
@@ -52,10 +55,84 @@ function loadRow(listingId: number): ResolveListingRow | undefined {
     .get(listingId) as ResolveListingRow | undefined
 }
 
+/** Persist the parcel polygon onto the listing's boundary columns. */
+function persistBoundaryColumns(
+  listingId: number,
+  result: BoundaryResult,
+): void {
+  getDb()
+    .prepare(
+      `UPDATE listings
+       SET boundary_json = ?, boundary_source = ?, boundary_cadastral = ?
+       WHERE id = ?`,
+    )
+    .run(
+      JSON.stringify(result.geometry),
+      result.source,
+      result.cadastralNumber ?? '',
+      listingId,
+    )
+}
+
+/** The anchor that produced the parcel, driving what gets overridden. */
+type Anchor = 'cadastral' | 'point' | 'address'
+
+interface AnchorSearch {
+  /** Parcel found via the winning anchor, if any. */
+  parcel?: { anchor: Anchor; result: BoundaryResult }
+  /** Exact (Regia) geocode of the address anchor, when one was obtained. */
+  exactPoint?: GeocodeCandidate
+}
+
+/** Try anchors in authority order until one resolves a parcel. */
+async function findParcel(row: ResolveListingRow): Promise<AnchorSearch> {
+  // 1. Cadastral number (authoritative).
+  if (row.cadastral_number?.trim()) {
+    try {
+      const result = await resolveByCadastral(row.cadastral_number)
+      if (result) return { parcel: { anchor: 'cadastral', result } }
+    } catch (e) {
+      log(`listing ${row.id} cadastral lookup failed: ${String(e)}`)
+    }
+  }
+
+  // 2. Coordinates - any confidence; approx pins are usually on the plot and
+  //    a wrong parcel from a truly bad pin can still be corrected manually.
+  if (row.lat !== null && row.lng !== null) {
+    try {
+      const result = await resolveByPoint(row.lat, row.lng)
+      if (result) return { parcel: { anchor: 'point', result } }
+    } catch (e) {
+      log(`listing ${row.id} point lookup failed: ${String(e)}`)
+    }
+  }
+
+  // 3. Address - only an EXACT (Regia) geocode is precise enough to feed a
+  //    point-in-parcel lookup.
+  if (row.address?.trim()) {
+    try {
+      const candidates = await geocodeAddress(row.address)
+      const exact = candidates.find((c) => c.confidence === 'exact')
+      if (exact) {
+        const result = await resolveByPoint(exact.lat, exact.lng)
+        if (result) {
+          return { parcel: { anchor: 'address', result }, exactPoint: exact }
+        }
+        return { exactPoint: exact }
+      }
+    } catch (e) {
+      log(`listing ${row.id} address geocode failed: ${String(e)}`)
+    }
+  }
+
+  return {}
+}
+
 /**
- * Resolve as much of a listing's location as possible from whatever single
- * anchor (address / cadastral / coords) it already has. Returns a serializable
- * summary of the current values and which fields were newly filled.
+ * Resolve a listing's location from its strongest available anchor
+ * (cadastral -> coordinates -> address) and OVERRIDE the remaining location
+ * fields with the resolved values. Returns a serializable summary of the
+ * current values and which fields changed.
  */
 export async function resolveListingLocation(
   listingId: number,
@@ -66,75 +143,103 @@ export async function resolveListingLocation(
     throw new Error(`listing ${listingId} not found`)
   }
 
-  // (b) coords missing-or-approx AND address present → forward geocode.
-  const coordsMissing = row.lat === null || row.lng === null
-  const coordsWeak = coordsMissing || row.location_confidence !== 'exact'
-  const address = row.address?.trim() ?? ''
-  if (coordsWeak && address) {
-    try {
-      const candidates = await geocodeAddress(address)
-      const top = candidates.length > 0 ? candidates[0] : undefined
-      if (top?.confidence === 'exact') {
-        setOverrides(listingId, {
-          lat: top.lat,
-          lng: top.lng,
-          location_confidence: 'exact',
-        })
-        filled.add('coords')
-      } else if (top && coordsMissing) {
-        setOverrides(listingId, {
-          lat: top.lat,
-          lng: top.lng,
-          location_confidence: 'approx',
-        })
-        filled.add('coords')
-      }
-    } catch (e) {
-      log(`listing ${listingId} geocode failed: ${String(e)}`)
+  const search = await findParcel(row)
+
+  if (search.parcel) {
+    const { anchor, result } = search.parcel
+
+    persistBoundaryColumns(listingId, result)
+    if (row.boundary_json === null) filled.add('boundary')
+
+    // Coordinates: the exact geocoded point for an address anchor, otherwise
+    // the parcel centroid (recentres approx pins; keeps cadastral exact).
+    const point =
+      anchor === 'address' && search.exactPoint
+        ? { lat: search.exactPoint.lat, lng: search.exactPoint.lng }
+        : result.centroid
+    if (
+      row.lat !== point.lat ||
+      row.lng !== point.lng ||
+      row.location_confidence !== 'exact'
+    ) {
+      setOverrides(listingId, {
+        lat: point.lat,
+        lng: point.lng,
+        location_confidence: 'exact',
+      })
+      filled.add('coords')
     }
-  }
 
-  // (c) cadastral → polygon + exact coords, OR exact coords → parcel + cadastral.
-  let hadBoundary = row.boundary_json !== null
-  try {
-    const result = await resolveBoundaryForListing(listingId)
-    if (result) {
-      row = loadRow(listingId) ?? row
-      if (!hadBoundary && row.boundary_json !== null) {
-        filled.add('boundary')
-        hadBoundary = true
+    // Cadastral number: override with the resolved parcel's (a cadastral
+    // anchor already agrees by definition).
+    if (
+      anchor !== 'cadastral' &&
+      result.cadastralNumber !== null &&
+      result.cadastralNumber !== row.cadastral_number
+    ) {
+      setOverrides(listingId, { cadastral_number: result.cadastralNumber })
+      filled.add('cadastral')
+    }
+
+    // Address: override with the reverse-geocoded address of the resolved
+    // point (skip when the address itself was the anchor).
+    if (anchor !== 'address') {
+      try {
+        const rev = await reverseGeocode(point.lat, point.lng)
+        if (rev && rev.address !== row.address) {
+          setOverrides(listingId, { address: rev.address })
+          filled.add('address')
+        }
+      } catch (e) {
+        log(`listing ${listingId} reverse geocode failed: ${String(e)}`)
       }
     }
-  } catch (e) {
-    log(`listing ${listingId} boundary resolution failed: ${String(e)}`)
-  }
-
-  // Reload so downstream steps see coords/cadastral written by boundary step.
-  row = loadRow(listingId) ?? row
-
-  // (d) cadastral empty but boundary produced one → fill it.
-  const cadEmpty = !row.cadastral_number?.trim()
-  if (cadEmpty && row.boundary_cadastral?.trim()) {
-    setOverrides(listingId, { cadastral_number: row.boundary_cadastral })
-    filled.add('cadastral')
+  } else if (search.exactPoint) {
+    // Exact geocode but no parcel under the point - keep the exact coords.
+    const g = search.exactPoint
+    if (row.lat !== g.lat || row.lng !== g.lng) {
+      setOverrides(listingId, {
+        lat: g.lat,
+        lng: g.lng,
+        location_confidence: 'exact',
+      })
+      filled.add('coords')
+    }
+  } else {
+    // No parcel from any anchor - fall back to non-destructive fills.
+    const address = row.address?.trim() ?? ''
+    if ((row.lat === null || row.lng === null) && address) {
+      try {
+        const candidates = await geocodeAddress(address)
+        if (candidates.length > 0) {
+          const top = candidates[0]
+          setOverrides(listingId, {
+            lat: top.lat,
+            lng: top.lng,
+            location_confidence:
+              top.confidence === 'exact' ? 'exact' : 'approx',
+          })
+          filled.add('coords')
+        }
+      } catch (e) {
+        log(`listing ${listingId} fallback geocode failed: ${String(e)}`)
+      }
+    }
     row = loadRow(listingId) ?? row
-  }
-
-  // (e) address still empty but coords exist → reverse geocode (approx).
-  const stillNoAddress = !row.address?.trim()
-  if (stillNoAddress && row.lat !== null && row.lng !== null) {
-    try {
-      const rev = await reverseGeocode(row.lat, row.lng)
-      if (rev) {
-        setOverrides(listingId, { address: rev.address })
-        filled.add('address')
-        row = loadRow(listingId) ?? row
+    if (!row.address?.trim() && row.lat !== null && row.lng !== null) {
+      try {
+        const rev = await reverseGeocode(row.lat, row.lng)
+        if (rev) {
+          setOverrides(listingId, { address: rev.address })
+          filled.add('address')
+        }
+      } catch (e) {
+        log(`listing ${listingId} reverse geocode failed: ${String(e)}`)
       }
-    } catch (e) {
-      log(`listing ${listingId} reverse geocode failed: ${String(e)}`)
     }
   }
 
+  row = loadRow(listingId) ?? row
   return {
     filled: [...filled],
     address: row.address,

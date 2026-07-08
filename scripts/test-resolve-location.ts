@@ -112,6 +112,38 @@ try {
     (r2.address?.trim().length ?? 0) > 0,
     `address=${r2.address}`,
   )
+
+  // --- Case 3: approx coords only (Trakų r. — outer-ring municipality) -----
+  console.log('\n=== Case 3: approx coords in Trakų r. ===')
+  const id3 = insertTemp({
+    lat: 54.61667,
+    lng: 25.0568392,
+    location_confidence: 'approx',
+  })
+  ids.push(id3)
+  const s3 = await resolveListingLocation(id3)
+  console.log('summary:', JSON.stringify(s3))
+  const r3 = readTemp(id3)
+  assert(
+    'case3 cadastral_number filled from approx point',
+    (r3.cadastral_number?.trim().length ?? 0) > 0,
+    `cad=${r3.cadastral_number}`,
+  )
+  assert(
+    "case3 confidence upgraded to 'exact'",
+    r3.location_confidence === 'exact',
+    `conf=${r3.location_confidence}`,
+  )
+  assert(
+    'case3 boundary_json non-null',
+    r3.boundary_json !== null,
+    `boundary=${r3.boundary_json === null ? 'null' : 'set'}`,
+  )
+  assert(
+    'case3 address filled (reverse geocode)',
+    (r3.address?.trim().length ?? 0) > 0,
+    `address=${r3.address}`,
+  )
 } finally {
   const db = getDb()
   for (const id of ids) {

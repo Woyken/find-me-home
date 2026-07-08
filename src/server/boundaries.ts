@@ -39,12 +39,11 @@ const PARCELS_ZIP_URL = (code: number) =>
 const PURPOSES_CSV_URL = `${RC_BASE}?byla=klas_NTR_paskirciu_tipai.csv`
 
 /**
- * Municipalities (SAV_KODAS) imported for parcel lookups. Vilnius city (13) and
- * district (41) cover the search area; the outer ring can be appended if
- * listings appear there.
- *   42 Elektrėnų · 79 Trakų r. · 89 Širvintų r.
+ * Municipalities (SAV_KODAS) imported for parcel lookups: Vilnius city (13),
+ * Vilnius district (41) and the outer ring — 42 Elektrėnų · 62 Molėtų ·
+ * 79 Trakų r. · 85 Šalčininkų r. · 86 Švenčionių r. · 89 Širvintų r.
  */
-const PARCEL_MUNICIPALITIES = [13, 41] as const
+const PARCEL_MUNICIPALITIES = [13, 41, 42, 62, 79, 85, 86, 89] as const
 
 /** Re-download a municipality's parcels if the local copy is older than this. */
 const IMPORT_MAX_AGE_DAYS = 30
