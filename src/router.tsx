@@ -8,6 +8,9 @@ export function getRouter() {
     scrollRestoration: true,
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,
+    defaultPendingComponent: () => (
+      <div class="p-6 text-sm text-gray-500">Loading…</div>
+    ),
   })
 
   return router

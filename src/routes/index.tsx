@@ -1,5 +1,12 @@
 import { createFileRoute } from '@tanstack/solid-router'
-import { For, Show, createMemo, createSignal, onCleanup } from 'solid-js'
+import {
+  For,
+  Show,
+  createMemo,
+  createSignal,
+  onCleanup,
+  untrack,
+} from 'solid-js'
 import {
   addAruodasPaste,
   fetchListings,
@@ -12,9 +19,16 @@ import type { ListingRow } from '../server/scan'
 import type { EvaluationRow } from '../server/evaluators'
 
 export const Route = createFileRoute('/')({
-  loader: () => fetchListings(),
-  component: Dashboard,
+  component: Dsh,
 })
+
+function Dsh() {
+  return (
+    <Show when={typeof window !== 'undefined'} fallback={<div>Loading...</div>}>
+      <Dashboard />
+    </Show>
+  )
+}
 
 const SOURCE_COLORS: Record<string, string> = {
   kampas: 'bg-emerald-100 text-emerald-800',
@@ -32,17 +46,21 @@ const STATUS_STYLES: Record<string, string> = {
 }
 
 function Dashboard() {
-  const initial = Route.useLoaderData()
-  const [data, setData] = createSignal(initial())
+  const loaderData = createMemo(() => fetchListings())
+  const [override, setOverride] = createSignal<ReturnType<
+    typeof loaderData
+  > | null>(null)
+  const data = () => override() ?? loaderData()
   const [scanBusy, setScanBusy] = createSignal(false)
   const [evalBusy, setEvalBusy] = createSignal(false)
   const [showPaste, setShowPaste] = createSignal(false)
+  const [editingId, setEditingId] = createSignal<number>()
 
   let pollTimer: ReturnType<typeof setInterval> | undefined
 
   const refresh = async () => {
     const fresh = await fetchListings()
-    setData(fresh)
+    setOverride(fresh)
     if (!fresh.scanRunning && !fresh.evaluating && pollTimer) {
       clearInterval(pollTimer)
       pollTimer = undefined
@@ -71,6 +89,7 @@ function Dashboard() {
   }
 
   const onEdited = () => {
+    setEditingId(undefined)
     setEvalBusy(true)
     void refresh()
     startPolling()
@@ -87,6 +106,11 @@ function Dashboard() {
       inner.set(e.requirement, e)
     }
     return m
+  })
+
+  const editingListing = createMemo(() => {
+    const e = editingId()
+    return data().listings.find((l) => l.id === e)
   })
 
   const scanStats = () => {
@@ -208,7 +232,10 @@ function Dashboard() {
                       listing={l}
                       requirements={data().requirements}
                       evals={evalsByListing().get(l.id)}
-                      onSaved={onEdited}
+                      editing={editingId() === l.id}
+                      onEdit={() =>
+                        setEditingId((cur) => (cur === l.id ? undefined : l.id))
+                      }
                     />
                   )}
                 </For>
@@ -217,6 +244,16 @@ function Dashboard() {
           </div>
         </Show>
       </section>
+
+      <Show when={editingListing()}>
+        <section class="mt-6 rounded-lg border border-amber-300 bg-amber-50/40 p-4">
+          <EditPanel
+            listing={editingListing()!}
+            onCancel={() => setEditingId(undefined)}
+            onSaved={onEdited}
+          />
+        </section>
+      </Show>
     </main>
   )
 }
@@ -225,116 +262,109 @@ function ListingTableRow(props: {
   listing: ListingRow
   requirements: Array<{ requirement: string; label: string; hard: boolean }>
   evals: Map<string, EvaluationRow> | undefined
-  onSaved: () => void
+  editing: boolean
+  onEdit: () => void
 }) {
   const l = props.listing
-  const [editing, setEditing] = createSignal(false)
   const pricePerAre = () =>
     l.price_eur != null && l.area_ares ? l.price_eur / l.area_ares : null
   const overrideKeys = (): Array<string> => {
     if (!l.overrides_json) return []
     try {
-      return Object.keys(JSON.parse(l.overrides_json) as Record<string, unknown>)
+      return Object.keys(
+        JSON.parse(l.overrides_json) as Record<string, unknown>,
+      )
     } catch {
       return []
     }
   }
   return (
-    <>
-      <tr class="hover:bg-blue-50/40">
-        <td class="max-w-xs px-3 py-2">
-          <a
-            href={l.url}
-            target="_blank"
-            rel="noreferrer"
-            class="font-medium text-blue-700 hover:underline"
-          >
-            {l.title ?? l.address ?? l.url}
-          </a>
-          <Show when={overrideKeys().length > 0}>
-            <span
-              class="ml-1 cursor-help text-xs text-amber-600"
-              title={`Manually edited: ${overrideKeys().join(', ')}`}
-            >
-              ✎
-            </span>
-          </Show>
-          <Show when={l.address && l.address !== l.title}>
-            <div class="truncate text-xs text-gray-500">{l.address}</div>
-          </Show>
-        </td>
-        <td class="whitespace-nowrap px-3 py-2 font-semibold">
-          {l.price_eur != null ? `€${l.price_eur.toLocaleString('lt-LT')}` : '—'}
-        </td>
-        <td class="whitespace-nowrap px-3 py-2">
-          {l.area_ares != null ? `${l.area_ares.toFixed(1)} a` : '—'}
-        </td>
-        <td class="whitespace-nowrap px-3 py-2 text-gray-600">
-          {pricePerAre() != null ? `€${pricePerAre()!.toFixed(0)}` : '—'}
-        </td>
-        <td class="max-w-40 truncate px-3 py-2" title={l.purpose_text ?? ''}>
-          {l.purpose_text ?? <span class="text-gray-400">unknown</span>}
-        </td>
-        <td class="whitespace-nowrap px-3 py-2 font-mono text-xs">
-          {l.cadastral_number ?? <span class="text-gray-400">—</span>}
-        </td>
-        <td class="whitespace-nowrap px-3 py-2 text-xs">
-          <Show
-            when={l.lat != null}
-            fallback={<span class="text-gray-400">unknown</span>}
-          >
-            <a
-              class="text-blue-600 hover:underline"
-              href={`https://www.google.com/maps?q=${l.lat},${l.lng}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {l.lat!.toFixed(4)}, {l.lng!.toFixed(4)}
-            </a>
-            <span class="ml-1 text-gray-400">({l.location_confidence})</span>
-          </Show>
-        </td>
-        <td class="px-3 py-2">
-          <div class="flex flex-wrap gap-1">
-            <For each={props.requirements}>
-              {(req) => (
-                <RequirementBadge meta={req} row={props.evals?.get(req.requirement)} />
-              )}
-            </For>
-          </div>
-        </td>
-        <td class="px-3 py-2">
+    <tr class={props.editing ? 'bg-amber-100/60' : 'hover:bg-blue-50/40'}>
+      <td class="max-w-xs px-3 py-2">
+        <a
+          href={l.url}
+          target="_blank"
+          rel="noreferrer"
+          class="font-medium text-blue-700 hover:underline"
+        >
+          {l.title ?? l.address ?? l.url}
+        </a>
+        <Show when={overrideKeys().length > 0}>
           <span
-            class={`rounded px-2 py-0.5 text-xs ${SOURCE_COLORS[l.source] ?? 'bg-gray-100'}`}
-          >
-            {l.source}
-          </span>
-        </td>
-        <td class="px-3 py-2">
-          <button
-            class="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50"
-            title="Edit listing"
-            onClick={() => setEditing((v) => !v)}
+            class="ml-1 cursor-help text-xs text-amber-600"
+            title={`Manually edited: ${overrideKeys().join(', ')}`}
           >
             ✎
-          </button>
-        </td>
-      </tr>
-      <Show when={editing()}>
-        <tr>
-          <td colspan={10} class="bg-amber-50/40 px-3 py-3">
-            <EditPanel
-              listing={l}
-              onCancel={() => setEditing(false)}
-              onSaved={() => {
-                setEditing(false)
-                props.onSaved()
-              }}
-            />
-          </td>
-        </tr>
-      </Show>
-    </>
+          </span>
+        </Show>
+        <Show when={l.address && l.address !== l.title}>
+          <div class="truncate text-xs text-gray-500">{l.address}</div>
+        </Show>
+      </td>
+      <td class="whitespace-nowrap px-3 py-2 font-semibold">
+        {l.price_eur != null ? `€${l.price_eur.toLocaleString('lt-LT')}` : '—'}
+      </td>
+      <td class="whitespace-nowrap px-3 py-2">
+        {l.area_ares != null ? `${l.area_ares.toFixed(1)} a` : '—'}
+      </td>
+      <td class="whitespace-nowrap px-3 py-2 text-gray-600">
+        {pricePerAre() != null ? `€${pricePerAre()!.toFixed(0)}` : '—'}
+      </td>
+      <td class="max-w-40 truncate px-3 py-2" title={l.purpose_text ?? ''}>
+        {l.purpose_text ?? <span class="text-gray-400">unknown</span>}
+      </td>
+      <td class="whitespace-nowrap px-3 py-2 font-mono text-xs">
+        {l.cadastral_number ?? <span class="text-gray-400">—</span>}
+      </td>
+      <td class="whitespace-nowrap px-3 py-2 text-xs">
+        <Show
+          when={l.lat != null}
+          fallback={<span class="text-gray-400">unknown</span>}
+        >
+          <a
+            class="text-blue-600 hover:underline"
+            href={`https://www.google.com/maps?q=${l.lat},${l.lng}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {l.lat!.toFixed(4)}, {l.lng!.toFixed(4)}
+          </a>
+          <span class="ml-1 text-gray-400">({l.location_confidence})</span>
+        </Show>
+      </td>
+      <td class="px-3 py-2">
+        <div class="flex flex-wrap gap-1">
+          <For each={props.requirements}>
+            {(req) => (
+              <RequirementBadge
+                meta={req}
+                row={props.evals?.get(req.requirement)}
+              />
+            )}
+          </For>
+        </div>
+      </td>
+      <td class="px-3 py-2">
+        <span
+          class={`rounded px-2 py-0.5 text-xs ${SOURCE_COLORS[l.source] ?? 'bg-gray-100'}`}
+        >
+          {l.source}
+        </span>
+      </td>
+      <td class="px-3 py-2">
+        <button
+          class="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50"
+          title="Edit listing"
+          onClick={(ev) => {
+            console.log(ev)
+            // debugger;
+            props.onEdit()
+          }}
+        >
+          ✎
+        </button>
+      </td>
+    </tr>
   )
 }
 
@@ -396,7 +426,8 @@ function EditPanel(props: {
   onCancel: () => void
   onSaved: () => void
 }) {
-  const l = props.listing
+  console.log('rendering edit panel for listing', props.listing.id)
+  const l = untrack(() => props.listing)
   const [address, setAddress] = createSignal(l.address ?? '')
   const [lat, setLat] = createSignal(l.lat != null ? String(l.lat) : '')
   const [lng, setLng] = createSignal(l.lng != null ? String(l.lng) : '')
