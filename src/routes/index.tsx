@@ -12,6 +12,7 @@ import {
   fetchListings,
   geocodeListingAddress,
   resolveListingBoundaries,
+  resolveListingLocationFn,
   startEvaluation,
   startScan,
   updateListing,
@@ -521,9 +522,17 @@ function EditPanel(props: {
 
   const [busy, setBusy] = createSignal(false)
   const [geocoding, setGeocoding] = createSignal(false)
+  const [resolving, setResolving] = createSignal(false)
+  const [resolveNote, setResolveNote] = createSignal<string | null>(null)
   const [error, setError] = createSignal<string | null>(null)
   const [candidates, setCandidates] = createSignal<
-    Array<{ lat: number; lng: number; displayName: string }>
+    Array<{
+      lat: number
+      lng: number
+      displayName: string
+      source?: 'regia' | 'nominatim'
+      confidence?: 'exact' | 'approx'
+    }>
   >([])
 
   const geocode = async () => {
@@ -542,11 +551,40 @@ function EditPanel(props: {
     }
   }
 
-  const pickCandidate = (c: { lat: number; lng: number }) => {
+  const pickCandidate = (c: {
+    lat: number
+    lng: number
+    confidence?: 'exact' | 'approx'
+  }) => {
     setLat(String(c.lat))
     setLng(String(c.lng))
-    setConfidence('approx')
+    setConfidence(c.confidence === 'exact' ? 'exact' : 'approx')
     setCandidates([])
+  }
+
+  const resolve = async () => {
+    setResolving(true)
+    setError(null)
+    setResolveNote(null)
+    try {
+      const summary = await resolveListingLocationFn({
+        data: { listingId: l.id },
+      })
+      if (summary.address !== null) setAddress(summary.address)
+      setLat(summary.lat != null ? String(summary.lat) : '')
+      setLng(summary.lng != null ? String(summary.lng) : '')
+      setConfidence(summary.locationConfidence === 'exact' ? 'exact' : 'approx')
+      if (summary.cadastral !== null) setCadastral(summary.cadastral)
+      setResolveNote(
+        summary.filled.length > 0
+          ? `Filled: ${summary.filled.join(', ')}`
+          : 'Nothing new resolved',
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setResolving(false)
+    }
   }
 
   const save = async () => {
@@ -621,7 +659,18 @@ function EditPanel(props: {
           >
             {geocoding() ? 'Geocoding…' : 'Geocode'}
           </button>
+          <button
+            type="button"
+            class="whitespace-nowrap rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+            disabled={resolving()}
+            onClick={resolve}
+          >
+            {resolving() ? 'Resolving…' : 'Resolve'}
+          </button>
         </div>
+        <Show when={resolveNote()}>
+          <p class="mt-1 text-xs text-indigo-700">{resolveNote()}</p>
+        </Show>
       </div>
 
       <Show when={candidates().length > 0}>
@@ -634,6 +683,15 @@ function EditPanel(props: {
                   class="w-full text-left hover:bg-blue-50"
                   onClick={() => pickCandidate(c)}
                 >
+                  <span
+                    class={
+                      c.source === 'regia'
+                        ? 'mr-1 rounded bg-green-100 px-1 py-0.5 text-[10px] font-semibold text-green-700'
+                        : 'mr-1 rounded bg-gray-100 px-1 py-0.5 text-[10px] font-semibold text-gray-600'
+                    }
+                  >
+                    {c.source === 'regia' ? 'regia' : 'OSM'}
+                  </span>
                   <span class="font-mono text-blue-700">
                     {c.lat.toFixed(5)}, {c.lng.toFixed(5)}
                   </span>{' '}

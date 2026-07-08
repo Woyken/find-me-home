@@ -12,6 +12,7 @@
  */
 import { getDb } from './db'
 import { fetchJson, geoCacheGet, geoCachePut } from './gis'
+import { regiaSearchAddress } from './regia'
 import { sleep } from './scrapers/common'
 
 /** Fields a user may manually override. */
@@ -120,6 +121,8 @@ export interface GeocodeCandidate {
   lat: number
   lng: number
   displayName: string
+  source?: 'regia' | 'nominatim'
+  confidence?: 'exact' | 'approx'
 }
 
 interface NominatimResult {
@@ -139,16 +142,21 @@ async function nominatimSearch(
     lat: parseFloat(r.lat),
     lng: parseFloat(r.lon),
     displayName: r.display_name,
+    source: 'nominatim',
+    confidence: 'approx',
   }))
 }
 
 /**
- * Geocode a free-text address with Nominatim (OpenStreetMap), scoped to
- * Lithuania. Results are cached per normalized address for 30 days. Nominatim
- * requires a descriptive User-Agent (added by `fetchJson`) and 1 req/s; this
- * is only called from interactive edits so a couple of calls are fine.
+ * Geocode a free-text address, preferring the Lithuanian Registrų centras
+ * "Regia" service (exact parcel coordinates), then falling back to Nominatim
+ * (OpenStreetMap, approximate) when Regia finds nothing. Results are cached per
+ * normalized address for 30 days.
  *
- * Geocoded coordinates are always treated as approximate.
+ * Regia candidates are marked source 'regia' / confidence 'exact'; Nominatim
+ * candidates are source 'nominatim' / confidence 'approx'. Nominatim requires a
+ * descriptive User-Agent (added by `fetchJson`) and 1 req/s; this is only
+ * called from interactive edits so a couple of calls are fine.
  */
 export async function geocodeAddress(
   address: string,
@@ -160,6 +168,21 @@ export async function geocodeAddress(
   const cached = geoCacheGet<Array<GeocodeCandidate>>(cacheKey)
   if (cached && cached.length > 0) return cached
 
+  // Primary geocoder: Regia (exact coordinates).
+  const regiaHits = await regiaSearchAddress(address)
+  if (regiaHits.length > 0) {
+    const candidates: Array<GeocodeCandidate> = regiaHits.map((r) => ({
+      lat: r.lat,
+      lng: r.lng,
+      displayName: r.displayName,
+      source: 'regia',
+      confidence: 'exact',
+    }))
+    geoCachePut(cacheKey, candidates)
+    return candidates
+  }
+
+  // Fallback geocoder: Nominatim (approximate).
   let candidates = await nominatimSearch(address)
 
   // Stored addresses often read "City, District, Street" — the middle
@@ -183,4 +206,70 @@ export async function geocodeAddress(
   // and caching a miss would defeat the fallback on the next attempt.
   if (candidates.length > 0) geoCachePut(cacheKey, candidates)
   return candidates
+}
+
+interface NominatimReverseResult {
+  display_name?: string
+  address?: {
+    road?: string
+    house_number?: string
+    village?: string
+    hamlet?: string
+    town?: string
+    city?: string
+    municipality?: string
+    suburb?: string
+    [key: string]: string | undefined
+  }
+}
+
+/** Compact "street housenumber, settlement" from a Nominatim address object. */
+function formatReverseAddress(
+  addr: NonNullable<NominatimReverseResult['address']>,
+): string {
+  const streetParts: Array<string> = []
+  if (addr.road) streetParts.push(addr.road)
+  if (addr.house_number) streetParts.push(addr.house_number)
+
+  const settlement =
+    addr.village ??
+    addr.hamlet ??
+    addr.town ??
+    addr.city ??
+    addr.suburb ??
+    addr.municipality
+
+  const segments: Array<string> = []
+  if (streetParts.length > 0) segments.push(streetParts.join(' '))
+  if (settlement) segments.push(settlement)
+  return segments.join(', ')
+}
+
+/**
+ * Reverse-geocode WGS84 coordinates to a compact human-readable address via
+ * Nominatim (OpenStreetMap). Results are informational/approximate. Cached per
+ * rounded coordinate for 30 days; empty results are not cached (following the
+ * forward-geocode precedent).
+ */
+export async function reverseGeocode(
+  lat: number,
+  lng: number,
+): Promise<{ displayName: string; address: string } | null> {
+  const cacheKey = `revgeo:${lat.toFixed(5)},${lng.toFixed(5)}`
+  const cached = geoCacheGet<{ displayName: string; address: string }>(cacheKey)
+  if (cached) return cached
+
+  const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=jsonv2&accept-language=lt`
+  const result = await fetchJson<NominatimReverseResult>(url)
+  if (!result.address) return null
+
+  const address = formatReverseAddress(result.address)
+  if (!address) return null
+
+  const value = {
+    displayName: result.display_name ?? address,
+    address,
+  }
+  geoCachePut(cacheKey, value)
+  return value
 }

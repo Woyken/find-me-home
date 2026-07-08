@@ -26,6 +26,7 @@ import {
   setOverrides,
 } from '../server/overrides'
 import type { OverrideFields, OverrideKey } from '../server/overrides'
+import { resolveListingLocation } from '../server/resolve-location'
 
 export const fetchListings = createServerFn({ method: 'GET' }).handler(() => {
   return {
@@ -256,4 +257,24 @@ export const geocodeListingAddress = createServerFn({ method: 'POST' })
     }
     const candidates = await geocodeAddress(address)
     return { address, candidates }
+  })
+
+/**
+ * Unified location resolver: given whatever single anchor a listing has
+ * (address / cadastral / coords), fill in the missing pieces (coords, cadastral,
+ * boundary, address). Persists via overrides and returns a summary of the
+ * current values plus which fields were newly filled.
+ */
+export const resolveListingLocationFn = createServerFn({ method: 'POST' })
+  .inputValidator((data: { listingId: number }) => {
+    if (
+      typeof data.listingId !== 'number' ||
+      !Number.isInteger(data.listingId)
+    ) {
+      throw new Error('listingId is required')
+    }
+    return data
+  })
+  .handler(async ({ data }) => {
+    return resolveListingLocation(data.listingId)
   })
