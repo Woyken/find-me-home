@@ -99,7 +99,7 @@ const PURPOSE_PASS_RE =
   /nam[uų]\s*vald|vienbu[čc]i[uų](?:\s+ir\s+dvibu[čc]i[uų])?\s+gyv|gyvenam[oó][sj]/i
 /** Hard negatives per decision #8: agricultural, garden-community, forest */
 const PURPOSE_FAIL_RE =
-  /m[ėe]g[ėe]j[uų]\s*sod|sodininki[uų]|sod[uų]\s*bendrij|[žz]em[ėe]s\s*[ūu]k|mi[šs]k[uų]\s*(?:[ūu]kio|paskirt)/i
+  /m[ėe]g[ėe]j[uų]\s*sod|sodininki[uų]|sod[uų]\s*bendrij|[žz]em[ėe]s\s*[ūu]k|mi[šs]k[uų]\s*(?:[ūu]kio|paskirt)|paskirt(?:is)?[:\s]{0,3}sod[uųo](?!\p{L})|sod[oų]\s*sklyp|sodo\s*paskirt/iu
 
 export function classifyPurposeText(
   text: string,

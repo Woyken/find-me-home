@@ -113,12 +113,12 @@ export async function scrapeListingPage(
 
   const title = /<title>([^<]+)<\/title>/.exec(html)?.[1]?.replace(/\s*\|\s*Alio\.lt\s*$/i, '')
 
-  const descMatch =
-    /<div[^>]*(?:id="adv_description"|class="[^"]*description[^"]*")[^>]*>([\s\S]*?)<\/div>/i.exec(
-      html,
-    )
-  const description = descMatch
-    ? descMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  const descRaw = extractBalancedDivContent(
+    html,
+    /<div[^>]*(?:id="adv_description(?:_b)?"|itemprop="description")[^>]*>/i,
+  )
+  const description = descRaw
+    ? descRaw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
     : undefined
 
   return {
@@ -145,6 +145,34 @@ export async function scrapeListingPage(
       : undefined,
     raw: { detailRows: kv },
   }
+}
+
+/**
+ * Finds the opening `<div ...>` matched by `startRegex` and returns the raw
+ * HTML content up to (but not including) its balanced closing `</div>`.
+ * Needed because description markup nests further `<div>` elements, so a
+ * naive non-greedy `[\s\S]*?<\/div>` stops at the first inner close tag.
+ */
+function extractBalancedDivContent(
+  html: string,
+  startRegex: RegExp,
+): string | undefined {
+  const start = startRegex.exec(html)
+  if (!start) return undefined
+  const contentStart = start.index + start[0].length
+  const divRe = /<div\b[^>]*>|<\/div\s*>/gi
+  divRe.lastIndex = contentStart
+  let depth = 1
+  let match: RegExpExecArray | null
+  while ((match = divRe.exec(html))) {
+    if (match[0].startsWith('</')) {
+      depth--
+      if (depth === 0) return html.slice(contentStart, match.index)
+    } else {
+      depth++
+    }
+  }
+  return undefined
 }
 
 function matchFloat(text: string, re: RegExp): number | undefined {

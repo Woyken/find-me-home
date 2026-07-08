@@ -76,4 +76,26 @@ function migrate(d: Database.Database) {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `)
+
+  // Additive column migrations. SQLite has no `ADD COLUMN IF NOT EXISTS`, so
+  // guard each ALTER by checking pragma table_info for the column first.
+  addColumnIfMissing(d, 'listings', 'overrides_json', 'TEXT')
+}
+
+/**
+ * Add a column to a table only if it does not already exist. Used for
+ * forward-compatible additive migrations on existing databases.
+ */
+function addColumnIfMissing(
+  d: Database.Database,
+  table: string,
+  column: string,
+  definition: string,
+) {
+  const cols = d.prepare(`pragma table_info(${table})`).all() as Array<{
+    name: string
+  }>
+  if (!cols.some((c) => c.name === column)) {
+    d.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  }
 }

@@ -6,6 +6,7 @@ import {
   runScan,
   upsertListing,
 } from '../server/scan'
+import type { ListingRow } from '../server/scan'
 import { runDedup } from '../server/dedup'
 import { parseAruodasPaste } from '../server/scrapers/aruodasPaste'
 import {
@@ -13,7 +14,14 @@ import {
   getRequirementMeta,
   isEvaluationRunning,
   runEvaluations,
+  runEvaluationsForListing,
 } from '../server/evaluators'
+import { getDb } from '../server/db'
+import {
+  geocodeAddress,
+  setOverrides,
+} from '../server/overrides'
+import type { OverrideFields, OverrideKey } from '../server/overrides'
 
 export const fetchListings = createServerFn({ method: 'GET' }).handler(() => {
   return {
@@ -66,4 +74,161 @@ export const addAruodasPaste = createServerFn({ method: 'POST' })
       priceEur: listing.priceEur ?? null,
       areaAres: listing.areaAres ?? null,
     }
+  })
+
+interface UpdateListingInput {
+  listingId: number
+  fields: OverrideFields
+  clear?: Array<OverrideKey>
+}
+
+const OVERRIDE_KEYS: Array<OverrideKey> = [
+  'lat',
+  'lng',
+  'location_confidence',
+  'address',
+  'purpose_text',
+  'price_eur',
+  'area_ares',
+  'cadastral_number',
+]
+
+function isFinitePositive(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+}
+
+function listingExists(listingId: number): boolean {
+  return (
+    getDb()
+      .prepare(`SELECT 1 FROM listings WHERE id = ?`)
+      .get(listingId) !== undefined
+  )
+}
+
+function validateUpdateInput(data: UpdateListingInput): UpdateListingInput {
+  if (typeof data.listingId !== 'number' || !Number.isInteger(data.listingId)) {
+    throw new Error('listingId is required')
+  }
+  if (!listingExists(data.listingId)) {
+    throw new Error(`listing ${data.listingId} not found`)
+  }
+
+  const raw = data.fields
+  const fields: OverrideFields = {}
+
+  if (raw.lat !== undefined) {
+    if (!Number.isFinite(raw.lat) || raw.lat < 53.5 || raw.lat > 56) {
+      throw new Error('lat must be within [53.5, 56]')
+    }
+    fields.lat = raw.lat
+  }
+  if (raw.lng !== undefined) {
+    if (!Number.isFinite(raw.lng) || raw.lng < 23 || raw.lng > 27) {
+      throw new Error('lng must be within [23, 27]')
+    }
+    fields.lng = raw.lng
+  }
+  if (raw.location_confidence !== undefined) {
+    const conf: unknown = raw.location_confidence
+    if (conf !== 'exact' && conf !== 'approx') {
+      throw new Error('location_confidence must be exact or approx')
+    }
+    fields.location_confidence = conf
+  }
+  if (raw.address !== undefined) {
+    fields.address = String(raw.address).trim()
+  }
+  if (raw.purpose_text !== undefined) {
+    fields.purpose_text = String(raw.purpose_text).trim()
+  }
+  if (raw.cadastral_number !== undefined) {
+    fields.cadastral_number = String(raw.cadastral_number).trim()
+  }
+  if (raw.price_eur !== undefined) {
+    if (!isFinitePositive(raw.price_eur)) {
+      throw new Error('price_eur must be a positive number')
+    }
+    fields.price_eur = raw.price_eur
+  }
+  if (raw.area_ares !== undefined) {
+    if (!isFinitePositive(raw.area_ares)) {
+      throw new Error('area_ares must be a positive number')
+    }
+    fields.area_ares = raw.area_ares
+  }
+
+  const clear = Array.isArray(data.clear)
+    ? data.clear.filter((k): k is OverrideKey => OVERRIDE_KEYS.includes(k))
+    : []
+
+  return { listingId: data.listingId, fields, clear }
+}
+
+/**
+ * Apply a manual edit: merge fields into overrides_json + main columns, drop
+ * stale evaluation rows, re-run dedup, then fire-and-forget a single-listing
+ * re-evaluation (client polls fetchListings for progress). Returns the updated
+ * ListingRow.
+ */
+export const updateListing = createServerFn({ method: 'POST' })
+  .inputValidator(validateUpdateInput)
+  .handler(({ data }) => {
+    const db = getDb()
+    setOverrides(data.listingId, data.fields, data.clear)
+
+    // Existing evaluations are stale after an edit; drop them so the matrix
+    // shows "not evaluated" until the background re-eval repopulates them.
+    db.prepare(`DELETE FROM evaluations WHERE listing_id = ?`).run(
+      data.listingId,
+    )
+
+    // Coords/price/area may have changed which plots merge together.
+    runDedup()
+
+    void runEvaluationsForListing(data.listingId).catch((e) =>
+      console.error(`re-evaluation of listing ${data.listingId} failed`, e),
+    )
+
+    const updated = db
+      .prepare(
+        `SELECT id, source, source_id, url, title, price_eur, area_ares,
+                purpose_text, cadastral_number, lat, lng, location_confidence,
+                address, substr(description, 1, 400) AS description,
+                photos_json, utilities_json, overrides_json, dedup_group_id,
+                status, first_seen_at, last_seen_at
+         FROM listings WHERE id = ?`,
+      )
+      .get(data.listingId) as ListingRow
+
+    return { listing: updated }
+  })
+
+/**
+ * Geocode a listing's address (or an explicitly provided one) via Nominatim.
+ * Returns candidate coordinates for the user to pick from; saving happens via
+ * updateListing. Geocoded coords are always approximate.
+ */
+export const geocodeListingAddress = createServerFn({ method: 'POST' })
+  .inputValidator((data: { listingId: number; address?: string }) => {
+    if (
+      typeof data.listingId !== 'number' ||
+      !Number.isInteger(data.listingId)
+    ) {
+      throw new Error('listingId is required')
+    }
+    return data
+  })
+  .handler(async ({ data }) => {
+    let address = data.address?.trim()
+    if (!address) {
+      const row = getDb()
+        .prepare(`SELECT address FROM listings WHERE id = ?`)
+        .get(data.listingId) as { address: string | null } | undefined
+      address = row?.address?.trim() ?? ''
+    }
+    if (!address) {
+      throw new Error('no address to geocode')
+    }
+    const candidates = await geocodeAddress(address)
+    return { address, candidates }
   })

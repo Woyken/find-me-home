@@ -97,6 +97,44 @@ export async function runEvaluations(): Promise<EvaluateStats> {
   return stats
 }
 
+/**
+ * Re-evaluate a single listing (after a manual edit). Reuses the same
+ * `evalInProgress` guard as `runEvaluations`: if a full evaluation is already
+ * running it skips, trusting that run to cover this listing. Otherwise it sets
+ * the guard for the duration so the UI "evaluating" state works.
+ */
+export async function runEvaluationsForListing(
+  listingId: number,
+): Promise<EvaluateStats> {
+  const stats: EvaluateStats = {
+    listings: 0,
+    evaluated: 0,
+    skippedExpensive: 0,
+    errors: [],
+  }
+  if (evalInProgress) return stats
+  evalInProgress = true
+  const log = (msg: string) => console.log(`[evaluate ${listingId}] ${msg}`)
+  try {
+    const listing = getDb()
+      .prepare(
+        `SELECT id, source, source_id, url, title, price_eur, area_ares,
+                purpose_text, cadastral_number, lat, lng, location_confidence,
+                address, substr(description, 1, 400) AS description,
+                photos_json, utilities_json, overrides_json, dedup_group_id,
+                status, first_seen_at, last_seen_at
+         FROM listings WHERE id = ?`,
+      )
+      .get(listingId) as ListingRow | undefined
+    if (!listing) return stats
+    stats.listings = 1
+    await evaluateListing(listing, stats, log)
+  } finally {
+    evalInProgress = false
+  }
+  return stats
+}
+
 async function evaluateListing(
   l: ListingRow,
   stats: EvaluateStats,

@@ -1,5 +1,6 @@
 import { getDb } from './db'
 import { runDedup } from './dedup'
+import { applyOverrides } from './overrides'
 import { DEFAULT_SCRAPE_OPTIONS } from './scrapers/common'
 import { kampasScraper } from './scrapers/kampas'
 import { domopliusScraper } from './scrapers/domoplius'
@@ -145,6 +146,9 @@ export function upsertListing(
       runId,
       existing.id,
     )
+    // Re-apply any manual overrides on top of the scraper's values so manual
+    // corrections survive re-scans.
+    applyOverrides(existing.id)
     return 'updated'
   }
 
@@ -193,6 +197,7 @@ export interface ListingRow {
   description: string | null
   photos_json: string | null
   utilities_json: string | null
+  overrides_json: string | null
   dedup_group_id: number | null
   status: string
   first_seen_at: string
@@ -206,7 +211,7 @@ export function getListings(): Array<ListingRow> {
       `SELECT id, source, source_id, url, title, price_eur, area_ares,
               purpose_text, cadastral_number, lat, lng, location_confidence,
               address, substr(description, 1, 400) AS description,
-              photos_json, utilities_json, dedup_group_id, status,
+              photos_json, utilities_json, overrides_json, dedup_group_id, status,
               first_seen_at, last_seen_at
        FROM listings
        WHERE status = 'active'
