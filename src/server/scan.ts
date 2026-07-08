@@ -198,6 +198,9 @@ export interface ListingRow {
   photos_json: string | null
   utilities_json: string | null
   overrides_json: string | null
+  boundary_json: string | null
+  boundary_source: string | null
+  boundary_cadastral: string | null
   dedup_group_id: number | null
   status: string
   first_seen_at: string
@@ -211,7 +214,9 @@ export function getListings(): Array<ListingRow> {
       `SELECT id, source, source_id, url, title, price_eur, area_ares,
               purpose_text, cadastral_number, lat, lng, location_confidence,
               address, substr(description, 1, 400) AS description,
-              photos_json, utilities_json, overrides_json, dedup_group_id, status,
+              photos_json, utilities_json, overrides_json,
+              boundary_json, boundary_source, boundary_cadastral,
+              dedup_group_id, status,
               first_seen_at, last_seen_at
        FROM listings
        WHERE status = 'active'

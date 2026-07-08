@@ -11,12 +11,15 @@ import {
   addAruodasPaste,
   fetchListings,
   geocodeListingAddress,
+  resolveListingBoundaries,
   startEvaluation,
   startScan,
   updateListing,
 } from '../server-functions/listings'
 import type { ListingRow } from '../server/scan'
 import type { EvaluationRow } from '../server/evaluators'
+import { ListingsMap } from '../components/ListingsMap'
+import type { FocusRequest } from '../components/ListingsMap'
 
 export const Route = createFileRoute('/')({
   component: Dsh,
@@ -53,10 +56,15 @@ function Dashboard() {
   const data = () => override() ?? loaderData()
   const [scanBusy, setScanBusy] = createSignal(false)
   const [evalBusy, setEvalBusy] = createSignal(false)
+  const [boundariesBusy, setBoundariesBusy] = createSignal(false)
   const [showPaste, setShowPaste] = createSignal(false)
   const [editingId, setEditingId] = createSignal<number>()
+  const [selectedId, setSelectedId] = createSignal<number>()
+  const [focusRequest, setFocusRequest] = createSignal<FocusRequest>()
 
   let pollTimer: ReturnType<typeof setInterval> | undefined
+  const boundaryRefreshTimers: Array<ReturnType<typeof setTimeout>> = []
+  const rowRefs = new Map<number, HTMLTableRowElement>()
 
   const refresh = async () => {
     const fresh = await fetchListings()
@@ -74,7 +82,10 @@ function Dashboard() {
     pollTimer = setInterval(refresh, 4000)
   }
 
-  onCleanup(() => pollTimer && clearInterval(pollTimer))
+  onCleanup(() => {
+    if (pollTimer) clearInterval(pollTimer)
+    for (const t of boundaryRefreshTimers) clearTimeout(t)
+  })
 
   const onScan = async () => {
     setScanBusy(true)
@@ -88,11 +99,34 @@ function Dashboard() {
     startPolling()
   }
 
+  const onResolveBoundaries = async () => {
+    setBoundariesBusy(true)
+    await resolveListingBoundaries()
+    // Fire-and-forget on the server; there's no busy flag to poll, so refresh
+    // a few times on a delay to pick up newly resolved boundary geometry.
+    for (const delayMs of [3000, 7000, 12000, 20000]) {
+      boundaryRefreshTimers.push(setTimeout(() => void refresh(), delayMs))
+    }
+    boundaryRefreshTimers.push(
+      setTimeout(() => setBoundariesBusy(false), 20000),
+    )
+  }
+
   const onEdited = () => {
     setEditingId(undefined)
     setEvalBusy(true)
     void refresh()
     startPolling()
+  }
+
+  const onFocusListing = (id: number) => {
+    setSelectedId(id)
+    setFocusRequest({ id, nonce: Date.now() })
+  }
+
+  const onSelectListing = (id: number) => {
+    setSelectedId(id)
+    rowRefs.get(id)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }
 
   const evalsByListing = createMemo(() => {
@@ -152,6 +186,13 @@ function Dashboard() {
             {evalBusy() || data().evaluating ? 'Evaluating…' : 'Evaluate'}
           </button>
           <button
+            class="rounded-lg bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-500 disabled:opacity-50"
+            disabled={boundariesBusy()}
+            onClick={onResolveBoundaries}
+          >
+            {boundariesBusy() ? 'Resolving boundaries…' : 'Resolve boundaries'}
+          </button>
+          <button
             class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
             disabled={scanBusy() || data().scanRunning}
             onClick={onScan}
@@ -197,6 +238,18 @@ function Dashboard() {
         )}
       </Show>
 
+      <section class="mb-6">
+        <h2 class="mb-3 text-lg font-semibold">Map</h2>
+        <ListingsMap
+          listings={data().listings}
+          requirements={data().requirements}
+          evalsByListing={evalsByListing()}
+          selectedId={selectedId()}
+          onSelect={onSelectListing}
+          focusRequest={focusRequest()}
+        />
+      </section>
+
       <section>
         <h2 class="mb-3 text-lg font-semibold">
           Listings ({data().listings.length})
@@ -233,9 +286,12 @@ function Dashboard() {
                       requirements={data().requirements}
                       evals={evalsByListing().get(l.id)}
                       editing={editingId() === l.id}
+                      selected={selectedId() === l.id}
                       onEdit={() =>
                         setEditingId((cur) => (cur === l.id ? undefined : l.id))
                       }
+                      onFocus={() => onFocusListing(l.id)}
+                      registerRow={(el) => rowRefs.set(l.id, el)}
                     />
                   )}
                 </For>
@@ -263,11 +319,15 @@ function ListingTableRow(props: {
   requirements: Array<{ requirement: string; label: string; hard: boolean }>
   evals: Map<string, EvaluationRow> | undefined
   editing: boolean
+  selected: boolean
   onEdit: () => void
+  onFocus: () => void
+  registerRow: (el: HTMLTableRowElement) => void
 }) {
   const l = props.listing
-  const pricePerAre = () =>
-    l.price_eur != null && l.area_ares ? l.price_eur / l.area_ares : null
+  const price = l.price_eur
+  const area = l.area_ares
+  const pricePerAre = () => (price != null && area ? price / area : null)
   const overrideKeys = (): Array<string> => {
     if (!l.overrides_json) return []
     try {
@@ -279,7 +339,16 @@ function ListingTableRow(props: {
     }
   }
   return (
-    <tr class={props.editing ? 'bg-amber-100/60' : 'hover:bg-blue-50/40'}>
+    <tr
+      ref={props.registerRow}
+      class={
+        props.selected
+          ? 'bg-blue-50 ring-2 ring-inset ring-blue-400'
+          : props.editing
+            ? 'bg-amber-100/60'
+            : 'hover:bg-blue-50/40'
+      }
+    >
       <td class="max-w-xs px-3 py-2">
         <a
           href={l.url}
@@ -302,10 +371,10 @@ function ListingTableRow(props: {
         </Show>
       </td>
       <td class="whitespace-nowrap px-3 py-2 font-semibold">
-        {l.price_eur != null ? `€${l.price_eur.toLocaleString('lt-LT')}` : '—'}
+        {price != null ? `€${price.toLocaleString('lt-LT')}` : '—'}
       </td>
       <td class="whitespace-nowrap px-3 py-2">
-        {l.area_ares != null ? `${l.area_ares.toFixed(1)} a` : '—'}
+        {area != null ? `${area.toFixed(1)} a` : '—'}
       </td>
       <td class="whitespace-nowrap px-3 py-2 text-gray-600">
         {pricePerAre() != null ? `€${pricePerAre()!.toFixed(0)}` : '—'}
@@ -330,6 +399,13 @@ function ListingTableRow(props: {
             {l.lat!.toFixed(4)}, {l.lng!.toFixed(4)}
           </a>
           <span class="ml-1 text-gray-400">({l.location_confidence})</span>
+          <button
+            class="ml-1 rounded border border-gray-300 px-1 text-xs hover:bg-gray-50"
+            title="Show on map"
+            onClick={props.onFocus}
+          >
+            📍
+          </button>
         </Show>
       </td>
       <td class="px-3 py-2">

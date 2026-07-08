@@ -80,6 +80,11 @@ function migrate(d: Database.Database) {
   // Additive column migrations. SQLite has no `ADD COLUMN IF NOT EXISTS`, so
   // guard each ALTER by checking pragma table_info for the column first.
   addColumnIfMissing(d, 'listings', 'overrides_json', 'TEXT')
+
+  // Phase 6: resolved parcel boundary (WGS84 GeoJSON Polygon) + provenance.
+  addColumnIfMissing(d, 'listings', 'boundary_json', 'TEXT')
+  addColumnIfMissing(d, 'listings', 'boundary_source', 'TEXT')
+  addColumnIfMissing(d, 'listings', 'boundary_cadastral', 'TEXT')
 }
 
 /**

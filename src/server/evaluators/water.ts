@@ -137,12 +137,13 @@ export const waterEvaluator: Evaluator = {
       }
     }
 
-    // Priority 3: no signal at all → assume well+septic; be honest about limits.
+    // Priority 3: no signal at all → informational only (never a warning):
+    // assume well+septic and be honest about the limits of the data.
     if (l.lat == null && l.lng == null && !l.description && !l.utilities_json) {
       return unknown('no listing data to assess water/sewage', 'listing')
     }
     return {
-      status: 'warn',
+      status: 'unknown',
       value: 'unknown — assume well+septic (~€5–9k extra, not in €65k budget)',
       evidence: [
         {

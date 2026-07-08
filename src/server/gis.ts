@@ -23,6 +23,12 @@ export function toLks94(lat: number, lng: number): Point3346 {
   return { x, y }
 }
 
+/** LKS-94 (EPSG:3346) → WGS84 lat/lng. proj4 returns [lng, lat]. */
+export function fromLks94(x: number, y: number): { lat: number; lng: number } {
+  const [lng, lat] = proj4('EPSG:3346', 'EPSG:4326', [x, y])
+  return { lat, lng }
+}
+
 /**
  * Read a cached JSON value from geo_cache.
  * Returns `undefined` on a cache miss (or expired), `null` when the cached

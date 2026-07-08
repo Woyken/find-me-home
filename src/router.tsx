@@ -8,9 +8,9 @@ export function getRouter() {
     scrollRestoration: true,
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,
-    defaultPendingComponent: () => (
-      <div class="p-6 text-sm text-gray-500">Loading…</div>
-    ),
+    // NOTE: defaultPendingComponent is intentionally absent — with Solid
+    // 2.0-beta the pending component fails to unmount after hydration,
+    // leaving a stray "Loading…" node in the document.
   })
 
   return router

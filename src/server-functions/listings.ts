@@ -16,6 +16,10 @@ import {
   runEvaluations,
   runEvaluationsForListing,
 } from '../server/evaluators'
+import {
+  isBoundaryResolutionRunning,
+  resolveBoundaries,
+} from '../server/boundaries'
 import { getDb } from '../server/db'
 import {
   geocodeAddress,
@@ -48,6 +52,26 @@ export const startEvaluation = createServerFn({ method: 'POST' }).handler(
     return { started: true as const }
   },
 )
+
+/**
+ * Fire-and-forget parcel boundary resolution for all active listings that lack
+ * a boundary but have a cadastral number or exact coordinates. Enrichment only
+ * — the client polls fetchListings for the resulting boundary geometry.
+ */
+export const resolveListingBoundaries = createServerFn({
+  method: 'POST',
+}).handler(() => {
+  if (isBoundaryResolutionRunning()) return { started: false as const }
+  void resolveBoundaries()
+    .then((s) =>
+      console.log(
+        `[boundaries] done: ${s.resolved} resolved, ${s.unresolved} unresolved, ${s.errors.length} errors`,
+        s.errors,
+      ),
+    )
+    .catch((e) => console.error('boundary resolution failed', e))
+  return { started: true as const }
+})
 
 export const startScan = createServerFn({ method: 'POST' }).handler(
   async () => {
@@ -194,8 +218,9 @@ export const updateListing = createServerFn({ method: 'POST' })
         `SELECT id, source, source_id, url, title, price_eur, area_ares,
                 purpose_text, cadastral_number, lat, lng, location_confidence,
                 address, substr(description, 1, 400) AS description,
-                photos_json, utilities_json, overrides_json, dedup_group_id,
-                status, first_seen_at, last_seen_at
+                photos_json, utilities_json, overrides_json,
+                boundary_json, boundary_source, boundary_cadastral,
+                dedup_group_id, status, first_seen_at, last_seen_at
          FROM listings WHERE id = ?`,
       )
       .get(data.listingId) as ListingRow
