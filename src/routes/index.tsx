@@ -601,11 +601,29 @@ function EditPanel(props: {
         area_ares?: number
         cadastral_number?: string
       } = {}
+      const clear: Array<
+        | 'lat'
+        | 'lng'
+        | 'location_confidence'
+        | 'address'
+        | 'purpose_text'
+        | 'price_eur'
+        | 'area_ares'
+        | 'cadastral_number'
+      > = []
 
       const latVal = lat().trim()
-      if (latVal !== '' && Number(latVal) !== l.lat) fields.lat = Number(latVal)
+      if (latVal === '') {
+        if (l.lat != null) clear.push('lat')
+      } else if (Number(latVal) !== l.lat) {
+        fields.lat = Number(latVal)
+      }
       const lngVal = lng().trim()
-      if (lngVal !== '' && Number(lngVal) !== l.lng) fields.lng = Number(lngVal)
+      if (lngVal === '') {
+        if (l.lng != null) clear.push('lng')
+      } else if (Number(lngVal) !== l.lng) {
+        fields.lng = Number(lngVal)
+      }
       if (confidence() !== l.location_confidence) {
         fields.location_confidence = confidence()
       }
@@ -619,15 +637,19 @@ function EditPanel(props: {
         fields.cadastral_number = cadastral().trim()
       }
       const priceVal = price().trim()
-      if (priceVal !== '' && Number(priceVal) !== l.price_eur) {
+      if (priceVal === '') {
+        if (l.price_eur != null) clear.push('price_eur')
+      } else if (Number(priceVal) !== l.price_eur) {
         fields.price_eur = Number(priceVal)
       }
       const areaVal = area().trim()
-      if (areaVal !== '' && Number(areaVal) !== l.area_ares) {
+      if (areaVal === '') {
+        if (l.area_ares != null) clear.push('area_ares')
+      } else if (Number(areaVal) !== l.area_ares) {
         fields.area_ares = Number(areaVal)
       }
 
-      await updateListing({ data: { listingId: l.id, fields } })
+      await updateListing({ data: { listingId: l.id, fields, clear } })
       props.onSaved()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

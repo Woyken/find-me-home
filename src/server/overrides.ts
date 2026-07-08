@@ -55,10 +55,10 @@ export function getOverrides(listingId: number): OverrideFields {
 
 /**
  * Merge `fields` into the listing's stored overrides and optionally remove
- * keys listed in `clear`. Clearing a key drops it from `overrides_json` so the
- * next scan restores the scraper's value; it does NOT immediately restore the
- * previously scraped value (documented behaviour). Persists the merged JSON
- * and re-applies all overrides onto the main columns.
+ * keys listed in `clear`. Clearing a key drops it from `overrides_json` AND
+ * nulls the matching main column so the value is removed immediately; the next
+ * scan then restores the scraper's value. Persists the merged JSON and
+ * re-applies all remaining overrides onto the main columns.
  */
 export function setOverrides(
   listingId: number,
@@ -73,11 +73,19 @@ export function setOverrides(
       assignOverride(merged, key, value)
     }
   }
-  for (const key of clear) delete merged[key]
+  const clearedKeys = clear.filter((key) => OVERRIDE_KEYS.includes(key))
+  for (const key of clearedKeys) delete merged[key]
 
   getDb()
     .prepare(`UPDATE listings SET overrides_json = ? WHERE id = ?`)
     .run(Object.keys(merged).length > 0 ? JSON.stringify(merged) : null, listingId)
+
+  if (clearedKeys.length > 0) {
+    const sets = clearedKeys.map((key) => `${key} = NULL`).join(', ')
+    getDb()
+      .prepare(`UPDATE listings SET ${sets} WHERE id = ?`)
+      .run(listingId)
+  }
 
   applyOverrides(listingId)
   return merged
