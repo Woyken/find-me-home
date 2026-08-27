@@ -4,11 +4,10 @@ import { applyOverrides } from './overrides'
 import { DEFAULT_SCRAPE_OPTIONS } from './scrapers/common'
 import { kampasScraper } from './scrapers/kampas'
 import { domopliusScraper } from './scrapers/domoplius'
-import { skelbiuScraper } from './scrapers/skelbiu'
 import { alioScraper } from './scrapers/alio'
 import type { ScrapeOptions, ScrapedListing } from './scrapers/common'
 
-const SCRAPERS = [kampasScraper, domopliusScraper, skelbiuScraper, alioScraper]
+const SCRAPERS = [kampasScraper, domopliusScraper, alioScraper]
 
 export interface ScanStats {
   scanRunId: number
@@ -85,7 +84,7 @@ export async function runScan(
         const gone = db
           .prepare(
             `UPDATE listings SET status = 'gone'
-             WHERE source = ? AND status = 'active' AND source != 'aruodas-manual'
+             WHERE source = ? AND status = 'active'
                AND (last_scan_run_id IS NULL OR last_scan_run_id < ?)`,
           )
           .run(source, runId)

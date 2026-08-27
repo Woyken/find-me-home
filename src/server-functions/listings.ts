@@ -8,7 +8,6 @@ import {
 } from '../server/scan'
 import type { ListingRow } from '../server/scan'
 import { runDedup } from '../server/dedup'
-import { parseAruodasPaste } from '../server/scrapers/aruodasPaste'
 import {
   getEvaluations,
   getRequirementMeta,
@@ -82,24 +81,6 @@ export const startScan = createServerFn({ method: 'POST' }).handler(
     return { started: true as const }
   },
 )
-
-export const addAruodasPaste = createServerFn({ method: 'POST' })
-  .inputValidator((data: { url: string; pageText: string }) => {
-    if (!data.url.trim()) throw new Error('url is required')
-    if (!data.pageText.trim()) throw new Error('pageText is required')
-    return data
-  })
-  .handler(({ data }) => {
-    const listing = parseAruodasPaste(data)
-    const outcome = upsertListing(listing, null)
-    runDedup()
-    return {
-      outcome,
-      title: listing.title ?? null,
-      priceEur: listing.priceEur ?? null,
-      areaAres: listing.areaAres ?? null,
-    }
-  })
 
 interface UpdateListingInput {
   listingId: number

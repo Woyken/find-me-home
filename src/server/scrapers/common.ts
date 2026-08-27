@@ -1,5 +1,5 @@
 export interface ScrapedListing {
-  source: 'kampas' | 'domoplius' | 'skelbiu' | 'alio' | 'aruodas-manual'
+  source: 'kampas' | 'domoplius' | 'alio'
   sourceId: string
   url: string
   title?: string
@@ -109,7 +109,7 @@ export async function politeFetch(
 }
 
 /**
- * Fetch via the system curl binary. Some sites (alio.lt, skelbiu.lt) block
+ * Fetch via the system curl binary. Some sites (alio.lt) block
  * Node's TLS fingerprint but accept curl's. Returns status + body text.
  */
 export async function curlFetch(

@@ -3,7 +3,6 @@
 import { kampasScraper } from '../src/server/scrapers/kampas'
 import { domopliusScraper } from '../src/server/scrapers/domoplius'
 import { alioScraper } from '../src/server/scrapers/alio'
-import { skelbiuScraper } from '../src/server/scrapers/skelbiu'
 import { DEFAULT_SCRAPE_OPTIONS } from '../src/server/scrapers/common'
 
 const opts = {
@@ -12,7 +11,7 @@ const opts = {
   log: (m: string) => console.log('  ', m),
 }
 
-for (const scraper of [kampasScraper, domopliusScraper, alioScraper, skelbiuScraper]) {
+for (const scraper of [kampasScraper, domopliusScraper, alioScraper]) {
   console.log(`\n=== ${scraper.source} ===`)
   try {
     const r = await scraper.scrape(opts)

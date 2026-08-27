@@ -8,7 +8,7 @@ import {
   untrack,
 } from 'solid-js'
 import {
-  addAruodasPaste,
+
   fetchListings,
   geocodeListingAddress,
   resolveListingBoundaries,
@@ -37,9 +37,7 @@ function Dsh() {
 const SOURCE_COLORS: Record<string, string> = {
   kampas: 'bg-emerald-100 text-emerald-800',
   domoplius: 'bg-sky-100 text-sky-800',
-  skelbiu: 'bg-amber-100 text-amber-800',
   alio: 'bg-violet-100 text-violet-800',
-  'aruodas-manual': 'bg-rose-100 text-rose-800',
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -173,12 +171,6 @@ function Dashboard() {
           </p>
         </div>
         <div class="flex items-center gap-3">
-          <button
-            class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
-            onClick={() => setShowPaste((v) => !v)}
-          >
-            Paste aruodas listing
-          </button>
           <button
             class="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
             disabled={evalBusy() || data().evaluating}
@@ -830,61 +822,5 @@ function EditPanel(props: {
         </button>
       </div>
     </div>
-  )
-}
-
-function PasteForm(props: { onDone: () => void }) {
-  const [url, setUrl] = createSignal('')
-  const [pageText, setPageText] = createSignal('')
-  const [busy, setBusy] = createSignal(false)
-  const [error, setError] = createSignal<string | null>(null)
-
-  const submit = async (e: Event) => {
-    e.preventDefault()
-    setBusy(true)
-    setError(null)
-    try {
-      await addAruodasPaste({ data: { url: url(), pageText: pageText() } })
-      props.onDone()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <form
-      class="mb-6 space-y-3 rounded-lg border border-gray-200 p-4"
-      onSubmit={submit}
-    >
-      <h3 class="font-semibold">Add aruodas.lt listing manually</h3>
-      <p class="text-xs text-gray-500">
-        Open the listing in your browser, copy the URL and the page text
-        (Ctrl+A, Ctrl+C), and paste both below.
-      </p>
-      <input
-        class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-        placeholder="https://www.aruodas.lt/sklypai/..."
-        value={url()}
-        onInput={(e) => setUrl(e.currentTarget.value)}
-      />
-      <textarea
-        class="h-40 w-full rounded border border-gray-300 px-3 py-2 text-sm"
-        placeholder="Paste the full page text here…"
-        value={pageText()}
-        onInput={(e) => setPageText(e.currentTarget.value)}
-      />
-      <Show when={error()}>
-        <p class="text-sm text-red-600">{error()}</p>
-      </Show>
-      <button
-        type="submit"
-        class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
-        disabled={busy()}
-      >
-        {busy() ? 'Saving…' : 'Save listing'}
-      </button>
-    </form>
   )
 }

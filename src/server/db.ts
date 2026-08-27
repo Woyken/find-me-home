@@ -29,7 +29,7 @@ function migrate(d: Database.Database) {
 
     CREATE TABLE IF NOT EXISTS listings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      source TEXT NOT NULL,             -- kampas | domoplius | skelbiu | alio | aruodas-manual
+      source TEXT NOT NULL,             -- kampas | domoplius | alio
       source_id TEXT NOT NULL,          -- id on the source site
       url TEXT NOT NULL,
       title TEXT,
