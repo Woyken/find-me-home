@@ -243,11 +243,32 @@ export function ListingsMap(props: {
         center: VILNIUS_CENTER,
         zoom: 11,
       })
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19,
-      }).addTo(map)
+      const mapLayer = L.tileLayer(
+        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        {
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          maxZoom: 19,
+        },
+      )
+      const satelliteLayer = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {
+          attribution: 'Tiles &copy; Esri',
+          maxZoom: 19,
+        },
+      )
+      mapLayer.addTo(map)
+      L.control
+        .layers(
+          {
+            Map: mapLayer,
+            Satellite: satelliteLayer,
+          },
+          undefined,
+          { position: 'topright' },
+        )
+        .addTo(map)
       layerGroup = L.layerGroup().addTo(map)
       resizeObserver = new ResizeObserver(() => {
         if (!map) return
