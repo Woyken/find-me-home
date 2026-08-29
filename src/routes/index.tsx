@@ -8,7 +8,8 @@ import {
   untrack,
 } from 'solid-js'
 import {
-
+  deleteListing,
+  getAruodasBookmarklet,
   fetchListings,
   geocodeListingAddress,
   resolveListingBoundaries,
@@ -38,6 +39,7 @@ const SOURCE_COLORS: Record<string, string> = {
   kampas: 'bg-emerald-100 text-emerald-800',
   domoplius: 'bg-sky-100 text-sky-800',
   alio: 'bg-violet-100 text-violet-800',
+  aruodas: 'bg-orange-100 text-orange-800',
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -56,7 +58,7 @@ function Dashboard() {
   const [scanBusy, setScanBusy] = createSignal(false)
   const [evalBusy, setEvalBusy] = createSignal(false)
   const [boundariesBusy, setBoundariesBusy] = createSignal(false)
-  const [showPaste, setShowPaste] = createSignal(false)
+  const [showAruodasImport, setShowAruodasImport] = createSignal(false)
   const [editingId, setEditingId] = createSignal<number>()
   const [selectedId, setSelectedId] = createSignal<number>()
   const [focusRequest, setFocusRequest] = createSignal<FocusRequest>()
@@ -192,16 +194,17 @@ function Dashboard() {
           >
             {scanBusy() || data().scanRunning ? 'Scanning…' : 'Scan now'}
           </button>
+          <button
+            class="rounded-lg bg-orange-600 px-5 py-2 text-sm font-semibold text-white hover:bg-orange-500"
+            onClick={() => setShowAruodasImport((shown) => !shown)}
+          >
+            {showAruodasImport() ? 'Close import' : 'Import Aruodas'}
+          </button>
         </div>
       </header>
 
-      <Show when={showPaste()}>
-        <PasteForm
-          onDone={() => {
-            setShowPaste(false)
-            void refresh()
-          }}
-        />
+      <Show when={showAruodasImport()}>
+        <AruodasImportPanel />
       </Show>
 
       <Show when={data().lastScan}>
@@ -300,10 +303,138 @@ function Dashboard() {
             listing={editingListing()!}
             onCancel={() => setEditingId(undefined)}
             onSaved={onEdited}
+            onDeleted={() => {
+              setEditingId(undefined)
+              setSelectedId(undefined)
+              void refresh()
+            }}
           />
         </section>
       </Show>
     </main>
+  )
+}
+
+function AruodasImportPanel() {
+  const [url, setUrl] = createSignal('')
+  const [bookmarklet, setBookmarklet] = createSignal('')
+  const [busy, setBusy] = createSignal(false)
+  const [message, setMessage] = createSignal<string>()
+  const [error, setError] = createSignal<string>()
+
+  const isAruodasLandUrl = (value: string) => {
+    try {
+      const parsed = new URL(value)
+      return (
+        parsed.protocol === 'https:' &&
+        (parsed.hostname === 'aruodas.lt' ||
+          parsed.hostname === 'www.aruodas.lt') &&
+        parsed.pathname.startsWith('/sklypai')
+      )
+    } catch {
+      return false
+    }
+  }
+
+  const openListing = () => {
+    if (!isAruodasLandUrl(url())) {
+      setError('Enter an HTTPS URL for an individual Aruodas land listing.')
+      return
+    }
+    setError(undefined)
+    window.open(url(), '_blank', 'noopener,noreferrer')
+  }
+
+  const generateBookmarklet = async () => {
+    setBusy(true)
+    setError(undefined)
+    setMessage(undefined)
+    try {
+      const { bookmarklet: generated } = await getAruodasBookmarklet({
+        data: { origin: window.location.origin },
+      })
+      setBookmarklet(generated)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const copyBookmarklet = async () => {
+    try {
+      await navigator.clipboard.writeText(bookmarklet())
+      setMessage(
+        'Bookmarklet copied. Save it as a Chrome bookmark named “Import to Find Me Home”.',
+      )
+    } catch (err) {
+      setError(
+        `Could not copy the bookmarklet: ${err instanceof Error ? err.message : String(err)}`,
+      )
+    }
+  }
+
+  return (
+    <section class="mb-6 rounded-lg border border-orange-200 bg-orange-50 p-4">
+      <h2 class="text-lg font-semibold text-orange-950">Import from Aruodas</h2>
+      <p class="mt-1 text-sm text-orange-950/80">
+        Open the listing in Chrome, complete any human verification yourself,
+        then run your saved bookmarklet on the visible listing page.
+      </p>
+
+      <div class="mt-4 flex flex-wrap gap-2">
+        <input
+          class="min-w-64 flex-1 rounded border border-orange-300 bg-white px-3 py-2 text-sm"
+          type="url"
+          placeholder="https://www.aruodas.lt/sklypai-..."
+          value={url()}
+          onInput={(event) => setUrl(event.currentTarget.value)}
+        />
+        <button
+          type="button"
+          class="rounded bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
+          onClick={openListing}
+        >
+          Open listing
+        </button>
+        <button
+          type="button"
+          class="rounded border border-orange-400 px-4 py-2 text-sm font-semibold text-orange-900 hover:bg-orange-100 disabled:opacity-50"
+          disabled={busy()}
+          onClick={generateBookmarklet}
+        >
+          {busy() ? 'Generating…' : 'Get bookmarklet'}
+        </button>
+      </div>
+
+      <Show when={bookmarklet()}>
+        <div class="mt-4">
+          <p class="mb-2 text-sm font-medium text-orange-950">
+            Copy this once, then save it as a Chrome bookmark. On Android,
+            invoke it by typing its bookmark name in Chrome’s address bar.
+          </p>
+          <textarea
+            class="h-28 w-full rounded border border-orange-300 bg-white p-2 font-mono text-xs"
+            readOnly
+            value={bookmarklet()}
+          />
+          <button
+            type="button"
+            class="mt-2 rounded bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
+            onClick={copyBookmarklet}
+          >
+            Copy bookmarklet
+          </button>
+        </div>
+      </Show>
+
+      <Show when={message()}>
+        <p class="mt-3 text-sm text-emerald-700">{message()}</p>
+      </Show>
+      <Show when={error()}>
+        <p class="mt-3 text-sm text-red-700">{error()}</p>
+      </Show>
+    </section>
   )
 }
 
@@ -494,8 +625,8 @@ function EditPanel(props: {
   listing: ListingRow
   onCancel: () => void
   onSaved: () => void
+  onDeleted: () => void
 }) {
-  console.log('rendering edit panel for listing', props.listing.id)
   const l = untrack(() => props.listing)
   const [address, setAddress] = createSignal(l.address ?? '')
   const [lat, setLat] = createSignal(l.lat != null ? String(l.lat) : '')
@@ -513,6 +644,7 @@ function EditPanel(props: {
   const [cadastral, setCadastral] = createSignal(l.cadastral_number ?? '')
 
   const [busy, setBusy] = createSignal(false)
+  const [deleting, setDeleting] = createSignal(false)
   const [geocoding, setGeocoding] = createSignal(false)
   const [resolving, setResolving] = createSignal(false)
   const [resolveNote, setResolveNote] = createSignal<string | null>(null)
@@ -570,6 +702,8 @@ function EditPanel(props: {
       setResolveNote(
         summary.filled.length > 0
           ? `Filled: ${summary.filled.join(', ')}`
+          : summary.areaMismatch
+            ? `Skipped parcel: ${summary.areaMismatch.parcelAreaAres.toFixed(1)} a does not match listing area ${summary.areaMismatch.listingAreaAres.toFixed(1)} a`
           : 'Nothing new resolved',
       )
     } catch (err) {
@@ -610,6 +744,7 @@ function EditPanel(props: {
       } else if (Number(latVal) !== l.lat) {
         fields.lat = Number(latVal)
       }
+
       const lngVal = lng().trim()
       if (lngVal === '') {
         if (l.lng != null) clear.push('lng')
@@ -647,6 +782,26 @@ function EditPanel(props: {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
+    }
+  }
+
+  const remove = async () => {
+    if (
+      !window.confirm(
+        'Delete this listing permanently? Its evaluation results will also be deleted.',
+      )
+    ) {
+      return
+    }
+    setDeleting(true)
+    setError(null)
+    try {
+      await deleteListing({ data: { listingId: l.id } })
+      props.onDeleted()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -808,7 +963,7 @@ function EditPanel(props: {
         <button
           type="button"
           class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-          disabled={busy()}
+          disabled={busy() || deleting()}
           onClick={save}
         >
           {busy() ? 'Saving…' : 'Save'}
@@ -816,9 +971,18 @@ function EditPanel(props: {
         <button
           type="button"
           class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
+          disabled={busy() || deleting()}
           onClick={props.onCancel}
         >
           Cancel
+        </button>
+        <button
+          type="button"
+          class="ml-auto rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+          disabled={busy() || deleting()}
+          onClick={remove}
+        >
+          {deleting() ? 'Deleting…' : 'Delete listing'}
         </button>
       </div>
     </div>

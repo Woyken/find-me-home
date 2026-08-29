@@ -49,6 +49,8 @@ const PARCEL_MUNICIPALITIES = [13, 41, 42, 62, 79, 85, 86, 89] as const
 const IMPORT_MAX_AGE_DAYS = 30
 /** Boundary results are cached in geo_cache for this long. */
 const CACHE_MAX_AGE_DAYS = 30
+/** A resolved parcel may differ from the advertised plot area by at most 20%. */
+const MAX_AREA_DIFFERENCE_RATIO = 0.2
 
 const log = (msg: string) => console.log(`[boundaries] ${msg}`)
 
@@ -101,6 +103,28 @@ export interface BoundaryResult {
   purposeText: string | null
   /** Polygon centroid in WGS84. */
   centroid: { lat: number; lng: number }
+}
+
+/**
+ * Checks whether the registered parcel is plausibly the advertised plot.
+ * Listings without a usable area remain eligible for location resolution.
+ */
+export function isParcelAreaCompatible(
+  listingAreaAres: number | null,
+  parcelAreaM2: number,
+): boolean {
+  if (
+    listingAreaAres === null ||
+    !Number.isFinite(listingAreaAres) ||
+    listingAreaAres <= 0
+  ) {
+    return true
+  }
+  const parcelAreaAres = parcelAreaM2 / 100
+  return (
+    Math.abs(parcelAreaAres - listingAreaAres) / listingAreaAres <=
+    MAX_AREA_DIFFERENCE_RATIO
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -596,6 +620,7 @@ interface BoundaryListingRow {
   id: number
   lat: number | null
   lng: number | null
+  area_ares: number | null
   location_confidence: string
   cadastral_number: string | null
 }
@@ -634,7 +659,8 @@ function persistBoundary(
 /**
  * Resolve and persist the parcel boundary for one listing. Tries the cadastral
  * number first (authoritative), then a point lookup when the listing has exact
- * coordinates. Returns the result, or null when nothing could be resolved.
+ * coordinates. A result must also be compatible with the listing area. Returns
+ * the result, or null when nothing could be resolved.
  */
 export async function resolveBoundaryForListing(
   listingId: number,
@@ -642,7 +668,7 @@ export async function resolveBoundaryForListing(
   const db = getDb()
   const listing = db
     .prepare(
-      `SELECT id, lat, lng, location_confidence, cadastral_number
+      `SELECT id, lat, lng, area_ares, location_confidence, cadastral_number
        FROM listings WHERE id = ?`,
     )
     .get(listingId) as BoundaryListingRow | undefined
@@ -652,12 +678,34 @@ export async function resolveBoundaryForListing(
   try {
     result = await resolveByCadastral(listing.cadastral_number)
     if (
+      result &&
+      !isParcelAreaCompatible(listing.area_ares, result.areaM2)
+    ) {
+      log(
+        `listing ${listingId} rejected cadastral parcel ${result.cadastralNumber ?? 'unknown'}: ${(
+          result.areaM2 / 100
+        ).toFixed(2)} a does not match ${listing.area_ares} a`,
+      )
+      result = null
+    }
+    if (
       !result &&
       listing.location_confidence === 'exact' &&
       listing.lat !== null &&
       listing.lng !== null
     ) {
       result = await resolveByPoint(listing.lat, listing.lng)
+      if (
+        result &&
+        !isParcelAreaCompatible(listing.area_ares, result.areaM2)
+      ) {
+        log(
+          `listing ${listingId} rejected point parcel ${result.cadastralNumber ?? 'unknown'}: ${(
+            result.areaM2 / 100
+          ).toFixed(2)} a does not match ${listing.area_ares} a`,
+        )
+        result = null
+      }
     }
   } catch (e) {
     log(`listing ${listingId} resolution failed: ${String(e)}`)

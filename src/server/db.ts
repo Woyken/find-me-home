@@ -56,6 +56,14 @@ function migrate(d: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_listings_dedup ON listings(dedup_group_id);
     CREATE INDEX IF NOT EXISTS idx_listings_status ON listings(status);
 
+    -- Long-lived, per-source device keys for explicitly user-invoked imports.
+    CREATE TABLE IF NOT EXISTS import_secrets (
+      source TEXT PRIMARY KEY,
+      secret TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      rotated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     -- Requirement evaluations (phase 3+). One row per listing per requirement.
     CREATE TABLE IF NOT EXISTS evaluations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

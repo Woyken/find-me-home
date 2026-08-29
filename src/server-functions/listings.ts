@@ -20,12 +20,13 @@ import {
   resolveBoundaries,
 } from '../server/boundaries'
 import { getDb } from '../server/db'
-import {
-  geocodeAddress,
-  setOverrides,
-} from '../server/overrides'
+import { geocodeAddress, setOverrides } from '../server/overrides'
 import type { OverrideFields, OverrideKey } from '../server/overrides'
 import { resolveListingLocation } from '../server/resolve-location'
+import {
+  createAruodasBookmarklet,
+  getAruodasImportKey,
+} from '../server/aruodas-import'
 
 export const fetchListings = createServerFn({ method: 'GET' }).handler(() => {
   return {
@@ -82,6 +83,41 @@ export const startScan = createServerFn({ method: 'POST' }).handler(
   },
 )
 
+function validateBookmarkletOrigin(data: { origin: string }): {
+  origin: string
+} {
+  if (typeof data.origin !== 'string') throw new Error('origin is required')
+  let origin: URL
+  try {
+    origin = new URL(data.origin)
+  } catch {
+    throw new Error('origin must be a valid URL')
+  }
+  const isLocalHttp =
+    origin.protocol === 'http:' &&
+    (origin.hostname === 'localhost' || origin.hostname === '127.0.0.1')
+  if (origin.protocol !== 'https:' && !isLocalHttp) {
+    throw new Error('Find Me Home must use HTTPS for mobile imports')
+  }
+  if (origin.pathname !== '/' || origin.search || origin.hash) {
+    throw new Error('origin must not include a path, query, or hash')
+  }
+  return { origin: origin.origin }
+}
+
+/**
+ * Returns a personal bookmarklet which submits the currently visible,
+ * user-verified Aruodas listing with an ordinary cross-site form POST.
+ */
+export const getAruodasBookmarklet = createServerFn({ method: 'POST' })
+  .validator(validateBookmarkletOrigin)
+  .handler(({ data }) => {
+    const endpoint = new URL('/api/aruodas-import', data.origin).toString()
+    return {
+      bookmarklet: createAruodasBookmarklet(endpoint, getAruodasImportKey()),
+    }
+  })
+
 interface UpdateListingInput {
   listingId: number
   fields: OverrideFields
@@ -105,9 +141,8 @@ function isFinitePositive(value: unknown): value is number {
 
 function listingExists(listingId: number): boolean {
   return (
-    getDb()
-      .prepare(`SELECT 1 FROM listings WHERE id = ?`)
-      .get(listingId) !== undefined
+    getDb().prepare(`SELECT 1 FROM listings WHERE id = ?`).get(listingId) !==
+    undefined
   )
 }
 
@@ -208,6 +243,24 @@ export const updateListing = createServerFn({ method: 'POST' })
       .get(data.listingId) as ListingRow
 
     return { listing: updated }
+  })
+
+export const deleteListing = createServerFn({ method: 'POST' })
+  .inputValidator((data: { listingId: number }) => {
+    if (
+      typeof data.listingId !== 'number' ||
+      !Number.isInteger(data.listingId)
+    ) {
+      throw new Error('listingId is required')
+    }
+    if (!listingExists(data.listingId)) {
+      throw new Error(`listing ${data.listingId} not found`)
+    }
+    return data
+  })
+  .handler(({ data }) => {
+    getDb().prepare(`DELETE FROM listings WHERE id = ?`).run(data.listingId)
+    return { deleted: true as const }
   })
 
 /**

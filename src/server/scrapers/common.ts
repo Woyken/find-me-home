@@ -1,5 +1,5 @@
 export interface ScrapedListing {
-  source: 'kampas' | 'domoplius' | 'alio'
+  source: 'kampas' | 'domoplius' | 'alio' | 'aruodas'
   sourceId: string
   url: string
   title?: string

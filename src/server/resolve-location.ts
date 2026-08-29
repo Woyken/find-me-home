@@ -14,7 +14,11 @@
  * without inventing data.
  */
 import { getDb } from './db'
-import { resolveByCadastral, resolveByPoint } from './boundaries'
+import {
+  isParcelAreaCompatible,
+  resolveByCadastral,
+  resolveByPoint,
+} from './boundaries'
 import { geocodeAddress, reverseGeocode, setOverrides } from './overrides'
 import type { BoundaryResult } from './boundaries'
 import type { GeocodeCandidate } from './overrides'
@@ -31,6 +35,7 @@ export interface ResolveLocationSummary {
   cadastral: string | null
   locationConfidence: string | null
   boundarySource: string | null
+  areaMismatch: { listingAreaAres: number; parcelAreaAres: number } | null
 }
 
 interface ResolveListingRow {
@@ -38,6 +43,7 @@ interface ResolveListingRow {
   address: string | null
   lat: number | null
   lng: number | null
+  area_ares: number | null
   location_confidence: string
   cadastral_number: string | null
   boundary_json: string | null
@@ -48,7 +54,7 @@ interface ResolveListingRow {
 function loadRow(listingId: number): ResolveListingRow | undefined {
   return getDb()
     .prepare(
-      `SELECT id, address, lat, lng, location_confidence, cadastral_number,
+      `SELECT id, address, lat, lng, area_ares, location_confidence, cadastral_number,
               boundary_json, boundary_source, boundary_cadastral
        FROM listings WHERE id = ?`,
     )
@@ -82,15 +88,37 @@ interface AnchorSearch {
   parcel?: { anchor: Anchor; result: BoundaryResult }
   /** Exact (Regia) geocode of the address anchor, when one was obtained. */
   exactPoint?: GeocodeCandidate
+  /** First parcel rejected because its registered area did not fit the listing. */
+  areaMismatch?: { listingAreaAres: number; parcelAreaAres: number }
+}
+
+function rejectAreaMismatch(
+  row: ResolveListingRow,
+  result: BoundaryResult,
+): AnchorSearch['areaMismatch'] | undefined {
+  if (isParcelAreaCompatible(row.area_ares, result.areaM2)) return undefined
+  const mismatch = {
+    listingAreaAres: row.area_ares!,
+    parcelAreaAres: result.areaM2 / 100,
+  }
+  log(
+    `listing ${row.id} rejected ${result.source} parcel ${result.cadastralNumber ?? 'unknown'}: ${mismatch.parcelAreaAres.toFixed(2)} a does not match ${mismatch.listingAreaAres} a`,
+  )
+  return mismatch
 }
 
 /** Try anchors in authority order until one resolves a parcel. */
 async function findParcel(row: ResolveListingRow): Promise<AnchorSearch> {
+  let areaMismatch: AnchorSearch['areaMismatch']
   // 1. Cadastral number (authoritative).
   if (row.cadastral_number?.trim()) {
     try {
       const result = await resolveByCadastral(row.cadastral_number)
-      if (result) return { parcel: { anchor: 'cadastral', result } }
+      if (result) {
+        const mismatch = rejectAreaMismatch(row, result)
+        if (!mismatch) return { parcel: { anchor: 'cadastral', result } }
+        areaMismatch = mismatch
+      }
     } catch (e) {
       log(`listing ${row.id} cadastral lookup failed: ${String(e)}`)
     }
@@ -101,7 +129,11 @@ async function findParcel(row: ResolveListingRow): Promise<AnchorSearch> {
   if (row.lat !== null && row.lng !== null) {
     try {
       const result = await resolveByPoint(row.lat, row.lng)
-      if (result) return { parcel: { anchor: 'point', result } }
+      if (result) {
+        const mismatch = rejectAreaMismatch(row, result)
+        if (!mismatch) return { parcel: { anchor: 'point', result } }
+        areaMismatch ??= mismatch
+      }
     } catch (e) {
       log(`listing ${row.id} point lookup failed: ${String(e)}`)
     }
@@ -116,16 +148,20 @@ async function findParcel(row: ResolveListingRow): Promise<AnchorSearch> {
       if (exact) {
         const result = await resolveByPoint(exact.lat, exact.lng)
         if (result) {
-          return { parcel: { anchor: 'address', result }, exactPoint: exact }
+          const mismatch = rejectAreaMismatch(row, result)
+          if (!mismatch) {
+            return { parcel: { anchor: 'address', result }, exactPoint: exact }
+          }
+          areaMismatch ??= mismatch
         }
-        return { exactPoint: exact }
+        return { exactPoint: exact, areaMismatch }
       }
     } catch (e) {
       log(`listing ${row.id} address geocode failed: ${String(e)}`)
     }
   }
 
-  return {}
+  return { areaMismatch }
 }
 
 /**
@@ -248,5 +284,6 @@ export async function resolveListingLocation(
     cadastral: row.cadastral_number,
     locationConfidence: row.location_confidence,
     boundarySource: row.boundary_source,
+    areaMismatch: search.areaMismatch ?? null,
   }
 }
