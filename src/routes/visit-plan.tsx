@@ -14,7 +14,7 @@ export const Route = createFileRoute('/visit-plan')({
 })
 
 function VisitPlanPage() {
-  const plan = () => Route.useLoaderData()()
+  const plan = Route.useLoaderData()
   const router = useRouter()
   const [busyId, setBusyId] = createSignal<number | null>(null)
 
