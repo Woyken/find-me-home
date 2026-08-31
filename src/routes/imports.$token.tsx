@@ -1,18 +1,18 @@
-import { Link, createFileRoute, useNavigate } from '@tanstack/solid-router'
-import { Show, createSignal, untrack } from 'solid-js'
+import { useNavigate } from '@solidjs/router'
+import { Show, createMemo, createSignal, untrack } from 'solid-js'
 import { chooseImportedLocationClue } from '../location-clue'
-import {
-  fetchImportDraft,
-  saveDraft,
-} from '../server-functions/source-listings'
+import { saveDraft } from '../server-functions/source-listings'
+import { paths } from '../paths'
+import { importDraftQuery } from '../queries'
 
-export const Route = createFileRoute('/imports/$token')({
-  loader: ({ params }) => fetchImportDraft({ data: { token: params.token } }),
-  component: ImportReview,
-})
+export const preloadImportReview = (props: {
+  params: Record<string, string | undefined>
+}) => void importDraftQuery(props.params.token ?? '')
 
-function ImportReview() {
-  const draft = () => Route.useLoaderData()()
+export default function ImportReview(props: {
+  params: Record<string, string | undefined>
+}) {
+  const draft = createMemo(() => importDraftQuery(props.params.token ?? ''))
   const navigate = useNavigate()
   return (
     <main class="min-h-screen bg-[#f6f4ec] px-5 py-8 text-[#17231d] sm:px-10">
@@ -24,24 +24,19 @@ function ImportReview() {
             <p class="mt-3 text-[#607067]">
               Run the bookmarklet from the Aruodas advert again.
             </p>
-            <Link
+            <a
               class="mt-6 inline-block font-bold text-[#315f73] underline"
-              to="/"
+              href={paths.home}
             >
               Return home
-            </Link>
+            </a>
           </div>
         }
       >
         {(loaded) => (
           <ReviewSheet
             draft={loaded()}
-            onSaved={(id) =>
-              navigate({
-                to: '/source-listings/$sourceListingId',
-                params: { sourceListingId: String(id) },
-              })
-            }
+            onSaved={(id) => navigate(paths.sourceListing(id))}
           />
         )}
       </Show>
@@ -50,11 +45,7 @@ function ImportReview() {
 }
 
 function ReviewSheet(props: {
-  draft: NonNullable<
-    ReturnType<typeof Route.useLoaderData>
-  > extends () => infer T
-    ? NonNullable<Awaited<T>>
-    : never
+  draft: NonNullable<Awaited<ReturnType<typeof importDraftQuery>>>
   onSaved: (id: number) => void
 }) {
   const draft = untrack(() => props.draft)

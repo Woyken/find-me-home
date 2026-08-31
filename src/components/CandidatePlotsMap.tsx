@@ -23,6 +23,7 @@ export function CandidatePlotsMap(props: {
   let resizeObserver: ResizeObserver | undefined
   let householdLayer: Leaflet.LayerGroup | undefined
   let container: HTMLDivElement | undefined
+  let disposed = false
   const [locationState, setLocationState] = createSignal<
     'idle' | 'locating' | 'available' | 'unavailable'
   >('idle')
@@ -57,9 +58,11 @@ export function CandidatePlotsMap(props: {
     }
   }
 
-  const draw = (fitBounds: boolean) => {
-    const plots = props.plots
-    const selectedPlotId = props.selectedPlotId
+  const draw = (
+    fitBounds: boolean,
+    plots: Array<MapPlot>,
+    selectedPlotId: number | undefined,
+  ) => {
     if (!map || !leaflet || !plotLayer) return
 
     plotLayer.clearLayers()
@@ -124,8 +127,12 @@ export function CandidatePlotsMap(props: {
 
   const init = (element: HTMLDivElement) => {
     void import('leaflet').then((loaded) => {
+      if (disposed) return
       leaflet = loaded
       map = loaded.map(element, { zoomControl: false })
+      plotLayer = loaded.layerGroup().addTo(map)
+      householdLayer = loaded.layerGroup().addTo(map)
+      draw(true, props.plots, props.selectedPlotId)
       loaded
         .tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution:
@@ -134,23 +141,27 @@ export function CandidatePlotsMap(props: {
         })
         .addTo(map)
       loaded.control.zoom({ position: 'bottomright' }).addTo(map)
-      plotLayer = loaded.layerGroup().addTo(map)
-      householdLayer = loaded.layerGroup().addTo(map)
       map.on('zoomend moveend', resolveLabelCollisions)
       resizeObserver = new ResizeObserver(() => map?.invalidateSize())
       resizeObserver.observe(element)
-      draw(true)
-      locate()
+      try {
+        locate()
+      } catch {
+        setLocationState('unavailable')
+        setLocationMessage(
+          'Live location is unavailable. Map and field notes remain usable.',
+        )
+      }
     })
   }
 
-  createEffect(() => {
-    props.plots
-    props.selectedPlotId
-    draw(false)
-  })
+  createEffect(
+    () => [props.plots, props.selectedPlotId] as const,
+    ([plots, selectedPlotId]) => draw(false, plots, selectedPlotId),
+  )
 
   onCleanup(() => {
+    disposed = true
     resizeObserver?.disconnect()
     map?.remove()
   })
@@ -167,7 +178,7 @@ export function CandidatePlotsMap(props: {
     setLocationMessage('Finding your location…')
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
-        if (!leaflet || !map || !householdLayer) return
+        if (disposed || !leaflet || !map || !householdLayer) return
         householdLayer.clearLayers()
         leaflet
           .circle([coords.latitude, coords.longitude], {
@@ -192,12 +203,13 @@ export function CandidatePlotsMap(props: {
           [coords.latitude, coords.longitude],
           Math.max(map.getZoom(), 16),
         )
-        setLocationState('available')
         setLocationMessage(
           `Live location accuracy ±${Math.round(coords.accuracy)} m`,
         )
+        setLocationState('available')
       },
       (error) => {
+        if (disposed) return
         setLocationState('unavailable')
         setLocationMessage(
           error.code === error.PERMISSION_DENIED
@@ -237,7 +249,7 @@ export function CandidatePlotsMap(props: {
     >
       <div
         ref={init}
-        class="h-full w-full"
+        class="absolute inset-0"
         aria-label="Map of Candidate Plots"
       />
       <div class="absolute left-3 top-3 z-[500] flex max-w-[calc(100%-1.5rem)] flex-wrap gap-2">

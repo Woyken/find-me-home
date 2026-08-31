@@ -1,10 +1,9 @@
-import { Link, createFileRoute, useRouter } from '@tanstack/solid-router'
+import { revalidate, useNavigate } from '@solidjs/router'
 import { For, Show, createMemo, createSignal, onCleanup } from 'solid-js'
 import { CandidatePlotsMap } from '../components/CandidatePlotsMap'
 import {
   addCandidatePlot,
   deleteSavedSourceListing,
-  fetchSourceListing,
   markVisited,
   saveCandidatePlotFacts,
   saveCandidatePlotHouseholdNotes,
@@ -12,17 +11,21 @@ import {
   updateVisitPlan,
 } from '../server-functions/source-listings'
 import type { SourceListingDetail } from '../server/source-listings'
+import { paths } from '../paths'
+import { sourceListingQuery } from '../queries'
 import { formatDate } from './index'
 
-export const Route = createFileRoute('/source-listings/$sourceListingId')({
-  loader: ({ params }) =>
-    fetchSourceListing({ data: { id: Number(params.sourceListingId) } }),
-  component: SourceListingPage,
-})
+export const preloadSourceListing = (props: {
+  params: Record<string, string | undefined>
+}) => void sourceListingQuery(Number(props.params.sourceListingId))
 
-function SourceListingPage() {
-  const listing = Route.useLoaderData()
-  const router = useRouter()
+export default function SourceListingPage(props: {
+  params: Record<string, string | undefined>
+}) {
+  const listing = createMemo(() =>
+    sourceListingQuery(Number(props.params.sourceListingId)),
+  )
+  const navigate = useNavigate()
   const [busy, setBusy] = createSignal(false)
   const [deleteError, setDeleteError] = createSignal('')
   const [visitError, setVisitError] = createSignal('')
@@ -76,7 +79,7 @@ function SourceListingPage() {
       })
       setSelectedPlotId(result.plotId)
       setPlotSearch('')
-      await router.invalidate({ sync: true })
+      await revalidate()
     } catch (caught) {
       setPlotError(caught instanceof Error ? caught.message : String(caught))
     } finally {
@@ -91,7 +94,7 @@ function SourceListingPage() {
       await updateVisitPlan({
         data: { id: current.id, included: current.visitPlanPosition === null },
       })
-      await router.invalidate({ sync: true })
+      await revalidate()
     } finally {
       setBusy(false)
     }
@@ -103,7 +106,7 @@ function SourceListingPage() {
     setVisitError('')
     try {
       await markVisited({ data: { id: current.id } })
-      await router.navigate({ to: '/visit-plan' })
+      navigate(paths.visitPlan)
     } catch (caught) {
       setVisitError(caught instanceof Error ? caught.message : String(caught))
       setBusy(false)
@@ -120,7 +123,7 @@ function SourceListingPage() {
     setDeleteError('')
     try {
       await deleteSavedSourceListing({ data: { id: current.id } })
-      await router.navigate({ to: '/' })
+      navigate(paths.home)
     } catch (caught) {
       setDeleteError(caught instanceof Error ? caught.message : String(caught))
       setBusy(false)
@@ -132,15 +135,18 @@ function SourceListingPage() {
         {(item) => (
           <div class="mx-auto max-w-5xl">
             <div class="flex flex-wrap gap-x-5 gap-y-2">
-              <Link
+              <a
                 class="text-sm font-bold text-[#315f73] underline"
-                to="/visit-plan"
+                href={paths.visitPlan}
               >
                 ← Visit Plan
-              </Link>
-              <Link class="text-sm font-bold text-[#315f73] underline" to="/">
+              </a>
+              <a
+                class="text-sm font-bold text-[#315f73] underline"
+                href={paths.home}
+              >
                 Saved Source Listings
-              </Link>
+              </a>
             </div>
             <header class="mt-8 border-b border-[#17231d]/20 pb-8">
               <div class="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
@@ -440,7 +446,6 @@ function CandidatePlotCard(props: {
   sourceListingId: number
   sourceListingAddress: string | null
 }) {
-  const router = useRouter()
   const initialClueKind: LocationClueKind = props.plot.parcelNumberClue
     ? 'registry'
     : props.plot.latitudeClue !== null || props.plot.longitudeClue !== null
@@ -509,7 +514,7 @@ function CandidatePlotCard(props: {
         },
       })
       setSaved(true)
-      await router.invalidate({ sync: true })
+      await revalidate()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
@@ -600,7 +605,7 @@ function CandidatePlotCard(props: {
     try {
       await action()
       setSaved(true)
-      await router.invalidate({ sync: true })
+      await revalidate()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {

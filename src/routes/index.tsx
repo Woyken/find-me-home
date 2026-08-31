@@ -1,19 +1,17 @@
-import { Link, createFileRoute, useRouter } from '@tanstack/solid-router'
-import { For, Show, createSignal } from 'solid-js'
+import { revalidate } from '@solidjs/router'
+import { For, Show, createMemo, createSignal } from 'solid-js'
 import {
-  fetchSourceListings,
   getAruodasBookmarklet,
   updateVisitPlan,
 } from '../server-functions/source-listings'
 import type { SourceListingSummary } from '../server/source-listings'
+import { paths } from '../paths'
+import { sourceListingsQuery } from '../queries'
 
-export const Route = createFileRoute('/')({
-  loader: () => fetchSourceListings(),
-  component: Home,
-})
+export const preloadHome = () => void sourceListingsQuery()
 
-function Home() {
-  const listings = () => Route.useLoaderData()()
+export default function Home() {
+  const listings = createMemo(() => sourceListingsQuery())
   const visitCount = () =>
     listings().filter((listing) => listing.visitPlanPosition !== null).length
   const [showImport, setShowImport] = createSignal(false)
@@ -24,12 +22,12 @@ function Home() {
         <header class="flex flex-wrap items-center justify-between gap-3 border-b border-[#18241e] px-4 py-4 sm:px-7">
           <h1 class="font-serif text-2xl">Find Me Home</h1>
           <div class="flex items-center gap-3">
-            <Link
+            <a
               class="border-b border-[#204d3a] font-mono text-xs font-bold text-[#204d3a]"
-              to="/visit-plan"
+              href={paths.visitPlan}
             >
               {visitCount()} in Visit Plan
-            </Link>
+            </a>
             <button
               class="bg-[#204d3a] px-4 py-2 text-sm font-bold text-white"
               onClick={() => setShowImport((shown) => !shown)}
@@ -71,7 +69,6 @@ function Home() {
 }
 
 function ListingRow(props: { listing: SourceListingSummary }) {
-  const router = useRouter()
   const [busy, setBusy] = createSignal(false)
   const toggleVisit = async () => {
     setBusy(true)
@@ -82,7 +79,7 @@ function ListingRow(props: { listing: SourceListingSummary }) {
           included: props.listing.visitPlanPosition === null,
         },
       })
-      await router.invalidate({ sync: true })
+      await revalidate()
     } finally {
       setBusy(false)
     }
@@ -95,13 +92,12 @@ function ListingRow(props: { listing: SourceListingSummary }) {
           Aruodas {props.listing.sourceId} · {props.listing.candidatePlotCount}{' '}
           {props.listing.candidatePlotCount === 1 ? 'plot' : 'plots'}
         </p>
-        <Link
+        <a
           class="mt-1 block font-serif text-xl leading-tight hover:underline"
-          to="/source-listings/$sourceListingId"
-          params={{ sourceListingId: String(props.listing.id) }}
+          href={paths.sourceListing(props.listing.id)}
         >
           {props.listing.title ?? `Aruodas advert ${props.listing.sourceId}`}
-        </Link>
+        </a>
         <p class="mt-2 text-sm text-[#647169] sm:hidden">
           {props.listing.locationLabel ?? 'Location unknown'}
         </p>

@@ -1,9 +1,6 @@
 import { defineConfig, transformWithOxc } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
-
-import { tanstackStart } from '@tanstack/solid-start/plugin/vite'
-
-import solidPlugin from 'vite-plugin-solid'
+import solid from '@solidjs/vite-plugin'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -34,11 +31,11 @@ export default defineConfig({
   plugins: [
     bookmarkletPlugin(),
     tailwindcss(),
-    tanstackStart({
-      spa: {
-        enabled: true,
-      },
+    solid({
+      start: { middleware: './src/middleware.ts' },
+      ssr: false,
+      serverFunctions: true,
     }),
-    solidPlugin({ ssr: true }),
   ],
+  server: { port: 3000 },
 })

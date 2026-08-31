@@ -1,23 +1,41 @@
-import { createRouter as createTanStackRouter } from '@tanstack/solid-router'
-import { routeTree } from './routeTree.gen'
+import { createRouter, defineRoute } from '@solidjs/router'
+import Home, { preloadHome } from './routes/index'
+import ImportReview, { preloadImportReview } from './routes/imports.$token'
+import SourceListingPage, {
+  preloadSourceListing,
+} from './routes/source-listings.$sourceListingId'
+import VisitPlanPage, { preloadVisitPlan } from './routes/visit-plan'
 
-export function getRouter() {
-  const router = createTanStackRouter({
-    routeTree,
+export const Router = createRouter({
+  routes: [
+    { path: '/', component: Home, preload: preloadHome },
+    {
+      path: '/visit-plan',
+      component: VisitPlanPage,
+      preload: preloadVisitPlan,
+    },
+    defineRoute({
+      path: '/source-listings/:sourceListingId',
+      component: SourceListingPage,
+      preload: preloadSourceListing,
+    }),
+    defineRoute({
+      path: '/imports/:token',
+      component: ImportReview,
+      preload: preloadImportReview,
+    }),
+    { path: '*404', component: NotFound },
+  ],
+  scrollRestoration: true,
+})
 
-    scrollRestoration: true,
-    defaultPreload: 'intent',
-    defaultPreloadStaleTime: 0,
-    // NOTE: defaultPendingComponent is intentionally absent — with Solid
-    // 2.0-beta the pending component fails to unmount after hydration,
-    // leaving a stray "Loading…" node in the document.
-  })
-
-  return router
-}
-
-declare module '@tanstack/solid-router' {
-  interface Register {
-    router: ReturnType<typeof getRouter>
-  }
+function NotFound() {
+  return (
+    <main class="flex min-h-screen items-center justify-center bg-[#f6f4ec]">
+      <div class="text-center">
+        <h1 class="mb-2 text-4xl font-bold">404</h1>
+        <p class="text-gray-500">Page not found</p>
+      </div>
+    </main>
+  )
 }

@@ -1,22 +1,19 @@
-import { Link, createFileRoute, useRouter } from '@tanstack/solid-router'
-import { For, Show, createSignal } from 'solid-js'
+import { revalidate } from '@solidjs/router'
+import { For, Show, createMemo, createSignal } from 'solid-js'
 import { VisitPlanMap } from '../components/VisitPlanMap'
 import {
-  fetchVisitPlan,
   reorderVisitPlan,
   updateVisitPlan,
 } from '../server-functions/source-listings'
 import type { SourceListingSummary } from '../server/source-listings'
+import { paths } from '../paths'
+import { visitPlanQuery } from '../queries'
 import { formatArea, formatDate, formatPrice } from './index'
 
-export const Route = createFileRoute('/visit-plan')({
-  loader: () => fetchVisitPlan(),
-  component: VisitPlanPage,
-})
+export const preloadVisitPlan = () => void visitPlanQuery()
 
-function VisitPlanPage() {
-  const plan = Route.useLoaderData()
-  const router = useRouter()
+export default function VisitPlanPage() {
+  const plan = createMemo(() => visitPlanQuery())
   const [busyId, setBusyId] = createSignal<number | null>(null)
   const [view, setView] = createSignal<'list' | 'map'>('list')
 
@@ -28,7 +25,7 @@ function VisitPlanPage() {
     setBusyId(ids[destination] ?? null)
     try {
       await reorderVisitPlan({ data: { ids } })
-      await router.invalidate({ sync: true })
+      await revalidate()
     } finally {
       setBusyId(null)
     }
@@ -38,7 +35,7 @@ function VisitPlanPage() {
     setBusyId(id)
     try {
       await updateVisitPlan({ data: { id, included: false } })
-      await router.invalidate({ sync: true })
+      await revalidate()
     } finally {
       setBusyId(null)
     }
@@ -47,9 +44,9 @@ function VisitPlanPage() {
   return (
     <main class="min-h-screen bg-[#edf0ea] px-4 py-6 text-[#18241e] sm:px-8 sm:py-10">
       <div class="mx-auto max-w-5xl">
-        <Link class="text-sm font-bold text-[#315f73] underline" to="/">
+        <a class="text-sm font-bold text-[#315f73] underline" href={paths.home}>
           ← Saved Source Listings
-        </Link>
+        </a>
 
         <header class="mt-7 border-y border-[#18241e] bg-[#faf9f4] px-5 py-7 sm:flex sm:items-end sm:justify-between sm:px-8">
           <div>
@@ -91,12 +88,12 @@ function VisitPlanPage() {
                 Add Source Listings from your saved collection. The first one
                 you add becomes the first stop.
               </p>
-              <Link
+              <a
                 class="mt-6 inline-block bg-[#204d3a] px-5 py-3 text-sm font-bold text-white"
-                to="/"
+                href={paths.home}
               >
                 Choose Source Listings
-              </Link>
+              </a>
             </section>
           }
         >
@@ -166,13 +163,12 @@ function VisitPlanEntry(props: {
           Aruodas {props.listing.sourceId} · {props.listing.candidatePlotCount}{' '}
           {props.listing.candidatePlotCount === 1 ? 'plot' : 'plots'}
         </p>
-        <Link
+        <a
           class="mt-1 block font-serif text-2xl leading-tight hover:underline"
-          to="/source-listings/$sourceListingId"
-          params={{ sourceListingId: String(props.listing.id) }}
+          href={paths.sourceListing(props.listing.id)}
         >
           {name()}
-        </Link>
+        </a>
         <p class="mt-2 text-sm text-[#526058]">
           {props.listing.locationLabel ?? 'Location unknown'}
         </p>

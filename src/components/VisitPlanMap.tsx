@@ -1,16 +1,19 @@
-import { useNavigate } from '@tanstack/solid-router'
+import { useNavigate } from '@solidjs/router'
 import { onCleanup } from 'solid-js'
 import 'leaflet/dist/leaflet.css'
 import type * as Leaflet from 'leaflet'
 import type { SourceListingSummary } from '../server/source-listings'
+import { paths } from '../paths'
 
 export function VisitPlanMap(props: { listings: Array<SourceListingSummary> }) {
   const navigate = useNavigate()
   let map: Leaflet.Map | undefined
   let resizeObserver: ResizeObserver | undefined
+  let disposed = false
 
   const init = (element: HTMLDivElement) => {
     void import('leaflet').then((leaflet) => {
+      if (disposed) return
       map = leaflet.map(element, { zoomControl: false })
       leaflet
         .tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -46,10 +49,7 @@ export function VisitPlanMap(props: { listings: Array<SourceListingSummary> }) {
           `<b>${escapeHtml(listing.title ?? `Aruodas advert ${listing.sourceId}`)}</b><br>${escapeHtml(listing.locationLabel ?? 'Location unknown')}${referenceOnly ? '<br><small>Advertisement plan reference only</small>' : ''}`,
         )
         marker.on('click', () => {
-          void navigate({
-            to: '/source-listings/$sourceListingId',
-            params: { sourceListingId: String(listing.id) },
-          })
+          navigate(paths.sourceListing(listing.id))
         })
         marker.addTo(map!)
         bounds.extend(marker.getLatLng())
@@ -66,6 +66,7 @@ export function VisitPlanMap(props: { listings: Array<SourceListingSummary> }) {
   }
 
   onCleanup(() => {
+    disposed = true
     resizeObserver?.disconnect()
     map?.remove()
   })
