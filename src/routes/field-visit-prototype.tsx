@@ -10,9 +10,11 @@ type RatingKey = 'access' | 'area' | 'view'
 type Plot = {
   id: number
   name: string
+  addressLabel: string
   area: string
   price: string
   notes: string
+  mapState: 'boundary' | 'location' | 'paper'
   ratings: Record<RatingKey, number>
 }
 type SourceListing = {
@@ -28,7 +30,7 @@ type SourceListing = {
 const variants: Array<{ key: VariantKey; name: string }> = [
   { key: 'A', name: 'Stacked plot cards' },
   { key: 'B', name: 'Colored boundary map' },
-  { key: 'C', name: 'Numbered boundary map' },
+  { key: 'C', name: 'Hybrid field atlas' },
 ]
 
 const directionsHref =
@@ -46,17 +48,31 @@ const initialListings: Array<SourceListing> = [
       {
         id: 11,
         name: '15 a roadside plot',
+        addressLabel: '10',
         area: '15 a',
         price: 'EUR 42,000',
         notes: '',
+        mapState: 'boundary',
         ratings: { access: 0, area: 0, view: 0 },
       },
       {
         id: 12,
         name: 'Rear 12 a plot',
+        addressLabel: '11A',
         area: '12 a',
         price: 'EUR 36,000',
         notes: '',
+        mapState: 'location',
+        ratings: { access: 0, area: 0, view: 0 },
+      },
+      {
+        id: 13,
+        name: 'Proposed corner plot',
+        addressLabel: '11B',
+        area: '9 a',
+        price: 'EUR 31,000',
+        notes: '',
+        mapState: 'paper',
         ratings: { access: 0, area: 0, view: 0 },
       },
     ],
@@ -72,9 +88,11 @@ const initialListings: Array<SourceListing> = [
       {
         id: 21,
         name: 'Household plot',
+        addressLabel: '18',
         area: '10.6 a',
         price: 'EUR 38,500',
         notes: '',
+        mapState: 'location',
         ratings: { access: 0, area: 0, view: 0 },
       },
     ],
@@ -90,9 +108,11 @@ const initialListings: Array<SourceListing> = [
       {
         id: 31,
         name: 'Corner plot',
+        addressLabel: '7',
         area: '11 a',
         price: 'EUR 55,000',
         notes: '',
+        mapState: 'boundary',
         ratings: { access: 0, area: 0, view: 0 },
       },
     ],
@@ -469,20 +489,22 @@ function VariantC() {
                 </div>
               </header>
               <div class="px-4">
-                <BoundaryMap
+                <FieldAtlas
                   plots={listing().plots}
                   selectedPlotId={selectedPlotId()}
-                  colorMode="shared"
                   onSelect={setSelectedPlotId}
                 />
-                <div class="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs text-[#53635a]">
+                <div class="mt-3 grid grid-cols-3 gap-2">
                   <For each={listing().plots}>
-                    {(plot, index) => (
+                    {(plot) => (
                       <button
-                        class="font-bold underline decoration-[#a8b1a9] underline-offset-4"
+                        class={`rounded-xl border p-3 text-left ${selectedPlotId() === plot.id ? 'border-[#315d45] bg-[#e4eee7]' : 'border-[#cbd1c8] bg-white'}`}
                         onClick={() => setSelectedPlotId(plot.id)}
                       >
-                        {index() + 1}. {plot.name}
+                        <b class="block text-lg">{plot.addressLabel}</b>
+                        <span class="mt-1 block text-[0.65rem] leading-tight text-[#647168]">
+                          {mapStateLabel(plot.mapState)}
+                        </span>
                       </button>
                     )}
                   </For>
@@ -493,7 +515,7 @@ function VariantC() {
                   when={selectedPlot()}
                   fallback={
                     <p class="mt-6 text-center text-sm text-[#647168]">
-                      Tap a numbered boundary to open its field notes.
+                      Tap an address on the map or below it to open field notes.
                     </p>
                   }
                 >
@@ -504,6 +526,7 @@ function VariantC() {
                       saveState={visit.saveState()}
                       onRate={visit.rate}
                       onNotes={visit.updateNotes}
+                      showPaperReference
                     />
                   )}
                 </Show>
@@ -602,6 +625,7 @@ function PlotNotebook(props: {
   saveState: string
   onRate: (plotId: number, key: RatingKey, value: number) => void
   onNotes: (plotId: number, notes: string) => void
+  showPaperReference?: boolean
 }) {
   return (
     <div class="rounded-2xl border border-[#d6d9d1] bg-white p-5 shadow-sm">
@@ -612,7 +636,12 @@ function PlotNotebook(props: {
       </Show>
       <div class="flex items-start justify-between gap-4">
         <div>
-          <h2 class="text-xl font-bold">{props.plot.name}</h2>
+          <div class="flex items-center gap-2">
+            <span class="rounded-md bg-[#183e2b] px-2 py-1 text-xs font-bold text-white">
+              {props.plot.addressLabel}
+            </span>
+            <h2 class="text-xl font-bold">{props.plot.name}</h2>
+          </div>
           <p class="mt-1 text-sm text-[#68756d]">{props.plot.area}</p>
         </div>
         <b class="text-sm">{props.plot.price}</b>
@@ -620,6 +649,24 @@ function PlotNotebook(props: {
       <div class="mt-5 border-t border-[#e5e7e0] pt-5">
         <RatingRows plot={props.plot} onRate={props.onRate} />
       </div>
+      <Show when={props.showPaperReference && props.plot.mapState === 'paper'}>
+        <details class="mt-5 rounded-xl border border-[#d8d3c2] bg-[#f7f1df] p-3">
+          <summary class="cursor-pointer text-sm font-bold">
+            View plan from original ad
+          </summary>
+          <div class="relative mt-3 h-40 overflow-hidden rounded-lg border border-[#c7bea5] bg-[#eee5cc] p-3 shadow-inner">
+            <div class="absolute inset-3 rotate-[-2deg] border border-[#9d947d] bg-[#faf5e7] shadow-sm">
+              <div class="absolute left-5 top-5 h-20 w-28 skew-x-[-8deg] border-2 border-[#6d685b]" />
+              <div class="absolute bottom-5 right-5 font-serif text-xs italic text-[#6d685b]">
+                Plot 11B, conceptual division
+              </div>
+            </div>
+          </div>
+          <p class="mt-2 text-xs text-[#726b59]">
+            Reference image only. It is not positioned or traced onto the map.
+          </p>
+        </details>
+      </Show>
       <label class="mt-5 block border-t border-[#e5e7e0] pt-5">
         <span class="text-sm font-bold">Notes</span>
         <span class="ml-2 text-xs text-[#748078]">optional</span>
@@ -635,6 +682,109 @@ function PlotNotebook(props: {
       <p class="mt-5 text-right text-xs font-medium text-[#68756d]">
         {props.saveState}
       </p>
+    </div>
+  )
+}
+
+function mapStateLabel(state: Plot['mapState']) {
+  if (state === 'boundary') return 'Boundary available'
+  if (state === 'location') return 'Location only'
+  return 'Ad plan only'
+}
+
+function FieldAtlas(props: {
+  plots: Array<Plot>
+  selectedPlotId: number | undefined
+  onSelect: (plotId: number) => void
+}) {
+  const positionedPlots = () =>
+    props.plots.filter((plot) => plot.mapState !== 'paper')
+  return (
+    <div class="relative h-80 overflow-hidden rounded-2xl border border-[#bdc8bd] bg-[#dbe3d6] shadow-inner">
+      <div class="absolute inset-0 opacity-70 [background-image:linear-gradient(30deg,transparent_47%,#f5f1df_48%,#f5f1df_52%,transparent_53%),linear-gradient(105deg,transparent_47%,#b7c8b4_48%,#b7c8b4_51%,transparent_52%)] [background-size:82px_67px,105px_91px]" />
+      <div class="absolute left-4 top-4 rounded-lg bg-white/90 px-3 py-2 text-[0.65rem] font-bold uppercase tracking-[0.14em] text-[#53635a] shadow-sm">
+        Field atlas
+      </div>
+      <svg
+        class="absolute inset-0 size-full"
+        viewBox="0 0 360 320"
+        role="img"
+        aria-label="Map with Candidate Plot boundaries and approximate locations"
+      >
+        <For each={positionedPlots()}>
+          {(plot, index) => {
+            const selected = () => props.selectedPlotId === plot.id
+            const isBoundary = () => plot.mapState === 'boundary'
+            const x = () => (index() === 0 ? 136 : 250)
+            const y = () => (index() === 0 ? 150 : 170)
+            return (
+              <g
+                class="cursor-pointer"
+                role="button"
+                tabindex="0"
+                aria-label={`Open address ${plot.addressLabel}, ${mapStateLabel(plot.mapState)}`}
+                onClick={() => props.onSelect(plot.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ')
+                    props.onSelect(plot.id)
+                }}
+              >
+                <Show
+                  when={isBoundary()}
+                  fallback={
+                    <>
+                      <circle
+                        cx={x()}
+                        cy={y()}
+                        r="48"
+                        fill="#477b5b"
+                        fill-opacity={selected() ? '0.3' : '0.16'}
+                        stroke="#477b5b"
+                        stroke-width={selected() ? '4' : '2'}
+                        stroke-dasharray="8 7"
+                      />
+                      <circle cx={x()} cy={y()} r="5" fill="#315d45" />
+                    </>
+                  }
+                >
+                  <polygon
+                    points="64,98 187,70 205,206 80,225"
+                    fill="#477b5b"
+                    fill-opacity={selected() ? '0.62' : '0.36'}
+                    stroke={selected() ? '#17251c' : '#477b5b'}
+                    stroke-width={selected() ? '5' : '3'}
+                  />
+                </Show>
+                <rect
+                  x={x() - 24}
+                  y={y() - 17}
+                  width="48"
+                  height="34"
+                  rx="8"
+                  fill="white"
+                  stroke="#315d45"
+                  stroke-width="3"
+                />
+                <text
+                  x={x()}
+                  y={y() + 6}
+                  text-anchor="middle"
+                  font-size="15"
+                  font-weight="800"
+                  fill="#17251c"
+                >
+                  {plot.addressLabel}
+                </text>
+              </g>
+            )
+          }}
+        </For>
+      </svg>
+      <div class="absolute bottom-3 left-3 right-3 flex justify-between gap-2 text-[0.6rem] font-bold text-[#53635a]">
+        <span class="rounded bg-white/90 px-2 py-1">Solid = boundary</span>
+        <span class="rounded bg-white/90 px-2 py-1">Halo = location only</span>
+        <span class="rounded bg-white/90 px-2 py-1">Missing = ad plan</span>
+      </div>
     </div>
   )
 }
@@ -704,7 +854,7 @@ function BoundaryMap(props: {
                   font-weight="800"
                   fill="#17251c"
                 >
-                  {index() + 1}
+                  {plot.addressLabel}
                 </text>
               </g>
             )
