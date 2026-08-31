@@ -25,10 +25,13 @@ type SourceListing = {
 }
 
 const variants: Array<{ key: VariantKey; name: string }> = [
-  { key: 'A', name: 'Plan, then inspect' },
-  { key: 'B', name: 'One-stop field card' },
-  { key: 'C', name: 'Route strip and notebook' },
+  { key: 'A', name: 'Stacked plot cards' },
+  { key: 'B', name: 'Plot tabs, next stop' },
+  { key: 'C', name: 'Expandable notebooks' },
 ]
+
+const directionsHref =
+  'https://www.google.com/maps/dir/?api=1&destination=54.81241%2C25.40862'
 
 const initialListings: Array<SourceListing> = [
   {
@@ -326,9 +329,13 @@ function VariantB() {
                 >
                   Open original ad
                 </a>
-                <button class="rounded-xl border border-white/25 px-4 py-3 text-sm font-bold">
-                  Open in maps
-                </button>
+                <a
+                  class="rounded-xl border border-white/25 px-4 py-3 text-center text-sm font-bold"
+                  href={directionsHref}
+                  target="_blank"
+                >
+                  Directions
+                </a>
               </div>
             </header>
             <section class="mt-3 rounded-t-[2rem] bg-[#f8f5ec] px-5 pb-10 pt-6 text-[#17251c]">
@@ -443,13 +450,22 @@ function VariantC() {
                   </h2>
                   <p class="mt-2 text-[#647168]">{listing().address}</p>
                 </div>
-                <a
-                  class="rounded-xl border-2 border-[#315d45] px-4 py-3 text-sm font-bold text-[#315d45]"
-                  href="https://www.aruodas.lt"
-                  target="_blank"
-                >
-                  Original ad
-                </a>
+                <div class="flex gap-2">
+                  <a
+                    class="rounded-xl border-2 border-[#315d45] px-4 py-3 text-sm font-bold text-[#315d45]"
+                    href="https://www.aruodas.lt"
+                    target="_blank"
+                  >
+                    Original ad
+                  </a>
+                  <a
+                    class="rounded-xl bg-[#315d45] px-4 py-3 text-sm font-bold text-white"
+                    href={directionsHref}
+                    target="_blank"
+                  >
+                    Directions
+                  </a>
+                </div>
               </header>
               <div class="mt-7 space-y-4">
                 <For each={listing().plots}>
@@ -498,7 +514,6 @@ function ListingInspection(props: {
   onRate: (plotId: number, key: RatingKey, value: number) => void
   onComplete: () => void
 }) {
-  const [plotIndex, setPlotIndex] = createSignal(0)
   return (
     <>
       <header class="bg-[#183e2b] px-5 pb-6 pt-5 text-white">
@@ -509,38 +524,47 @@ function ListingInspection(props: {
           {props.listing.place}
         </h1>
         <p class="mt-2 text-sm text-[#c7d8cc]">{props.listing.address}</p>
-        <div class="mt-5 flex gap-3">
+        <div class="mt-5 grid grid-cols-2 gap-3">
           <a
-            class="flex-1 rounded-xl bg-white px-4 py-3 text-center text-sm font-bold text-[#183e2b]"
+            class="rounded-xl bg-white px-4 py-3 text-center text-sm font-bold text-[#183e2b]"
             href="https://www.aruodas.lt"
             target="_blank"
           >
             Open original ad
           </a>
-          <button class="rounded-xl border border-white/30 px-4 py-3 text-sm font-bold">
-            Maps
-          </button>
+          <a
+            class="rounded-xl border border-white/30 px-4 py-3 text-center text-sm font-bold"
+            href={directionsHref}
+            target="_blank"
+          >
+            Get directions
+          </a>
         </div>
       </header>
       <section class="p-5">
-        <p class="text-xs font-bold uppercase tracking-[0.15em] text-[#68756d]">
-          Rate Candidate Plot
-        </p>
-        <select
-          aria-label="Candidate Plot"
-          class="mt-2 w-full rounded-xl border border-[#cbd1c8] bg-white p-3 font-bold"
-          value={plotIndex()}
-          onChange={(event) => setPlotIndex(Number(event.currentTarget.value))}
-        >
+        <div class="flex items-end justify-between gap-4">
+          <div>
+            <p class="text-xs font-bold uppercase tracking-[0.15em] text-[#68756d]">
+              Candidate Plots
+            </p>
+            <h2 class="mt-1 font-serif text-2xl font-bold">
+              Rate what you can see
+            </h2>
+          </div>
+          <span class="text-xs text-[#68756d]">{props.saveState}</span>
+        </div>
+        <div class="mt-4 space-y-4">
           <For each={props.listing.plots}>
-            {(plot, index) => <option value={index()}>{plot.name}</option>}
+            {(plot, index) => (
+              <PlotNotebook
+                plot={plot}
+                eyebrow={`Candidate Plot ${index() + 1} of ${props.listing.plots.length}`}
+                saveState={props.saveState}
+                onRate={props.onRate}
+              />
+            )}
           </For>
-        </select>
-        <PlotNotebook
-          plot={props.listing.plots[plotIndex()]}
-          saveState={props.saveState}
-          onRate={props.onRate}
-        />
+        </div>
         <button
           class="mt-7 w-full rounded-xl bg-[#b9422f] px-5 py-4 font-bold text-white"
           onClick={props.onComplete}
@@ -554,11 +578,17 @@ function ListingInspection(props: {
 
 function PlotNotebook(props: {
   plot: Plot
+  eyebrow?: string
   saveState: string
   onRate: (plotId: number, key: RatingKey, value: number) => void
 }) {
   return (
-    <div class="mt-5 rounded-2xl border border-[#d6d9d1] bg-white p-5">
+    <div class="rounded-2xl border border-[#d6d9d1] bg-white p-5 shadow-sm">
+      <Show when={props.eyebrow}>
+        <p class="mb-3 text-[0.65rem] font-bold uppercase tracking-[0.16em] text-[#68756d]">
+          {props.eyebrow}
+        </p>
+      </Show>
       <div class="flex items-start justify-between gap-4">
         <div>
           <h2 class="text-xl font-bold">{props.plot.name}</h2>
