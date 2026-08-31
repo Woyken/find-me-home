@@ -12,6 +12,7 @@ type Plot = {
   name: string
   area: string
   price: string
+  notes: string
   ratings: Record<RatingKey, number>
 }
 type SourceListing = {
@@ -26,8 +27,8 @@ type SourceListing = {
 
 const variants: Array<{ key: VariantKey; name: string }> = [
   { key: 'A', name: 'Stacked plot cards' },
-  { key: 'B', name: 'Plot tabs, next stop' },
-  { key: 'C', name: 'Expandable notebooks' },
+  { key: 'B', name: 'Colored boundary map' },
+  { key: 'C', name: 'Numbered boundary map' },
 ]
 
 const directionsHref =
@@ -47,6 +48,7 @@ const initialListings: Array<SourceListing> = [
         name: '15 a roadside plot',
         area: '15 a',
         price: 'EUR 42,000',
+        notes: '',
         ratings: { access: 0, area: 0, view: 0 },
       },
       {
@@ -54,6 +56,7 @@ const initialListings: Array<SourceListing> = [
         name: 'Rear 12 a plot',
         area: '12 a',
         price: 'EUR 36,000',
+        notes: '',
         ratings: { access: 0, area: 0, view: 0 },
       },
     ],
@@ -71,6 +74,7 @@ const initialListings: Array<SourceListing> = [
         name: 'Household plot',
         area: '10.6 a',
         price: 'EUR 38,500',
+        notes: '',
         ratings: { access: 0, area: 0, view: 0 },
       },
     ],
@@ -88,6 +92,7 @@ const initialListings: Array<SourceListing> = [
         name: 'Corner plot',
         area: '11 a',
         price: 'EUR 55,000',
+        notes: '',
         ratings: { access: 0, area: 0, view: 0 },
       },
     ],
@@ -157,7 +162,7 @@ function FieldVisitPrototype() {
 function createVisitState() {
   const [listings, setListings] = createSignal(cloneListings())
   const [activeId, setActiveId] = createSignal<number>()
-  const [saveState, setSaveState] = createSignal('All ratings saved')
+  const [saveState, setSaveState] = createSignal('All changes saved')
   let saveTimer: ReturnType<typeof setTimeout> | undefined
 
   onCleanup(() => saveTimer && clearTimeout(saveTimer))
@@ -190,12 +195,35 @@ function createVisitState() {
     saveTimer = setTimeout(() => setSaveState('Saved just now'), 500)
   }
 
+  const updateNotes = (plotId: number, notes: string) => {
+    setListings((current) =>
+      current.map((listing) => ({
+        ...listing,
+        plots: listing.plots.map((plot) =>
+          plot.id === plotId ? { ...plot, notes } : plot,
+        ),
+      })),
+    )
+    setSaveState('Saving...')
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => setSaveState('Saved just now'), 500)
+  }
+
   const complete = (id: number) => {
     setListings((current) => current.filter((listing) => listing.id !== id))
     setActiveId(undefined)
   }
 
-  return { listings, activeId, setActiveId, saveState, move, rate, complete }
+  return {
+    listings,
+    activeId,
+    setActiveId,
+    saveState,
+    move,
+    rate,
+    updateNotes,
+    complete,
+  }
 }
 
 function VariantA() {
@@ -286,6 +314,7 @@ function VariantA() {
             saveState={visit.saveState()}
             onBack={() => visit.setActiveId(undefined)}
             onRate={visit.rate}
+            onNotes={visit.updateNotes}
             onComplete={() => visit.complete(listing().id)}
           />
         )}
@@ -296,19 +325,21 @@ function VariantA() {
 
 function VariantB() {
   const visit = createVisitState()
-  const [plotIndex, setPlotIndex] = createSignal(0)
+  const [selectedPlotId, setSelectedPlotId] = createSignal<number>()
   const current = () => visit.listings()[0]
+  const selectedPlot = () =>
+    current()?.plots.find((plot) => plot.id === selectedPlotId())
 
   return (
-    <div class="mx-auto min-h-screen max-w-md bg-[#17231c] pb-28 text-white shadow-xl">
+    <div class="mx-auto min-h-screen max-w-md bg-[#e8ede6] pb-28 shadow-xl">
       <Show
         when={current()}
-        fallback={<EmptyPlan message="Visit Plan complete for today." dark />}
+        fallback={<EmptyPlan message="Visit Plan complete for today." />}
       >
         {(listing) => (
           <>
-            <header class="px-5 pb-4 pt-5">
-              <div class="flex items-center justify-between text-xs font-bold uppercase tracking-[0.14em] text-[#9eb2a5]">
+            <header class="bg-[#183e2b] px-5 pb-5 pt-5 text-white">
+              <div class="flex items-center justify-between text-xs font-bold uppercase tracking-[0.14em] text-[#b8cabd]">
                 <span>Stop 1 of {visit.listings().length}</span>
                 <button
                   class="rounded-full border border-white/20 px-3 py-2 text-white"
@@ -317,13 +348,13 @@ function VariantB() {
                   Send later
                 </button>
               </div>
-              <h1 class="mt-7 font-serif text-4xl font-bold leading-none">
+              <h1 class="mt-5 font-serif text-3xl font-bold leading-none">
                 {listing().place}
               </h1>
-              <p class="mt-3 text-[#c7d2ca]">{listing().address}</p>
-              <div class="mt-5 grid grid-cols-2 gap-3">
+              <p class="mt-2 text-sm text-[#c7d2ca]">{listing().address}</p>
+              <div class="mt-4 grid grid-cols-2 gap-3">
                 <a
-                  class="rounded-xl bg-[#f3d778] px-4 py-3 text-center text-sm font-bold text-[#17231c]"
+                  class="rounded-xl bg-white px-4 py-3 text-center text-sm font-bold text-[#17231c]"
                   href="https://www.aruodas.lt"
                   target="_blank"
                 >
@@ -338,28 +369,38 @@ function VariantB() {
                 </a>
               </div>
             </header>
-            <section class="mt-3 rounded-t-[2rem] bg-[#f8f5ec] px-5 pb-10 pt-6 text-[#17251c]">
-              <div class="flex gap-2 overflow-x-auto pb-2">
-                <For each={listing().plots}>
-                  {(plot, index) => (
-                    <button
-                      class={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold ${plotIndex() === index() ? 'bg-[#315d45] text-white' : 'bg-[#e5e8df]'}`}
-                      onClick={() => setPlotIndex(index())}
-                    >
-                      Plot {index() + 1}: {plot.area}
-                    </button>
-                  )}
-                </For>
-              </div>
-              <PlotNotebook
-                plot={listing().plots[plotIndex()] ?? listing().plots[0]}
-                saveState={visit.saveState()}
-                onRate={visit.rate}
+            <section class="p-4 text-[#17251c]">
+              <BoundaryMap
+                plots={listing().plots}
+                selectedPlotId={selectedPlotId()}
+                colorMode="distinct"
+                onSelect={setSelectedPlotId}
               />
+              <p class="mt-3 text-center text-sm text-[#53635a]">
+                Tap a colored Candidate Plot boundary to rate it.
+              </p>
+              <Show
+                when={selectedPlot()}
+                fallback={
+                  <div class="mt-4 rounded-2xl border border-dashed border-[#aeb9b0] bg-white/60 p-6 text-center text-sm text-[#53635a]">
+                    No Candidate Plot selected
+                  </div>
+                }
+              >
+                {(plot) => (
+                  <PlotNotebook
+                    plot={plot()}
+                    eyebrow="Selected from map"
+                    saveState={visit.saveState()}
+                    onRate={visit.rate}
+                    onNotes={visit.updateNotes}
+                  />
+                )}
+              </Show>
               <button
                 class="mt-7 w-full rounded-2xl bg-[#b9422f] px-5 py-4 font-bold text-white"
                 onClick={() => {
-                  setPlotIndex(0)
+                  setSelectedPlotId(undefined)
                   visit.complete(listing().id)
                 }}
               >
@@ -378,88 +419,48 @@ function VariantB() {
 
 function VariantC() {
   const visit = createVisitState()
-  const [selectedId, setSelectedId] = createSignal(initialListings[0].id)
-  const selected = () =>
-    visit.listings().find((listing) => listing.id === selectedId()) ??
-    visit.listings()[0]
+  const [selectedPlotId, setSelectedPlotId] = createSignal<number>()
+  const current = () => visit.listings()[0]
+  const selectedPlot = () =>
+    current()?.plots.find((plot) => plot.id === selectedPlotId())
 
   return (
-    <div class="min-h-screen pb-28 lg:grid lg:grid-cols-[22rem_1fr]">
-      <aside class="border-b border-[#d6d9d1] bg-[#213329] p-4 text-white lg:min-h-screen lg:border-b-0 lg:border-r">
-        <header class="mb-4 px-1 py-2">
-          <p class="text-xs font-bold uppercase tracking-[0.2em] text-[#a9bcaf]">
-            Find Me Home
-          </p>
-          <h1 class="mt-1 font-serif text-3xl font-bold">Visit Plan</h1>
-        </header>
-        <div class="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
-          <For each={visit.listings()}>
-            {(listing, index) => (
-              <button
-                class={`min-w-64 rounded-xl p-4 text-left lg:min-w-0 ${selected()?.id === listing.id ? 'bg-[#f3d778] text-[#17251c]' : 'bg-white/8'}`}
-                onClick={() => setSelectedId(listing.id)}
-              >
-                <div class="flex items-center justify-between">
-                  <b>
-                    {index() + 1}. {listing.place}
-                  </b>
-                  <span class="text-xs">{listing.travel}</span>
-                </div>
-                <p class="mt-1 truncate text-xs opacity-70">
-                  {listing.address}
-                </p>
-                <div class="mt-3 flex gap-2">
-                  <span
-                    class="rounded border border-current px-2 py-1 text-xs"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      visit.move(listing.id, -1)
-                    }}
-                  >
-                    Earlier
-                  </span>
-                  <span
-                    class="rounded border border-current px-2 py-1 text-xs"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      visit.move(listing.id, 1)
-                    }}
-                  >
-                    Later
-                  </span>
-                </div>
-              </button>
-            )}
-          </For>
-        </div>
-      </aside>
-      <section class="mx-auto w-full max-w-3xl p-5 pb-12 sm:p-10">
+    <div class="mx-auto min-h-screen max-w-md bg-[#faf8f2] pb-28 shadow-xl">
+      <section>
         <Show
-          when={selected()}
+          when={current()}
           fallback={<EmptyPlan message="Nothing remains in the Visit Plan." />}
         >
           {(listing) => (
             <>
-              <header class="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p class="text-xs font-bold uppercase tracking-[0.16em] text-[#647168]">
-                    At the destination
-                  </p>
-                  <h2 class="mt-2 font-serif text-4xl font-bold">
-                    {listing().place}
-                  </h2>
-                  <p class="mt-2 text-[#647168]">{listing().address}</p>
+              <header class="px-5 pb-4 pt-5">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-[#647168]">
+                      Stop 1 of {visit.listings().length}
+                    </p>
+                    <h2 class="mt-1 font-serif text-3xl font-bold">
+                      {listing().place}
+                    </h2>
+                  </div>
+                  <button
+                    class="rounded-full border border-[#b8c0b9] px-3 py-2 text-xs font-bold"
+                    onClick={() => visit.move(listing().id, 1)}
+                  >
+                    Later
+                  </button>
                 </div>
-                <div class="flex gap-2">
+                <p class="mt-2 text-sm text-[#647168]">{listing().address}</p>
+                <div class="mt-4 flex gap-2">
                   <a
-                    class="rounded-xl border-2 border-[#315d45] px-4 py-3 text-sm font-bold text-[#315d45]"
+                    class="flex-1 rounded-xl border border-[#315d45] px-4 py-3 text-center text-sm font-bold text-[#315d45]"
                     href="https://www.aruodas.lt"
                     target="_blank"
                   >
                     Original ad
                   </a>
                   <a
-                    class="rounded-xl bg-[#315d45] px-4 py-3 text-sm font-bold text-white"
+                    class="flex-1 rounded-xl bg-[#315d45] px-4 py-3 text-center text-sm font-bold text-white"
                     href={directionsHref}
                     target="_blank"
                   >
@@ -467,38 +468,55 @@ function VariantC() {
                   </a>
                 </div>
               </header>
-              <div class="mt-7 space-y-4">
-                <For each={listing().plots}>
-                  {(plot, index) => (
-                    <details
-                      class="rounded-2xl border border-[#d6d9d1] bg-white p-5 shadow-sm"
-                      open={index() === 0}
-                    >
-                      <summary class="cursor-pointer list-none font-bold">
-                        <span class="flex items-center justify-between gap-3">
-                          <span>{plot.name}</span>
-                          <span class="text-sm text-[#647168]">
-                            {plot.price}
-                          </span>
-                        </span>
-                      </summary>
-                      <div class="mt-5 border-t border-[#e5e7e0] pt-5">
-                        <RatingRows plot={plot} onRate={visit.rate} />
-                      </div>
-                    </details>
+              <div class="px-4">
+                <BoundaryMap
+                  plots={listing().plots}
+                  selectedPlotId={selectedPlotId()}
+                  colorMode="shared"
+                  onSelect={setSelectedPlotId}
+                />
+                <div class="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs text-[#53635a]">
+                  <For each={listing().plots}>
+                    {(plot, index) => (
+                      <button
+                        class="font-bold underline decoration-[#a8b1a9] underline-offset-4"
+                        onClick={() => setSelectedPlotId(plot.id)}
+                      >
+                        {index() + 1}. {plot.name}
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </div>
+              <div class="px-4">
+                <Show
+                  when={selectedPlot()}
+                  fallback={
+                    <p class="mt-6 text-center text-sm text-[#647168]">
+                      Tap a numbered boundary to open its field notes.
+                    </p>
+                  }
+                >
+                  {(plot) => (
+                    <PlotNotebook
+                      plot={plot()}
+                      eyebrow="Field notes"
+                      saveState={visit.saveState()}
+                      onRate={visit.rate}
+                      onNotes={visit.updateNotes}
+                    />
                   )}
-                </For>
+                </Show>
+                <button
+                  class="mt-7 w-full rounded-xl bg-[#315d45] px-5 py-4 font-bold text-white"
+                  onClick={() => {
+                    setSelectedPlotId(undefined)
+                    visit.complete(listing().id)
+                  }}
+                >
+                  Finish this Visit
+                </button>
               </div>
-              <div class="mt-5 flex items-center justify-between text-xs text-[#647168]">
-                <span>{visit.saveState()}</span>
-                <span>Ratings belong to each Candidate Plot</span>
-              </div>
-              <button
-                class="mt-8 w-full rounded-xl bg-[#315d45] px-5 py-4 font-bold text-white"
-                onClick={() => visit.complete(listing().id)}
-              >
-                Finish this Visit
-              </button>
             </>
           )}
         </Show>
@@ -512,6 +530,7 @@ function ListingInspection(props: {
   saveState: string
   onBack: () => void
   onRate: (plotId: number, key: RatingKey, value: number) => void
+  onNotes: (plotId: number, notes: string) => void
   onComplete: () => void
 }) {
   return (
@@ -561,6 +580,7 @@ function ListingInspection(props: {
                 eyebrow={`Candidate Plot ${index() + 1} of ${props.listing.plots.length}`}
                 saveState={props.saveState}
                 onRate={props.onRate}
+                onNotes={props.onNotes}
               />
             )}
           </For>
@@ -581,6 +601,7 @@ function PlotNotebook(props: {
   eyebrow?: string
   saveState: string
   onRate: (plotId: number, key: RatingKey, value: number) => void
+  onNotes: (plotId: number, notes: string) => void
 }) {
   return (
     <div class="rounded-2xl border border-[#d6d9d1] bg-white p-5 shadow-sm">
@@ -599,9 +620,100 @@ function PlotNotebook(props: {
       <div class="mt-5 border-t border-[#e5e7e0] pt-5">
         <RatingRows plot={props.plot} onRate={props.onRate} />
       </div>
+      <label class="mt-5 block border-t border-[#e5e7e0] pt-5">
+        <span class="text-sm font-bold">Notes</span>
+        <span class="ml-2 text-xs text-[#748078]">optional</span>
+        <textarea
+          class="mt-2 min-h-24 w-full rounded-xl border border-[#cbd1c8] bg-[#fbfaf6] p-3 text-sm outline-none focus:border-[#315d45]"
+          placeholder="Access, surroundings, questions to follow up..."
+          value={props.plot.notes}
+          onInput={(event) =>
+            props.onNotes(props.plot.id, event.currentTarget.value)
+          }
+        />
+      </label>
       <p class="mt-5 text-right text-xs font-medium text-[#68756d]">
         {props.saveState}
       </p>
+    </div>
+  )
+}
+
+function BoundaryMap(props: {
+  plots: Array<Plot>
+  selectedPlotId: number | undefined
+  colorMode: 'distinct' | 'shared'
+  onSelect: (plotId: number) => void
+}) {
+  const boundaryColors = ['#d35343', '#e0a128']
+  return (
+    <div class="relative h-80 overflow-hidden rounded-2xl border border-[#bdc8bd] bg-[#dbe3d6] shadow-inner">
+      <div class="absolute inset-0 opacity-70 [background-image:linear-gradient(30deg,transparent_47%,#f5f1df_48%,#f5f1df_52%,transparent_53%),linear-gradient(105deg,transparent_47%,#b7c8b4_48%,#b7c8b4_51%,transparent_52%)] [background-size:82px_67px,105px_91px]" />
+      <div class="absolute left-4 top-4 rounded-lg bg-white/90 px-3 py-2 text-[0.65rem] font-bold uppercase tracking-[0.14em] text-[#53635a] shadow-sm">
+        Candidate Plot boundaries
+      </div>
+      <svg
+        class="absolute inset-0 size-full"
+        viewBox="0 0 360 320"
+        role="img"
+        aria-label="Map of Candidate Plot boundaries"
+      >
+        <For each={props.plots}>
+          {(plot, index) => {
+            const points = () =>
+              index() === 0
+                ? '64,98 187,70 205,206 80,225'
+                : '187,70 302,92 290,218 205,206'
+            const color = () =>
+              props.colorMode === 'shared'
+                ? '#477b5b'
+                : boundaryColors[index() % boundaryColors.length]
+            const selected = () => props.selectedPlotId === plot.id
+            return (
+              <g
+                class="cursor-pointer"
+                role="button"
+                tabindex="0"
+                aria-label={`Open ${plot.name}`}
+                onClick={() => props.onSelect(plot.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ')
+                    props.onSelect(plot.id)
+                }}
+              >
+                <polygon
+                  points={points()}
+                  fill={color()}
+                  fill-opacity={selected() ? '0.68' : '0.42'}
+                  stroke={selected() ? '#17251c' : color()}
+                  stroke-width={selected() ? '5' : '3'}
+                />
+                <circle
+                  cx={index() === 0 ? '136' : '249'}
+                  cy="145"
+                  r="18"
+                  fill="white"
+                  stroke={color()}
+                  stroke-width="3"
+                />
+                <text
+                  x={index() === 0 ? '136' : '249'}
+                  y="151"
+                  text-anchor="middle"
+                  font-size="16"
+                  font-weight="800"
+                  fill="#17251c"
+                >
+                  {index() + 1}
+                </text>
+              </g>
+            )
+          }}
+        </For>
+      </svg>
+      <div class="absolute bottom-3 right-3 rounded bg-white/90 px-2 py-1 text-[0.6rem] font-medium text-[#647168]">
+        Approximate boundaries
+      </div>
     </div>
   )
 }
