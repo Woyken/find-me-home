@@ -1,990 +1,214 @@
-import { createFileRoute } from '@tanstack/solid-router'
+import { Link, createFileRoute, useRouter } from '@tanstack/solid-router'
+import { For, Show, createSignal } from 'solid-js'
 import {
-  For,
-  Show,
-  createMemo,
-  createSignal,
-  onCleanup,
-  untrack,
-} from 'solid-js'
-import {
-  deleteListing,
+  fetchSourceListings,
   getAruodasBookmarklet,
-  fetchListings,
-  geocodeListingAddress,
-  resolveListingBoundaries,
-  resolveListingLocationFn,
-  startEvaluation,
-  startScan,
-  updateListing,
-} from '../server-functions/listings'
-import type { ListingRow } from '../server/scan'
-import type { EvaluationRow } from '../server/evaluators'
-import { ListingsMap } from '../components/ListingsMap'
-import type { FocusRequest } from '../components/ListingsMap'
+  updateVisitPlan,
+} from '../server-functions/source-listings'
+import type { SourceListingSummary } from '../server/source-listings'
 
 export const Route = createFileRoute('/')({
-  component: Dsh,
+  loader: () => fetchSourceListings(),
+  component: Home,
 })
 
-function Dsh() {
-  return (
-    <Show when={typeof window !== 'undefined'} fallback={<div>Loading...</div>}>
-      <Dashboard />
-    </Show>
-  )
-}
-
-const SOURCE_COLORS: Record<string, string> = {
-  kampas: 'bg-emerald-100 text-emerald-800',
-  domoplius: 'bg-sky-100 text-sky-800',
-  alio: 'bg-violet-100 text-violet-800',
-  aruodas: 'bg-orange-100 text-orange-800',
-}
-
-const STATUS_STYLES: Record<string, string> = {
-  pass: 'bg-emerald-500 text-white',
-  fail: 'bg-red-500 text-white',
-  warn: 'bg-amber-400 text-black',
-  unknown: 'bg-gray-200 text-gray-500',
-}
-
-function Dashboard() {
-  const loaderData = createMemo(() => fetchListings())
-  const [override, setOverride] = createSignal<ReturnType<
-    typeof loaderData
-  > | null>(null)
-  const data = () => override() ?? loaderData()
-  const [scanBusy, setScanBusy] = createSignal(false)
-  const [evalBusy, setEvalBusy] = createSignal(false)
-  const [boundariesBusy, setBoundariesBusy] = createSignal(false)
-  const [showAruodasImport, setShowAruodasImport] = createSignal(false)
-  const [editingId, setEditingId] = createSignal<number>()
-  const [selectedId, setSelectedId] = createSignal<number>()
-  const [focusRequest, setFocusRequest] = createSignal<FocusRequest>()
-
-  let pollTimer: ReturnType<typeof setInterval> | undefined
-  const boundaryRefreshTimers: Array<ReturnType<typeof setTimeout>> = []
-  const rowRefs = new Map<number, HTMLTableRowElement>()
-
-  const refresh = async () => {
-    const fresh = await fetchListings()
-    setOverride(fresh)
-    if (!fresh.scanRunning && !fresh.evaluating && pollTimer) {
-      clearInterval(pollTimer)
-      pollTimer = undefined
-      setScanBusy(false)
-      setEvalBusy(false)
-    }
-  }
-
-  const startPolling = () => {
-    if (pollTimer) return
-    pollTimer = setInterval(refresh, 4000)
-  }
-
-  onCleanup(() => {
-    if (pollTimer) clearInterval(pollTimer)
-    for (const t of boundaryRefreshTimers) clearTimeout(t)
-  })
-
-  const onScan = async () => {
-    setScanBusy(true)
-    await startScan()
-    startPolling()
-  }
-
-  const onEvaluate = async () => {
-    setEvalBusy(true)
-    await startEvaluation()
-    startPolling()
-  }
-
-  const onResolveBoundaries = async () => {
-    setBoundariesBusy(true)
-    await resolveListingBoundaries()
-    // Fire-and-forget on the server; there's no busy flag to poll, so refresh
-    // a few times on a delay to pick up newly resolved boundary geometry.
-    for (const delayMs of [3000, 7000, 12000, 20000]) {
-      boundaryRefreshTimers.push(setTimeout(() => void refresh(), delayMs))
-    }
-    boundaryRefreshTimers.push(
-      setTimeout(() => setBoundariesBusy(false), 20000),
-    )
-  }
-
-  const onEdited = () => {
-    setEditingId(undefined)
-    setEvalBusy(true)
-    void refresh()
-    startPolling()
-  }
-
-  const onFocusListing = (id: number) => {
-    setSelectedId(id)
-    setFocusRequest({ id, nonce: Date.now() })
-  }
-
-  const onSelectListing = (id: number) => {
-    setSelectedId(id)
-    rowRefs.get(id)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }
-
-  const evalsByListing = createMemo(() => {
-    const m = new Map<number, Map<string, EvaluationRow>>()
-    for (const e of data().evaluations) {
-      let inner = m.get(e.listing_id)
-      if (!inner) {
-        inner = new Map()
-        m.set(e.listing_id, inner)
-      }
-      inner.set(e.requirement, e)
-    }
-    return m
-  })
-
-  const editingListing = createMemo(() => {
-    const e = editingId()
-    return data().listings.find((l) => l.id === e)
-  })
-
-  const scanStats = () => {
-    const raw = data().lastScan?.stats_json
-    if (!raw) return null
-    try {
-      return JSON.parse(raw) as {
-        perSource?: Record<
-          string,
-          { found: number; examined: number; errors: Array<string> }
-        >
-      }
-    } catch {
-      return null
-    }
-  }
+function Home() {
+  const listings = () => Route.useLoaderData()()
+  const visitCount = () =>
+    listings().filter((listing) => listing.visitPlanPosition !== null).length
+  const [showImport, setShowImport] = createSignal(false)
 
   return (
-    <main class="mx-auto max-w-7xl p-6">
-      <header class="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 class="text-3xl font-bold tracking-tight">Find Me Home</h1>
-          <p class="text-sm text-gray-500">
-            Land plots near Vilnius · 8–25 a · ≤ €60k · namų valda
-          </p>
-        </div>
-        <div class="flex items-center gap-3">
-          <button
-            class="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-            disabled={evalBusy() || data().evaluating}
-            onClick={onEvaluate}
-          >
-            {evalBusy() || data().evaluating ? 'Evaluating…' : 'Evaluate'}
-          </button>
-          <button
-            class="rounded-lg bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-500 disabled:opacity-50"
-            disabled={boundariesBusy()}
-            onClick={onResolveBoundaries}
-          >
-            {boundariesBusy() ? 'Resolving boundaries…' : 'Resolve boundaries'}
-          </button>
-          <button
-            class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
-            disabled={scanBusy() || data().scanRunning}
-            onClick={onScan}
-          >
-            {scanBusy() || data().scanRunning ? 'Scanning…' : 'Scan now'}
-          </button>
-          <button
-            class="rounded-lg bg-orange-600 px-5 py-2 text-sm font-semibold text-white hover:bg-orange-500"
-            onClick={() => setShowAruodasImport((shown) => !shown)}
-          >
-            {showAruodasImport() ? 'Close import' : 'Import Aruodas'}
-          </button>
-        </div>
-      </header>
+    <main class="min-h-screen bg-[#edf0ea] px-4 pb-16 pt-4 text-[#18241e] sm:px-8 sm:pt-8">
+      <div class="mx-auto max-w-6xl overflow-hidden border border-[#18241e] bg-[#faf9f4]">
+        <header class="flex flex-wrap items-center justify-between gap-3 border-b border-[#18241e] px-4 py-4 sm:px-7">
+          <h1 class="font-serif text-2xl">Find Me Home</h1>
+          <div class="flex items-center gap-3">
+            <span class="font-mono text-xs">{visitCount()} in Visit Plan</span>
+            <button
+              class="bg-[#204d3a] px-4 py-2 text-sm font-bold text-white"
+              onClick={() => setShowImport((shown) => !shown)}
+            >
+              {showImport() ? 'Close' : '+ Aruodas'}
+            </button>
+          </div>
+        </header>
 
-      <Show when={showAruodasImport()}>
-        <AruodasImportPanel />
-      </Show>
+        <Show when={showImport()}>
+          <ImportSetup />
+        </Show>
 
-      <Show when={data().lastScan}>
-        {(scan) => (
-          <section class="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
-            <div class="flex flex-wrap items-center gap-x-6 gap-y-1">
-              <span>
-                Last scan: <b>{scan().started_at}</b> — {scan().status}
-              </span>
-              <Show when={scanStats()?.perSource}>
-                {(per) => (
-                  <For each={Object.entries(per())}>
-                    {([source, s]) => (
-                      <span
-                        class={`rounded px-2 py-0.5 ${SOURCE_COLORS[source] ?? 'bg-gray-100'}`}
-                        title={s.errors.join('\n')}
-                      >
-                        {source}: {s.found} found
-                        {s.errors.length > 0 ? ` · ${s.errors.length} err` : ''}
-                      </span>
-                    )}
-                  </For>
-                )}
-              </Show>
-            </div>
-          </section>
-        )}
-      </Show>
-
-      <section class="mb-6">
-        <h2 class="mb-3 text-lg font-semibold">Map</h2>
-        <ListingsMap
-          listings={data().listings}
-          requirements={data().requirements}
-          evalsByListing={evalsByListing()}
-          selectedId={selectedId()}
-          onSelect={onSelectListing}
-          focusRequest={focusRequest()}
-        />
-      </section>
-
-      <section>
-        <h2 class="mb-3 text-lg font-semibold">
-          Listings ({data().listings.length})
-        </h2>
         <Show
-          when={data().listings.length > 0}
+          when={listings().length > 0}
           fallback={
-            <p class="rounded-lg border border-dashed border-gray-300 p-8 text-center text-gray-500">
-              No listings yet — press “Scan now”.
-            </p>
+            <section class="px-5 py-16 text-center sm:px-8">
+              <h2 class="font-serif text-2xl">No Source Listings yet</h2>
+              <p class="mt-2 text-sm text-[#647169]">
+                Use + Aruodas to set up the import bookmarklet.
+              </p>
+            </section>
           }
         >
-          <div class="overflow-x-auto rounded-lg border border-gray-200">
-            <table class="w-full text-sm">
-              <thead class="bg-gray-50 text-left text-xs uppercase text-gray-500">
-                <tr>
-                  <th class="px-3 py-2">Title / Address</th>
-                  <th class="px-3 py-2">Price</th>
-                  <th class="px-3 py-2">Area</th>
-                  <th class="px-3 py-2">€/a</th>
-                  <th class="px-3 py-2">Purpose</th>
-                  <th class="px-3 py-2">Cadastral</th>
-                  <th class="px-3 py-2">Coords</th>
-                  <th class="px-3 py-2">Requirements</th>
-                  <th class="px-3 py-2">Source</th>
-                  <th class="px-3 py-2">Edit</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                <For each={data().listings}>
-                  {(l) => (
-                    <ListingTableRow
-                      listing={l}
-                      requirements={data().requirements}
-                      evals={evalsByListing().get(l.id)}
-                      editing={editingId() === l.id}
-                      selected={selectedId() === l.id}
-                      onEdit={() =>
-                        setEditingId((cur) => (cur === l.id ? undefined : l.id))
-                      }
-                      onFocus={() => onFocusListing(l.id)}
-                      registerRow={(el) => rowRefs.set(l.id, el)}
-                    />
-                  )}
-                </For>
-              </tbody>
-            </table>
+          <div class="hidden grid-cols-[2.1fr_1fr_0.7fr_0.8fr_auto] border-b border-[#18241e]/30 px-7 py-2 font-mono text-[10px] uppercase tracking-wider text-[#647169] sm:grid">
+            <span>Source Listing</span>
+            <span>Place</span>
+            <span>Price</span>
+            <span>Area</span>
+            <span>Visit Plan</span>
           </div>
+          <For each={listings()}>
+            {(listing) => <ListingRow listing={listing} />}
+          </For>
         </Show>
-      </section>
-
-      <Show when={editingListing()}>
-        <section class="mt-6 rounded-lg border border-amber-300 bg-amber-50/40 p-4">
-          <EditPanel
-            listing={editingListing()!}
-            onCancel={() => setEditingId(undefined)}
-            onSaved={onEdited}
-            onDeleted={() => {
-              setEditingId(undefined)
-              setSelectedId(undefined)
-              void refresh()
-            }}
-          />
-        </section>
-      </Show>
+      </div>
     </main>
   )
 }
 
-function AruodasImportPanel() {
-  const [url, setUrl] = createSignal('')
-  const [bookmarklet, setBookmarklet] = createSignal('')
+function ListingRow(props: { listing: SourceListingSummary }) {
+  const router = useRouter()
   const [busy, setBusy] = createSignal(false)
-  const [message, setMessage] = createSignal<string>()
-  const [error, setError] = createSignal<string>()
-
-  const isAruodasLandUrl = (value: string) => {
-    try {
-      const parsed = new URL(value)
-      return (
-        parsed.protocol === 'https:' &&
-        (parsed.hostname === 'aruodas.lt' ||
-          parsed.hostname === 'www.aruodas.lt') &&
-        parsed.pathname.startsWith('/sklypai')
-      )
-    } catch {
-      return false
-    }
-  }
-
-  const openListing = () => {
-    if (!isAruodasLandUrl(url())) {
-      setError('Enter an HTTPS URL for an individual Aruodas land listing.')
-      return
-    }
-    setError(undefined)
-    window.open(url(), '_blank', 'noopener,noreferrer')
-  }
-
-  const generateBookmarklet = async () => {
+  const toggleVisit = async () => {
     setBusy(true)
-    setError(undefined)
-    setMessage(undefined)
     try {
-      const { bookmarklet: generated } = await getAruodasBookmarklet({
-        data: { origin: window.location.origin },
+      await updateVisitPlan({
+        data: {
+          id: props.listing.id,
+          included: props.listing.visitPlanPosition === null,
+        },
       })
-      setBookmarklet(generated)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      await router.invalidate({ sync: true })
     } finally {
       setBusy(false)
     }
   }
 
-  const copyBookmarklet = async () => {
+  return (
+    <article class="grid gap-3 border-b border-[#18241e]/20 px-4 py-5 last:border-0 sm:grid-cols-[2.1fr_1fr_0.7fr_0.8fr_auto] sm:items-center sm:px-7">
+      <div class="min-w-0">
+        <p class="font-mono text-[9px] uppercase text-[#68756d]">
+          Aruodas {props.listing.sourceId} · {props.listing.candidatePlotCount}{' '}
+          {props.listing.candidatePlotCount === 1 ? 'plot' : 'plots'}
+        </p>
+        <Link
+          class="mt-1 block font-serif text-xl leading-tight hover:underline"
+          to="/source-listings/$sourceListingId"
+          params={{ sourceListingId: String(props.listing.id) }}
+        >
+          {props.listing.title ?? `Aruodas advert ${props.listing.sourceId}`}
+        </Link>
+        <p class="mt-2 text-sm text-[#647169] sm:hidden">
+          {props.listing.locationLabel ?? 'Location unknown'}
+        </p>
+      </div>
+      <p class="hidden text-sm sm:block">
+        {props.listing.locationLabel ?? 'Unknown'}
+      </p>
+      <b>{formatPrice(props.listing.priceEur)}</b>
+      <b>{formatArea(props.listing.areaAres)}</b>
+      <button
+        class={`min-w-20 border px-3 py-2 text-xs font-bold disabled:opacity-50 ${
+          props.listing.visitPlanPosition === null
+            ? 'border-[#849087] hover:border-[#204d3a]'
+            : 'border-[#204d3a] bg-[#d9e6d8] text-[#204d3a]'
+        }`}
+        disabled={busy()}
+        onClick={toggleVisit}
+      >
+        {props.listing.visitPlanPosition === null
+          ? 'Add'
+          : `Visit #${props.listing.visitPlanPosition}`}
+      </button>
+      <Show when={props.listing.visitedAt}>
+        <span class="text-xs text-[#647169] sm:col-start-2 sm:col-end-5">
+          Visited {formatDate(props.listing.visitedAt)}
+        </span>
+      </Show>
+    </article>
+  )
+}
+
+function ImportSetup() {
+  const [bookmarklet, setBookmarklet] = createSignal('')
+  const [message, setMessage] = createSignal('')
+  const [busy, setBusy] = createSignal(false)
+  const prepare = async () => {
+    setBusy(true)
     try {
-      await navigator.clipboard.writeText(bookmarklet())
-      setMessage(
-        'Bookmarklet copied. Save it as a Chrome bookmark named “Import to Find Me Home”.',
-      )
-    } catch (err) {
-      setError(
-        `Could not copy the bookmarklet: ${err instanceof Error ? err.message : String(err)}`,
-      )
+      const result = await getAruodasBookmarklet({
+        data: { origin: window.location.origin },
+      })
+      setBookmarklet(result.bookmarklet)
+    } finally {
+      setBusy(false)
     }
   }
 
   return (
-    <section class="mb-6 rounded-lg border border-orange-200 bg-orange-50 p-4">
-      <h2 class="text-lg font-semibold text-orange-950">Import from Aruodas</h2>
-      <p class="mt-1 text-sm text-orange-950/80">
-        Open the listing in Chrome, complete any human verification yourself,
-        then run your saved bookmarklet on the visible listing page.
-      </p>
-
-      <div class="mt-4 flex flex-wrap gap-2">
-        <input
-          class="min-w-64 flex-1 rounded border border-orange-300 bg-white px-3 py-2 text-sm"
-          type="url"
-          placeholder="https://www.aruodas.lt/sklypai-..."
-          value={url()}
-          onInput={(event) => setUrl(event.currentTarget.value)}
-        />
-        <button
-          type="button"
-          class="rounded bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
-          onClick={openListing}
-        >
-          Open listing
-        </button>
-        <button
-          type="button"
-          class="rounded border border-orange-400 px-4 py-2 text-sm font-semibold text-orange-900 hover:bg-orange-100 disabled:opacity-50"
-          disabled={busy()}
-          onClick={generateBookmarklet}
-        >
-          {busy() ? 'Generating…' : 'Get bookmarklet'}
-        </button>
-      </div>
-
-      <Show when={bookmarklet()}>
-        <div class="mt-4">
-          <p class="mb-2 text-sm font-medium text-orange-950">
-            Copy this once, then save it as a Chrome bookmark. On Android,
-            invoke it by typing its bookmark name in Chrome’s address bar.
+    <section class="border-b border-[#18241e] bg-[#e5ece8] px-4 py-5 sm:px-7">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="font-serif text-xl">Aruodas bookmarklet</h2>
+          <p class="mt-1 text-xs text-[#647169]">
+            Run it on an Aruodas land advert, then review before saving.
           </p>
-          <textarea
-            class="h-28 w-full rounded border border-orange-300 bg-white p-2 font-mono text-xs"
-            readOnly
-            value={bookmarklet()}
-          />
-          <button
-            type="button"
-            class="mt-2 rounded bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
-            onClick={copyBookmarklet}
-          >
-            Copy bookmarklet
-          </button>
         </div>
-      </Show>
-
+        <Show
+          when={bookmarklet()}
+          fallback={
+            <button
+              class="border border-[#204d3a] px-4 py-2 text-sm font-bold text-[#204d3a] disabled:opacity-50"
+              disabled={busy()}
+              onClick={prepare}
+            >
+              {busy() ? 'Preparing…' : 'Prepare bookmarklet'}
+            </button>
+          }
+        >
+          <div class="flex flex-wrap gap-2">
+            <a
+              class="bg-[#204d3a] px-4 py-2 text-sm font-bold text-white"
+              href={bookmarklet()}
+              onClick={(event) => event.preventDefault()}
+            >
+              Import to Find Me Home
+            </a>
+            <button
+              class="border border-[#204d3a] px-4 py-2 text-sm font-bold text-[#204d3a]"
+              onClick={async () => {
+                await navigator.clipboard.writeText(bookmarklet())
+                setMessage('Copied')
+              }}
+            >
+              Copy
+            </button>
+          </div>
+        </Show>
+      </div>
       <Show when={message()}>
-        <p class="mt-3 text-sm text-emerald-700">{message()}</p>
-      </Show>
-      <Show when={error()}>
-        <p class="mt-3 text-sm text-red-700">{error()}</p>
+        <p class="mt-2 text-right text-xs text-[#204d3a]">{message()}</p>
       </Show>
     </section>
   )
 }
 
-function ListingTableRow(props: {
-  listing: ListingRow
-  requirements: Array<{ requirement: string; label: string; hard: boolean }>
-  evals: Map<string, EvaluationRow> | undefined
-  editing: boolean
-  selected: boolean
-  onEdit: () => void
-  onFocus: () => void
-  registerRow: (el: HTMLTableRowElement) => void
-}) {
-  const l = props.listing
-  const price = l.price_eur
-  const area = l.area_ares
-  const pricePerAre = () => (price != null && area ? price / area : null)
-  const overrideKeys = (): Array<string> => {
-    if (!l.overrides_json) return []
-    try {
-      return Object.keys(
-        JSON.parse(l.overrides_json) as Record<string, unknown>,
+export const formatPrice = (value: number | null) =>
+  value === null
+    ? 'Unknown'
+    : new Intl.NumberFormat('lt-LT', {
+        style: 'currency',
+        currency: 'EUR',
+        maximumFractionDigits: 0,
+      }).format(value)
+
+export const formatArea = (value: number | null) =>
+  value === null
+    ? 'Unknown'
+    : `${new Intl.NumberFormat('lt-LT').format(value)} a`
+
+export const formatDate = (value: string | null) =>
+  value === null
+    ? 'Not yet'
+    : new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(
+        new Date(`${value}Z`),
       )
-    } catch {
-      return []
-    }
-  }
-  return (
-    <tr
-      ref={props.registerRow}
-      class={
-        props.selected
-          ? 'bg-blue-50 ring-2 ring-inset ring-blue-400'
-          : props.editing
-            ? 'bg-amber-100/60'
-            : 'hover:bg-blue-50/40'
-      }
-    >
-      <td class="max-w-xs px-3 py-2">
-        <a
-          href={l.url}
-          target="_blank"
-          rel="noreferrer"
-          class="font-medium text-blue-700 hover:underline"
-        >
-          {l.title ?? l.address ?? l.url}
-        </a>
-        <Show when={overrideKeys().length > 0}>
-          <span
-            class="ml-1 cursor-help text-xs text-amber-600"
-            title={`Manually edited: ${overrideKeys().join(', ')}`}
-          >
-            ✎
-          </span>
-        </Show>
-        <Show when={l.address && l.address !== l.title}>
-          <div class="truncate text-xs text-gray-500">{l.address}</div>
-        </Show>
-      </td>
-      <td class="whitespace-nowrap px-3 py-2 font-semibold">
-        {price != null ? `€${price.toLocaleString('lt-LT')}` : '—'}
-      </td>
-      <td class="whitespace-nowrap px-3 py-2">
-        {area != null ? `${area.toFixed(1)} a` : '—'}
-      </td>
-      <td class="whitespace-nowrap px-3 py-2 text-gray-600">
-        {pricePerAre() != null ? `€${pricePerAre()!.toFixed(0)}` : '—'}
-      </td>
-      <td class="max-w-40 truncate px-3 py-2" title={l.purpose_text ?? ''}>
-        {l.purpose_text ?? <span class="text-gray-400">unknown</span>}
-      </td>
-      <td class="whitespace-nowrap px-3 py-2 font-mono text-xs">
-        {l.cadastral_number ?? <span class="text-gray-400">—</span>}
-      </td>
-      <td class="whitespace-nowrap px-3 py-2 text-xs">
-        <Show
-          when={l.lat != null}
-          fallback={<span class="text-gray-400">unknown</span>}
-        >
-          <a
-            class="text-blue-600 hover:underline"
-            href={`https://www.google.com/maps?q=${l.lat},${l.lng}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {l.lat!.toFixed(4)}, {l.lng!.toFixed(4)}
-          </a>
-          <span class="ml-1 text-gray-400">({l.location_confidence})</span>
-          <button
-            class="ml-1 rounded border border-gray-300 px-1 text-xs hover:bg-gray-50"
-            title="Show on map"
-            onClick={props.onFocus}
-          >
-            📍
-          </button>
-        </Show>
-      </td>
-      <td class="px-3 py-2">
-        <div class="flex flex-wrap gap-1">
-          <For each={props.requirements}>
-            {(req) => (
-              <RequirementBadge
-                meta={req}
-                row={props.evals?.get(req.requirement)}
-              />
-            )}
-          </For>
-        </div>
-      </td>
-      <td class="px-3 py-2">
-        <span
-          class={`rounded px-2 py-0.5 text-xs ${SOURCE_COLORS[l.source] ?? 'bg-gray-100'}`}
-        >
-          {l.source}
-        </span>
-      </td>
-      <td class="px-3 py-2">
-        <button
-          class="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50"
-          title="Edit listing"
-          onClick={(ev) => {
-            console.log(ev)
-            // debugger;
-            props.onEdit()
-          }}
-        >
-          ✎
-        </button>
-      </td>
-    </tr>
-  )
-}
-
-const BADGE_ABBREV: Record<string, string> = {
-  size: 'Sz',
-  price: '€',
-  radius: 'Km',
-  purpose: 'Pu',
-  walk_to_stop: 'Wk',
-  commute: 'Cm',
-  eso_cost: 'El',
-  budget: 'Bd',
-  crime: 'Cr',
-  trees: 'Tr',
-  water_sewage: 'Wa',
-  legal_flags: 'Lg',
-  noise: 'Ns',
-  livability: 'Lv',
-}
-
-function RequirementBadge(props: {
-  meta: { requirement: string; label: string; hard: boolean }
-  row: EvaluationRow | undefined
-}) {
-  const status = () => props.row?.status ?? 'unknown'
-  const tooltip = () => {
-    const kind = props.meta.hard ? 'hard' : 'soft'
-    if (!props.row) return `${props.meta.label} (${kind}): not evaluated yet`
-    let evidence = ''
-    try {
-      const items = JSON.parse(props.row.evidence_json ?? '[]') as Array<{
-        source: string
-        detail: string
-      }>
-      evidence = items.map((i) => `[${i.source}] ${i.detail}`).join('\n')
-    } catch {
-      /* ignore */
-    }
-    return `${props.meta.label} (${kind}): ${props.row.status.toUpperCase()}${props.row.value ? ` — ${props.row.value}` : ''}\nconfidence: ${props.row.confidence ?? '?'}\n${evidence}`
-  }
-  return (
-    <span
-      class={`cursor-help rounded px-1.5 py-0.5 font-mono text-[10px] ${props.meta.hard ? 'font-bold' : 'font-normal'} ${STATUS_STYLES[status()] ?? STATUS_STYLES.unknown}`}
-      title={tooltip()}
-    >
-      <span class="font-semibold">
-        {BADGE_ABBREV[props.meta.requirement] ??
-          props.meta.requirement.slice(0, 2)}
-      </span>
-      <Show when={props.row?.value && status() !== 'unknown'}>
-        <span class="ml-1 font-normal">{props.row!.value}</span>
-      </Show>
-    </span>
-  )
-}
-
-function EditPanel(props: {
-  listing: ListingRow
-  onCancel: () => void
-  onSaved: () => void
-  onDeleted: () => void
-}) {
-  const l = untrack(() => props.listing)
-  const [address, setAddress] = createSignal(l.address ?? '')
-  const [lat, setLat] = createSignal(l.lat != null ? String(l.lat) : '')
-  const [lng, setLng] = createSignal(l.lng != null ? String(l.lng) : '')
-  const [confidence, setConfidence] = createSignal<'exact' | 'approx'>(
-    l.location_confidence === 'exact' ? 'exact' : 'approx',
-  )
-  const [purpose, setPurpose] = createSignal(l.purpose_text ?? '')
-  const [price, setPrice] = createSignal(
-    l.price_eur != null ? String(l.price_eur) : '',
-  )
-  const [area, setArea] = createSignal(
-    l.area_ares != null ? String(l.area_ares) : '',
-  )
-  const [cadastral, setCadastral] = createSignal(l.cadastral_number ?? '')
-
-  const [busy, setBusy] = createSignal(false)
-  const [deleting, setDeleting] = createSignal(false)
-  const [geocoding, setGeocoding] = createSignal(false)
-  const [resolving, setResolving] = createSignal(false)
-  const [resolveNote, setResolveNote] = createSignal<string | null>(null)
-  const [error, setError] = createSignal<string | null>(null)
-  const [candidates, setCandidates] = createSignal<
-    Array<{
-      lat: number
-      lng: number
-      displayName: string
-      source?: 'regia' | 'nominatim'
-      confidence?: 'exact' | 'approx'
-    }>
-  >([])
-
-  const geocode = async () => {
-    setGeocoding(true)
-    setError(null)
-    try {
-      const res = await geocodeListingAddress({
-        data: { listingId: l.id, address: address() },
-      })
-      setCandidates(res.candidates)
-      if (res.candidates.length === 0) setError('No geocoding results')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setGeocoding(false)
-    }
-  }
-
-  const pickCandidate = (c: {
-    lat: number
-    lng: number
-    confidence?: 'exact' | 'approx'
-  }) => {
-    setLat(String(c.lat))
-    setLng(String(c.lng))
-    setConfidence(c.confidence === 'exact' ? 'exact' : 'approx')
-    setCandidates([])
-  }
-
-  const resolve = async () => {
-    setResolving(true)
-    setError(null)
-    setResolveNote(null)
-    try {
-      const summary = await resolveListingLocationFn({
-        data: { listingId: l.id },
-      })
-      if (summary.address !== null) setAddress(summary.address)
-      setLat(summary.lat != null ? String(summary.lat) : '')
-      setLng(summary.lng != null ? String(summary.lng) : '')
-      setConfidence(summary.locationConfidence === 'exact' ? 'exact' : 'approx')
-      if (summary.cadastral !== null) setCadastral(summary.cadastral)
-      setResolveNote(
-        summary.filled.length > 0
-          ? `Filled: ${summary.filled.join(', ')}`
-          : summary.areaMismatch
-            ? `Skipped parcel: ${summary.areaMismatch.parcelAreaAres.toFixed(1)} a does not match listing area ${summary.areaMismatch.listingAreaAres.toFixed(1)} a`
-          : 'Nothing new resolved',
-      )
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setResolving(false)
-    }
-  }
-
-  const save = async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      const fields: {
-        lat?: number
-        lng?: number
-        location_confidence?: 'exact' | 'approx'
-        address?: string
-        purpose_text?: string
-        price_eur?: number
-        area_ares?: number
-        cadastral_number?: string
-      } = {}
-      const clear: Array<
-        | 'lat'
-        | 'lng'
-        | 'location_confidence'
-        | 'address'
-        | 'purpose_text'
-        | 'price_eur'
-        | 'area_ares'
-        | 'cadastral_number'
-      > = []
-
-      const latVal = lat().trim()
-      if (latVal === '') {
-        if (l.lat != null) clear.push('lat')
-      } else if (Number(latVal) !== l.lat) {
-        fields.lat = Number(latVal)
-      }
-
-      const lngVal = lng().trim()
-      if (lngVal === '') {
-        if (l.lng != null) clear.push('lng')
-      } else if (Number(lngVal) !== l.lng) {
-        fields.lng = Number(lngVal)
-      }
-      if (confidence() !== l.location_confidence) {
-        fields.location_confidence = confidence()
-      }
-      if (address().trim() !== (l.address ?? '')) {
-        fields.address = address().trim()
-      }
-      if (purpose().trim() !== (l.purpose_text ?? '')) {
-        fields.purpose_text = purpose().trim()
-      }
-      if (cadastral().trim() !== (l.cadastral_number ?? '')) {
-        fields.cadastral_number = cadastral().trim()
-      }
-      const priceVal = price().trim()
-      if (priceVal === '') {
-        if (l.price_eur != null) clear.push('price_eur')
-      } else if (Number(priceVal) !== l.price_eur) {
-        fields.price_eur = Number(priceVal)
-      }
-      const areaVal = area().trim()
-      if (areaVal === '') {
-        if (l.area_ares != null) clear.push('area_ares')
-      } else if (Number(areaVal) !== l.area_ares) {
-        fields.area_ares = Number(areaVal)
-      }
-
-      await updateListing({ data: { listingId: l.id, fields, clear } })
-      props.onSaved()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const remove = async () => {
-    if (
-      !window.confirm(
-        'Delete this listing permanently? Its evaluation results will also be deleted.',
-      )
-    ) {
-      return
-    }
-    setDeleting(true)
-    setError(null)
-    try {
-      await deleteListing({ data: { listingId: l.id } })
-      props.onDeleted()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-  const inputClass = 'w-full rounded border border-gray-300 px-2 py-1 text-sm'
-  const labelClass = 'block text-xs font-medium text-gray-600'
-
-  return (
-    <div class="space-y-3">
-      <h3 class="text-sm font-semibold">Edit listing #{l.id}</h3>
-
-      <div>
-        <label class={labelClass}>Address</label>
-        <div class="flex gap-2">
-          <input
-            class={inputClass}
-            value={address()}
-            onInput={(e) => setAddress(e.currentTarget.value)}
-          />
-          <button
-            type="button"
-            class="whitespace-nowrap rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
-            disabled={geocoding()}
-            onClick={geocode}
-          >
-            {geocoding() ? 'Geocoding…' : 'Geocode'}
-          </button>
-          <button
-            type="button"
-            class="whitespace-nowrap rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
-            disabled={resolving()}
-            onClick={resolve}
-          >
-            {resolving() ? 'Resolving…' : 'Resolve'}
-          </button>
-        </div>
-        <Show when={resolveNote()}>
-          <p class="mt-1 text-xs text-indigo-700">{resolveNote()}</p>
-        </Show>
-      </div>
-
-      <Show when={candidates().length > 0}>
-        <ul class="space-y-1 rounded border border-gray-200 bg-white p-2 text-xs">
-          <For each={candidates()}>
-            {(c) => (
-              <li>
-                <button
-                  type="button"
-                  class="w-full text-left hover:bg-blue-50"
-                  onClick={() => pickCandidate(c)}
-                >
-                  <span
-                    class={
-                      c.source === 'regia'
-                        ? 'mr-1 rounded bg-green-100 px-1 py-0.5 text-[10px] font-semibold text-green-700'
-                        : 'mr-1 rounded bg-gray-100 px-1 py-0.5 text-[10px] font-semibold text-gray-600'
-                    }
-                  >
-                    {c.source === 'regia' ? 'regia' : 'OSM'}
-                  </span>
-                  <span class="font-mono text-blue-700">
-                    {c.lat.toFixed(5)}, {c.lng.toFixed(5)}
-                  </span>{' '}
-                  — {c.displayName}
-                </button>
-              </li>
-            )}
-          </For>
-        </ul>
-      </Show>
-
-      <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <div>
-          <label class={labelClass}>Lat</label>
-          <input
-            class={inputClass}
-            value={lat()}
-            onInput={(e) => setLat(e.currentTarget.value)}
-          />
-        </div>
-        <div>
-          <label class={labelClass}>Lng</label>
-          <input
-            class={inputClass}
-            value={lng()}
-            onInput={(e) => setLng(e.currentTarget.value)}
-          />
-        </div>
-        <div>
-          <label class={labelClass}>Confidence</label>
-          <select
-            class={inputClass}
-            value={confidence()}
-            onChange={(e) =>
-              setConfidence(
-                e.currentTarget.value === 'exact' ? 'exact' : 'approx',
-              )
-            }
-          >
-            <option value="approx">approx</option>
-            <option value="exact">exact</option>
-          </select>
-        </div>
-        <div>
-          <label class={labelClass}>Cadastral</label>
-          <input
-            class={inputClass}
-            value={cadastral()}
-            onInput={(e) => setCadastral(e.currentTarget.value)}
-          />
-        </div>
-      </div>
-
-      <div>
-        <label class={labelClass}>Purpose</label>
-        <div class="flex gap-2">
-          <input
-            class={inputClass}
-            value={purpose()}
-            onInput={(e) => setPurpose(e.currentTarget.value)}
-          />
-          <For each={['namų valda', 'sodų', 'žemės ūkio']}>
-            {(p) => (
-              <button
-                type="button"
-                class="whitespace-nowrap rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50"
-                onClick={() => setPurpose(p)}
-              >
-                {p}
-              </button>
-            )}
-          </For>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class={labelClass}>Price €</label>
-          <input
-            class={inputClass}
-            value={price()}
-            onInput={(e) => setPrice(e.currentTarget.value)}
-          />
-        </div>
-        <div>
-          <label class={labelClass}>Area a</label>
-          <input
-            class={inputClass}
-            value={area()}
-            onInput={(e) => setArea(e.currentTarget.value)}
-          />
-        </div>
-      </div>
-
-      <Show when={error()}>
-        <p class="text-sm text-red-600">{error()}</p>
-      </Show>
-
-      <div class="flex gap-2">
-        <button
-          type="button"
-          class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-          disabled={busy() || deleting()}
-          onClick={save}
-        >
-          {busy() ? 'Saving…' : 'Save'}
-        </button>
-        <button
-          type="button"
-          class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50"
-          disabled={busy() || deleting()}
-          onClick={props.onCancel}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          class="ml-auto rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
-          disabled={busy() || deleting()}
-          onClick={remove}
-        >
-          {deleting() ? 'Deleting…' : 'Delete listing'}
-        </button>
-      </div>
-    </div>
-  )
-}

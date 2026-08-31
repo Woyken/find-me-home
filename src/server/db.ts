@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
-import path from 'node:path'
 import fs from 'node:fs'
+import path from 'node:path'
 
 const DB_DIR = path.join(process.cwd(), 'data')
 const DB_PATH = path.join(DB_DIR, 'find-me-home.db')
@@ -17,46 +17,77 @@ export function getDb(): Database.Database {
   return db
 }
 
-function migrate(d: Database.Database) {
-  d.exec(`
-    CREATE TABLE IF NOT EXISTS scan_runs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      started_at TEXT NOT NULL DEFAULT (datetime('now')),
-      finished_at TEXT,
-      status TEXT NOT NULL DEFAULT 'running', -- running | done | failed
-      stats_json TEXT
-    );
+function migrate(database: Database.Database) {
+  const hasLegacySchema = database
+    .prepare(
+      `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'listings'`,
+    )
+    .get()
+  if (hasLegacySchema) {
+    database.exec(`
+      DROP TABLE IF EXISTS evaluations;
+      DROP TABLE IF EXISTS listings;
+      DROP TABLE IF EXISTS scan_runs;
+    `)
+  }
 
-    CREATE TABLE IF NOT EXISTS listings (
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS source_listings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      source TEXT NOT NULL,             -- kampas | domoplius | alio
-      source_id TEXT NOT NULL,          -- id on the source site
+      source TEXT NOT NULL,
+      source_id TEXT NOT NULL,
       url TEXT NOT NULL,
       title TEXT,
-      price_eur REAL,
-      area_ares REAL,
-      purpose_text TEXT,                -- raw paskirtis text from listing
-      cadastral_number TEXT,
-      lat REAL,
-      lng REAL,
-      location_confidence TEXT NOT NULL DEFAULT 'unknown', -- exact | approx | unknown
       address TEXT,
       description TEXT,
-      photos_json TEXT,                 -- JSON array of photo URLs
-      utilities_json TEXT,              -- JSON: { electricity, water, sewage, gas } raw hints
-      raw_json TEXT,                    -- full raw scraped payload for debugging/re-parsing
-      dedup_group_id INTEGER,           -- listings sharing a group are considered the same plot
-      status TEXT NOT NULL DEFAULT 'active',  -- active | gone
-      first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
-      last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
-      last_scan_run_id INTEGER REFERENCES scan_runs(id),
+      photos_json TEXT NOT NULL DEFAULT '[]',
+      utilities_json TEXT NOT NULL DEFAULT '{}',
+      raw_json TEXT,
+      visited_at TEXT,
+      visit_plan_position INTEGER,
+      imported_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(source, source_id)
     );
 
-    CREATE INDEX IF NOT EXISTS idx_listings_dedup ON listings(dedup_group_id);
-    CREATE INDEX IF NOT EXISTS idx_listings_status ON listings(status);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_source_listings_visit_plan
+      ON source_listings(visit_plan_position)
+      WHERE visit_plan_position IS NOT NULL;
 
-    -- Long-lived, per-source device keys for explicitly user-invoked imports.
+    CREATE TABLE IF NOT EXISTS import_drafts (
+      token TEXT PRIMARY KEY,
+      source TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_import_drafts_expiry
+      ON import_drafts(expires_at);
+
+    CREATE TABLE IF NOT EXISTS candidate_plots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_listing_id INTEGER NOT NULL REFERENCES source_listings(id) ON DELETE CASCADE,
+      name TEXT,
+      price_eur REAL,
+      area_ares REAL,
+      purpose_text TEXT,
+      notes TEXT,
+      parcel_number_clue TEXT,
+      latitude_clue REAL,
+      longitude_clue REAL,
+      address_clue TEXT,
+      road_access_rating INTEGER CHECK (road_access_rating BETWEEN 1 AND 5),
+      area_feeling_rating INTEGER CHECK (area_feeling_rating BETWEEN 1 AND 5),
+      view_rating INTEGER CHECK (view_rating BETWEEN 1 AND 5),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_candidate_plots_source_listing
+      ON candidate_plots(source_listing_id);
+
     CREATE TABLE IF NOT EXISTS import_secrets (
       source TEXT PRIMARY KEY,
       secret TEXT NOT NULL,
@@ -64,51 +95,10 @@ function migrate(d: Database.Database) {
       rotated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
-    -- Requirement evaluations (phase 3+). One row per listing per requirement.
-    CREATE TABLE IF NOT EXISTS evaluations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      listing_id INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
-      requirement TEXT NOT NULL,        -- e.g. size, price, radius, purpose, walk_to_stop, commute, eso_cost, budget, trees, ...
-      status TEXT NOT NULL,             -- pass | fail | warn | unknown
-      value TEXT,                       -- human-readable evaluated value
-      evidence_json TEXT,               -- JSON array of evidence items { source, detail, url? }
-      confidence TEXT,                  -- high | medium | low
-      evaluated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE(listing_id, requirement)
-    );
-
-    -- Cache for expensive per-coordinate lookups (Trafi routing, GIS, ...)
     CREATE TABLE IF NOT EXISTS geo_cache (
       key TEXT PRIMARY KEY,
       value_json TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `)
-
-  // Additive column migrations. SQLite has no `ADD COLUMN IF NOT EXISTS`, so
-  // guard each ALTER by checking pragma table_info for the column first.
-  addColumnIfMissing(d, 'listings', 'overrides_json', 'TEXT')
-
-  // Phase 6: resolved parcel boundary (WGS84 GeoJSON Polygon) + provenance.
-  addColumnIfMissing(d, 'listings', 'boundary_json', 'TEXT')
-  addColumnIfMissing(d, 'listings', 'boundary_source', 'TEXT')
-  addColumnIfMissing(d, 'listings', 'boundary_cadastral', 'TEXT')
-}
-
-/**
- * Add a column to a table only if it does not already exist. Used for
- * forward-compatible additive migrations on existing databases.
- */
-function addColumnIfMissing(
-  d: Database.Database,
-  table: string,
-  column: string,
-  definition: string,
-) {
-  const cols = d.prepare(`pragma table_info(${table})`).all() as Array<{
-    name: string
-  }>
-  if (!cols.some((c) => c.name === column)) {
-    d.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
-  }
 }
