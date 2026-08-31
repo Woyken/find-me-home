@@ -120,13 +120,34 @@ const initialListings: Array<SourceListing> = [
 ]
 
 function cloneListings() {
-  return initialListings.map((listing) => ({
+  const listings = initialListings.map((listing) => ({
     ...listing,
     plots: listing.plots.map((plot) => ({
       ...plot,
       ratings: { ...plot.ratings },
     })),
   }))
+  if (
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('plots') === '20'
+  ) {
+    listings[0].plots = Array.from({ length: 20 }, (_, index) => ({
+      id: 100 + index,
+      name: `${8 + (index % 9)} a plot`,
+      addressLabel: `${10 + index}${index % 4 === 1 ? 'A' : ''}`,
+      area: `${8 + (index % 9)} a`,
+      price: `EUR ${(28000 + index * 1250).toLocaleString('en-US')}`,
+      notes: '',
+      mapState:
+        index % 5 === 4
+          ? ('paper' as const)
+          : index % 4 === 3
+            ? ('location' as const)
+            : ('boundary' as const),
+      ratings: { access: 0, area: 0, view: 0 },
+    }))
+  }
+  return listings
 }
 
 function FieldVisitPrototype() {
@@ -440,6 +461,9 @@ function VariantB() {
 function VariantC() {
   const visit = createVisitState()
   const [selectedPlotId, setSelectedPlotId] = createSignal<number>()
+  const [plotQuery, setPlotQuery] = createSignal('')
+  const [planView, setPlanView] = createSignal<'list' | 'map'>('list')
+  const [mapFullscreen, setMapFullscreen] = createSignal(false)
   const [locationStatus, setLocationStatus] = createSignal<
     'idle' | 'locating' | 'live' | 'unavailable'
   >('idle')
@@ -450,9 +474,28 @@ function VariantC() {
   }>()
   let locationWatchId: number | undefined
   let locationStartTimer: ReturnType<typeof setTimeout> | undefined
-  const current = () => visit.listings()[0]
+  const current = () =>
+    visit.listings().find((listing) => listing.id === visit.activeId())
   const selectedPlot = () =>
     current()?.plots.find((plot) => plot.id === selectedPlotId())
+  const selectedPlotIndex = () =>
+    current()?.plots.findIndex((plot) => plot.id === selectedPlotId()) ?? -1
+  const selectAdjacentPlot = (direction: -1 | 1) => {
+    const plots = current()?.plots ?? []
+    const next = selectedPlotIndex() + direction
+    if (next >= 0 && next < plots.length) setSelectedPlotId(plots[next].id)
+  }
+  const matchingPlots = () => {
+    const query = plotQuery().trim().toLowerCase()
+    if (!query) return current()?.plots ?? []
+    return (
+      current()?.plots.filter(
+        (plot) =>
+          plot.addressLabel.toLowerCase().includes(query) ||
+          plot.name.toLowerCase().includes(query),
+      ) ?? []
+    )
+  }
 
   const startLocationWatch = () => {
     if (!navigator.geolocation) {
@@ -486,62 +529,98 @@ function VariantC() {
 
   return (
     <div class="mx-auto min-h-screen max-w-md bg-[#faf8f2] pb-28 shadow-xl">
-      <section>
-        <Show
-          when={current()}
-          fallback={<EmptyPlan message="Nothing remains in the Visit Plan." />}
-        >
-          {(listing) => (
-            <>
-              <header class="px-5 pb-4 pt-5">
-                <div class="flex items-center justify-between">
-                  <div>
-                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-[#647168]">
-                      Stop 1 of {visit.listings().length}
-                    </p>
-                    <h2 class="mt-1 font-serif text-3xl font-bold">
-                      {listing().place}
-                    </h2>
-                  </div>
-                  <button
-                    class="rounded-full border border-[#b8c0b9] px-3 py-2 text-xs font-bold"
-                    onClick={() => visit.move(listing().id, 1)}
-                  >
-                    Later
-                  </button>
+      <Show
+        when={current()}
+        fallback={
+          <HybridVisitPlan
+            listings={visit.listings()}
+            view={planView()}
+            onView={setPlanView}
+            onMove={visit.move}
+            onOpen={(id) => {
+              setSelectedPlotId(undefined)
+              setPlotQuery('')
+              visit.setActiveId(id)
+            }}
+          />
+        }
+      >
+        {(listing) => (
+          <section>
+            <header class="px-5 pb-4 pt-5">
+              <button
+                class="text-sm font-bold text-[#315d45]"
+                onClick={() => {
+                  setSelectedPlotId(undefined)
+                  setMapFullscreen(false)
+                  visit.setActiveId(undefined)
+                }}
+              >
+                &lt; Visit Plan
+              </button>
+              <h2 class="mt-4 font-serif text-3xl font-bold">
+                {listing().place}
+              </h2>
+              <p class="mt-2 text-sm text-[#647168]">{listing().address}</p>
+              <div class="mt-4 flex gap-2">
+                <a
+                  class="flex-1 rounded-xl border border-[#315d45] px-4 py-3 text-center text-sm font-bold text-[#315d45]"
+                  href="https://www.aruodas.lt"
+                  target="_blank"
+                >
+                  Original ad
+                </a>
+                <a
+                  class="flex-1 rounded-xl bg-[#315d45] px-4 py-3 text-center text-sm font-bold text-white"
+                  href={directionsHref}
+                  target="_blank"
+                >
+                  Directions
+                </a>
+              </div>
+            </header>
+            <div class={mapFullscreen() ? '' : 'px-4'}>
+              <FieldAtlas
+                plots={listing().plots}
+                selectedPlotId={selectedPlotId()}
+                currentLocation={currentLocation()}
+                locationStatus={locationStatus()}
+                fullscreen={mapFullscreen()}
+                onFullscreen={() => setMapFullscreen((value) => !value)}
+                onLocate={startLocationWatch}
+                onSelect={setSelectedPlotId}
+              />
+              <Show when={!mapFullscreen()}>
+                <div class="mt-3 flex items-center justify-between gap-3">
+                  <p class="text-xs font-bold uppercase tracking-[0.12em] text-[#647168]">
+                    {listing().plots.length} Candidate Plots
+                  </p>
+                  <Show when={listing().plots.length > 6}>
+                    <input
+                      class="min-w-0 flex-1 rounded-lg border border-[#cbd1c8] bg-white px-3 py-2 text-sm outline-none focus:border-[#315d45]"
+                      aria-label="Find Candidate Plot by address"
+                      placeholder="Find address..."
+                      value={plotQuery()}
+                      onInput={(event) =>
+                        setPlotQuery(event.currentTarget.value)
+                      }
+                    />
+                  </Show>
                 </div>
-                <p class="mt-2 text-sm text-[#647168]">{listing().address}</p>
-                <div class="mt-4 flex gap-2">
-                  <a
-                    class="flex-1 rounded-xl border border-[#315d45] px-4 py-3 text-center text-sm font-bold text-[#315d45]"
-                    href="https://www.aruodas.lt"
-                    target="_blank"
+                <div
+                  class={`mt-2 gap-2 ${listing().plots.length > 6 ? 'flex snap-x overflow-x-auto pb-2' : 'grid grid-cols-3'}`}
+                >
+                  <For
+                    each={matchingPlots()}
+                    fallback={
+                      <p class="w-full py-4 text-center text-sm text-[#647168]">
+                        No matching address
+                      </p>
+                    }
                   >
-                    Original ad
-                  </a>
-                  <a
-                    class="flex-1 rounded-xl bg-[#315d45] px-4 py-3 text-center text-sm font-bold text-white"
-                    href={directionsHref}
-                    target="_blank"
-                  >
-                    Directions
-                  </a>
-                </div>
-              </header>
-              <div class="px-4">
-                <FieldAtlas
-                  plots={listing().plots}
-                  selectedPlotId={selectedPlotId()}
-                  currentLocation={currentLocation()}
-                  locationStatus={locationStatus()}
-                  onLocate={startLocationWatch}
-                  onSelect={setSelectedPlotId}
-                />
-                <div class="mt-3 grid grid-cols-3 gap-2">
-                  <For each={listing().plots}>
                     {(plot) => (
                       <button
-                        class={`rounded-xl border p-3 text-left ${selectedPlotId() === plot.id ? 'border-[#315d45] bg-[#e4eee7]' : 'border-[#cbd1c8] bg-white'}`}
+                        class={`snap-start rounded-xl border p-3 text-left ${listing().plots.length > 6 ? 'min-w-28' : ''} ${selectedPlotId() === plot.id ? 'border-[#315d45] bg-[#e4eee7]' : 'border-[#cbd1c8] bg-white'}`}
                         onClick={() => setSelectedPlotId(plot.id)}
                       >
                         <b class="block text-lg">{plot.addressLabel}</b>
@@ -552,7 +631,9 @@ function VariantC() {
                     )}
                   </For>
                 </div>
-              </div>
+              </Show>
+            </div>
+            <Show when={!mapFullscreen()}>
               <div class="px-4">
                 <Show
                   when={selectedPlot()}
@@ -563,14 +644,39 @@ function VariantC() {
                   }
                 >
                   {(plot) => (
-                    <PlotNotebook
-                      plot={plot()}
-                      eyebrow="Field notes"
-                      saveState={visit.saveState()}
-                      onRate={visit.rate}
-                      onNotes={visit.updateNotes}
-                      showPaperReference
-                    />
+                    <>
+                      <Show when={listing().plots.length > 6}>
+                        <div class="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                          <button
+                            class="rounded-lg border border-[#cbd1c8] bg-white px-3 py-2 text-xs font-bold disabled:opacity-30"
+                            disabled={selectedPlotIndex() === 0}
+                            onClick={() => selectAdjacentPlot(-1)}
+                          >
+                            Previous
+                          </button>
+                          <span class="text-xs font-bold text-[#647168]">
+                            {selectedPlotIndex() + 1} / {listing().plots.length}
+                          </span>
+                          <button
+                            class="rounded-lg border border-[#cbd1c8] bg-white px-3 py-2 text-xs font-bold disabled:opacity-30"
+                            disabled={
+                              selectedPlotIndex() === listing().plots.length - 1
+                            }
+                            onClick={() => selectAdjacentPlot(1)}
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </Show>
+                      <PlotNotebook
+                        plot={plot()}
+                        eyebrow="Field notes"
+                        saveState={visit.saveState()}
+                        onRate={visit.rate}
+                        onNotes={visit.updateNotes}
+                        showPaperReference
+                      />
+                    </>
                   )}
                 </Show>
                 <button
@@ -583,11 +689,145 @@ function VariantC() {
                   Finish this Visit
                 </button>
               </div>
-            </>
-          )}
-        </Show>
-      </section>
+            </Show>
+          </section>
+        )}
+      </Show>
     </div>
+  )
+}
+
+function HybridVisitPlan(props: {
+  listings: Array<SourceListing>
+  view: 'list' | 'map'
+  onView: (view: 'list' | 'map') => void
+  onMove: (id: number, direction: -1 | 1) => void
+  onOpen: (id: number) => void
+}) {
+  return (
+    <>
+      <header class="bg-[#183e2b] px-5 pb-5 pt-6 text-white">
+        <p class="text-xs font-bold uppercase tracking-[0.2em] text-[#b9d1c2]">
+          Saturday fieldwork
+        </p>
+        <h1 class="mt-2 font-serif text-4xl font-bold">Visit Plan</h1>
+        <div class="mt-5 grid grid-cols-2 rounded-xl bg-white/10 p-1">
+          <button
+            class={`rounded-lg px-4 py-2 text-sm font-bold ${props.view === 'list' ? 'bg-white text-[#183e2b]' : ''}`}
+            onClick={() => props.onView('list')}
+          >
+            List
+          </button>
+          <button
+            class={`rounded-lg px-4 py-2 text-sm font-bold ${props.view === 'map' ? 'bg-white text-[#183e2b]' : ''}`}
+            onClick={() => props.onView('map')}
+          >
+            Map
+          </button>
+        </div>
+      </header>
+      <Show
+        when={props.listings.length > 0}
+        fallback={
+          <EmptyPlan message="Every Source Listing has been visited." />
+        }
+      >
+        <Show
+          when={props.view === 'list'}
+          fallback={<PlanMap listings={props.listings} onOpen={props.onOpen} />}
+        >
+          <section class="space-y-3 p-4">
+            <For each={props.listings}>
+              {(listing, index) => (
+                <article class="grid grid-cols-[2.5rem_1fr] overflow-hidden rounded-2xl border border-[#d8ddd5] bg-white shadow-sm">
+                  <div class="flex flex-col items-center justify-center gap-1 bg-[#edf0e9] py-3">
+                    <button
+                      aria-label={`Move ${listing.place} earlier`}
+                      class="grid size-8 place-items-center rounded-full disabled:opacity-20"
+                      disabled={index() === 0}
+                      onClick={() => props.onMove(listing.id, -1)}
+                    >
+                      ^
+                    </button>
+                    <b class="text-sm">{index() + 1}</b>
+                    <button
+                      aria-label={`Move ${listing.place} later`}
+                      class="grid size-8 place-items-center rounded-full disabled:opacity-20"
+                      disabled={index() === props.listings.length - 1}
+                      onClick={() => props.onMove(listing.id, 1)}
+                    >
+                      v
+                    </button>
+                  </div>
+                  <button
+                    class="p-4 text-left"
+                    onClick={() => props.onOpen(listing.id)}
+                  >
+                    <div class="flex items-start justify-between gap-3">
+                      <div>
+                        <h2 class="text-lg font-bold">{listing.place}</h2>
+                        <p class="mt-1 text-sm text-[#627067]">
+                          {listing.address}
+                        </p>
+                      </div>
+                      <span class="whitespace-nowrap text-sm font-bold text-[#315d45]">
+                        {listing.travel}
+                      </span>
+                    </div>
+                    <div class="mt-4 flex items-center justify-between border-t border-[#edf0e9] pt-3 text-xs text-[#627067]">
+                      <span>{listing.plots.length} Candidate Plot(s)</span>
+                      <b class="text-[#315d45]">Open stop &gt;</b>
+                    </div>
+                  </button>
+                </article>
+              )}
+            </For>
+          </section>
+        </Show>
+      </Show>
+    </>
+  )
+}
+
+function PlanMap(props: {
+  listings: Array<SourceListing>
+  onOpen: (id: number) => void
+}) {
+  return (
+    <section class="p-4">
+      <div class="relative h-[32rem] overflow-hidden rounded-2xl border border-[#bdc8bd] bg-[#dbe3d6] shadow-inner">
+        <div class="absolute inset-0 opacity-70 [background-image:linear-gradient(30deg,transparent_47%,#f5f1df_48%,#f5f1df_52%,transparent_53%),linear-gradient(105deg,transparent_47%,#b7c8b4_48%,#b7c8b4_51%,transparent_52%)] [background-size:82px_67px,105px_91px]" />
+        <For each={props.listings}>
+          {(listing, index) => {
+            const positions = [
+              { left: '15%', top: '18%' },
+              { left: '54%', top: '43%' },
+              { left: '28%', top: '68%' },
+            ]
+            const position = positions[index() % positions.length]
+            return (
+              <button
+                class="absolute -translate-x-1/2 -translate-y-1/2 text-left"
+                style={position}
+                onClick={() => props.onOpen(listing.id)}
+              >
+                <div class="relative h-20 w-28 rotate-[-4deg] border-2 border-[#315d45] bg-[#477b5b]/30">
+                  <span class="absolute left-1/2 top-1/2 grid size-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[#183e2b] text-xs font-bold text-white">
+                    {index() + 1}
+                  </span>
+                </div>
+                <span class="mt-1 block rounded bg-white/95 px-2 py-1 text-xs font-bold shadow-sm">
+                  {listing.place}
+                </span>
+              </button>
+            )
+          }}
+        </For>
+      </div>
+      <p class="mt-3 text-center text-xs text-[#647168]">
+        Only Candidate Plots with available boundaries are painted.
+      </p>
+    </section>
   )
 }
 
@@ -741,11 +981,26 @@ function FieldAtlas(props: {
   currentLocation:
     { latitude: number; longitude: number; accuracy: number } | undefined
   locationStatus: 'idle' | 'locating' | 'live' | 'unavailable'
+  fullscreen: boolean
+  onFullscreen: () => void
   onLocate: () => void
   onSelect: (plotId: number) => void
 }) {
   const positionedPlots = () =>
     props.plots.filter((plot) => plot.mapState !== 'paper')
+  const dense = () => props.plots.length > 6
+  const plotPosition = (index: number) => {
+    if (!dense())
+      return { x: index === 0 ? 136 : 250, y: index === 0 ? 150 : 170 }
+    const column = index % 5
+    const row = Math.floor(index / 5)
+    return { x: 48 + column * 66, y: 92 + row * 56 }
+  }
+  const boundaryPoints = (index: number) => {
+    if (!dense()) return '64,98 187,70 205,206 80,225'
+    const { x, y } = plotPosition(index)
+    return `${x - 27},${y - 21} ${x + 28},${y - 24} ${x + 25},${y + 22} ${x - 30},${y + 25}`
+  }
   const markerX = () =>
     Math.max(
       28,
@@ -765,13 +1020,22 @@ function FieldAtlas(props: {
       ),
     )
   return (
-    <div class="relative h-80 overflow-hidden rounded-2xl border border-[#bdc8bd] bg-[#dbe3d6] shadow-inner">
+    <div
+      class={
+        props.fullscreen
+          ? 'fixed inset-0 z-[1100] h-dvh w-screen overflow-hidden bg-[#dbe3d6]'
+          : 'relative h-80 overflow-hidden rounded-2xl border border-[#bdc8bd] bg-[#dbe3d6] shadow-inner'
+      }
+    >
       <div class="absolute inset-0 opacity-70 [background-image:linear-gradient(30deg,transparent_47%,#f5f1df_48%,#f5f1df_52%,transparent_53%),linear-gradient(105deg,transparent_47%,#b7c8b4_48%,#b7c8b4_51%,transparent_52%)] [background-size:82px_67px,105px_91px]" />
-      <div class="absolute left-4 top-4 rounded-lg bg-white/90 px-3 py-2 text-[0.65rem] font-bold uppercase tracking-[0.14em] text-[#53635a] shadow-sm">
-        Field atlas
-      </div>
       <button
-        class="absolute right-4 top-4 z-10 rounded-lg border border-[#b7c4c9] bg-white/95 px-3 py-2 text-[0.65rem] font-bold text-[#245f78] shadow-sm"
+        class="absolute left-4 top-4 z-10 rounded-lg border border-[#b7c4c9] bg-white/95 px-3 py-2 text-xs font-bold text-[#17251c] shadow-sm"
+        onClick={props.onFullscreen}
+      >
+        {props.fullscreen ? 'Close full screen' : 'Full screen'}
+      </button>
+      <button
+        class="absolute right-4 top-4 z-10 rounded-lg border border-[#b7c4c9] bg-white/95 px-3 py-2 text-xs font-bold text-[#245f78] shadow-sm"
         onClick={props.onLocate}
       >
         {props.locationStatus === 'locating'
@@ -792,8 +1056,8 @@ function FieldAtlas(props: {
           {(plot, index) => {
             const selected = () => props.selectedPlotId === plot.id
             const isBoundary = () => plot.mapState === 'boundary'
-            const x = () => (index() === 0 ? 136 : 250)
-            const y = () => (index() === 0 ? 150 : 170)
+            const x = () => plotPosition(index()).x
+            const y = () => plotPosition(index()).y
             return (
               <g
                 class="cursor-pointer"
@@ -813,7 +1077,7 @@ function FieldAtlas(props: {
                       <circle
                         cx={x()}
                         cy={y()}
-                        r="48"
+                        r={dense() ? '25' : '48'}
                         fill="#477b5b"
                         fill-opacity={selected() ? '0.3' : '0.16'}
                         stroke="#477b5b"
@@ -825,7 +1089,7 @@ function FieldAtlas(props: {
                   }
                 >
                   <polygon
-                    points="64,98 187,70 205,206 80,225"
+                    points={boundaryPoints(index())}
                     fill="#477b5b"
                     fill-opacity={selected() ? '0.62' : '0.36'}
                     stroke={selected() ? '#17251c' : '#477b5b'}
@@ -833,20 +1097,20 @@ function FieldAtlas(props: {
                   />
                 </Show>
                 <rect
-                  x={x() - 24}
-                  y={y() - 17}
-                  width="48"
-                  height="34"
-                  rx="8"
+                  x={x() - (dense() ? 20 : 24)}
+                  y={y() - (dense() ? 13 : 17)}
+                  width={dense() ? '40' : '48'}
+                  height={dense() ? '26' : '34'}
+                  rx="7"
                   fill="white"
                   stroke="#315d45"
                   stroke-width="3"
                 />
                 <text
                   x={x()}
-                  y={y() + 6}
+                  y={y() + (dense() ? 5 : 6)}
                   text-anchor="middle"
-                  font-size="15"
+                  font-size={dense() ? '11' : '15'}
                   font-weight="800"
                   fill="#17251c"
                 >
@@ -882,7 +1146,7 @@ function FieldAtlas(props: {
           </g>
         </Show>
       </svg>
-      <div class="absolute bottom-11 left-3 rounded-lg bg-white/95 px-2 py-1 text-[0.6rem] font-bold text-[#245f78] shadow-sm">
+      <div class="absolute bottom-4 left-4 rounded-lg bg-white/95 px-2 py-1 text-[0.65rem] font-bold text-[#245f78] shadow-sm">
         <Show
           when={props.locationStatus === 'live'}
           fallback={
@@ -896,11 +1160,13 @@ function FieldAtlas(props: {
             : 'Live position'}
         </Show>
       </div>
-      <div class="absolute bottom-3 left-3 right-3 flex justify-between gap-2 text-[0.6rem] font-bold text-[#53635a]">
-        <span class="rounded bg-white/90 px-2 py-1">Solid = boundary</span>
-        <span class="rounded bg-white/90 px-2 py-1">Halo = location only</span>
-        <span class="rounded bg-white/90 px-2 py-1">Missing = ad plan</span>
-      </div>
+      <Show when={props.fullscreen && props.selectedPlotId}>
+        <div class="absolute bottom-4 right-4 rounded-lg bg-[#183e2b] px-3 py-2 text-xs font-bold text-white shadow-lg">
+          {props.plots.find((plot) => plot.id === props.selectedPlotId)
+            ?.addressLabel ?? ''}{' '}
+          selected
+        </div>
+      </Show>
     </div>
   )
 }
