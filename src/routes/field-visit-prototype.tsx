@@ -440,9 +440,49 @@ function VariantB() {
 function VariantC() {
   const visit = createVisitState()
   const [selectedPlotId, setSelectedPlotId] = createSignal<number>()
+  const [locationStatus, setLocationStatus] = createSignal<
+    'idle' | 'locating' | 'live' | 'unavailable'
+  >('idle')
+  const [currentLocation, setCurrentLocation] = createSignal<{
+    latitude: number
+    longitude: number
+    accuracy: number
+  }>()
+  let locationWatchId: number | undefined
+  let locationStartTimer: ReturnType<typeof setTimeout> | undefined
   const current = () => visit.listings()[0]
   const selectedPlot = () =>
     current()?.plots.find((plot) => plot.id === selectedPlotId())
+
+  const startLocationWatch = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus('unavailable')
+      return
+    }
+    if (locationWatchId !== undefined)
+      navigator.geolocation.clearWatch(locationWatchId)
+    setLocationStatus('locating')
+    locationWatchId = navigator.geolocation.watchPosition(
+      (position) => {
+        setCurrentLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        })
+        setLocationStatus('live')
+      },
+      () => setLocationStatus('unavailable'),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 },
+    )
+  }
+
+  if (typeof window !== 'undefined')
+    locationStartTimer = setTimeout(startLocationWatch, 0)
+  onCleanup(() => {
+    if (locationStartTimer) clearTimeout(locationStartTimer)
+    if (locationWatchId !== undefined)
+      navigator.geolocation.clearWatch(locationWatchId)
+  })
 
   return (
     <div class="mx-auto min-h-screen max-w-md bg-[#faf8f2] pb-28 shadow-xl">
@@ -492,6 +532,9 @@ function VariantC() {
                 <FieldAtlas
                   plots={listing().plots}
                   selectedPlotId={selectedPlotId()}
+                  currentLocation={currentLocation()}
+                  locationStatus={locationStatus()}
+                  onLocate={startLocationWatch}
                   onSelect={setSelectedPlotId}
                 />
                 <div class="mt-3 grid grid-cols-3 gap-2">
@@ -695,16 +738,50 @@ function mapStateLabel(state: Plot['mapState']) {
 function FieldAtlas(props: {
   plots: Array<Plot>
   selectedPlotId: number | undefined
+  currentLocation:
+    { latitude: number; longitude: number; accuracy: number } | undefined
+  locationStatus: 'idle' | 'locating' | 'live' | 'unavailable'
+  onLocate: () => void
   onSelect: (plotId: number) => void
 }) {
   const positionedPlots = () =>
     props.plots.filter((plot) => plot.mapState !== 'paper')
+  const markerX = () =>
+    Math.max(
+      28,
+      Math.min(
+        332,
+        180 +
+          ((props.currentLocation?.longitude ?? 25.40862) - 25.40862) * 40000,
+      ),
+    )
+  const markerY = () =>
+    Math.max(
+      55,
+      Math.min(
+        275,
+        165 -
+          ((props.currentLocation?.latitude ?? 54.81241) - 54.81241) * 55000,
+      ),
+    )
   return (
     <div class="relative h-80 overflow-hidden rounded-2xl border border-[#bdc8bd] bg-[#dbe3d6] shadow-inner">
       <div class="absolute inset-0 opacity-70 [background-image:linear-gradient(30deg,transparent_47%,#f5f1df_48%,#f5f1df_52%,transparent_53%),linear-gradient(105deg,transparent_47%,#b7c8b4_48%,#b7c8b4_51%,transparent_52%)] [background-size:82px_67px,105px_91px]" />
       <div class="absolute left-4 top-4 rounded-lg bg-white/90 px-3 py-2 text-[0.65rem] font-bold uppercase tracking-[0.14em] text-[#53635a] shadow-sm">
         Field atlas
       </div>
+      <button
+        class="absolute right-4 top-4 z-10 rounded-lg border border-[#b7c4c9] bg-white/95 px-3 py-2 text-[0.65rem] font-bold text-[#245f78] shadow-sm"
+        onClick={props.onLocate}
+      >
+        {props.locationStatus === 'locating'
+          ? 'Locating...'
+          : props.locationStatus === 'live'
+            ? 'Center on me'
+            : props.locationStatus === 'unavailable'
+              ? 'Retry location'
+              : 'Show my location'}
+      </button>
       <svg
         class="absolute inset-0 size-full"
         viewBox="0 0 360 320"
@@ -779,7 +856,46 @@ function FieldAtlas(props: {
             )
           }}
         </For>
+        <Show when={props.locationStatus === 'live' && props.currentLocation}>
+          <g aria-label="Your live location">
+            <circle
+              cx={markerX()}
+              cy={markerY()}
+              r={Math.max(
+                22,
+                Math.min(55, (props.currentLocation?.accuracy ?? 20) / 2),
+              )}
+              fill="#2684c7"
+              fill-opacity="0.16"
+              stroke="#2684c7"
+              stroke-opacity="0.35"
+              stroke-width="2"
+            />
+            <circle
+              cx={markerX()}
+              cy={markerY()}
+              r="10"
+              fill="#2684c7"
+              stroke="white"
+              stroke-width="4"
+            />
+          </g>
+        </Show>
       </svg>
+      <div class="absolute bottom-11 left-3 rounded-lg bg-white/95 px-2 py-1 text-[0.6rem] font-bold text-[#245f78] shadow-sm">
+        <Show
+          when={props.locationStatus === 'live'}
+          fallback={
+            props.locationStatus === 'unavailable'
+              ? 'Location unavailable - map still works'
+              : 'Waiting for your location'
+          }
+        >
+          {props.currentLocation?.accuracy
+            ? `Live position +/- ${Math.round(props.currentLocation.accuracy)} m`
+            : 'Live position'}
+        </Show>
+      </div>
       <div class="absolute bottom-3 left-3 right-3 flex justify-between gap-2 text-[0.6rem] font-bold text-[#53635a]">
         <span class="rounded bg-white/90 px-2 py-1">Solid = boundary</span>
         <span class="rounded bg-white/90 px-2 py-1">Halo = location only</span>
