@@ -359,7 +359,10 @@ function plotAddressLabel(plot: CandidatePlot) {
 
 function compactPlotLabel(plot: CandidatePlot) {
   const address = plot.resolvedAddress ?? plot.addressClue
-  if (address) return address.split(' — ')[0]
+  const addressNumber = address?.match(
+    /\b\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?(?=\s*(?:—|,|$))/,
+  )?.[0]
+  if (addressNumber) return addressNumber
   return plot.resolvedParcelNumber ?? plot.parcelNumberClue ?? 'Candidate Plot'
 }
 

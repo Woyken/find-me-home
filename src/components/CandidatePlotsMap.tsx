@@ -22,6 +22,32 @@ export function CandidatePlotsMap(props: {
   let leaflet: typeof Leaflet | undefined
   let resizeObserver: ResizeObserver | undefined
 
+  const resolveLabelCollisions = () => {
+    if (!map) return
+    const container = map.getContainer()
+    const labels = [
+      ...container.querySelectorAll<HTMLElement>('.candidate-plot-map-label'),
+    ]
+    labels.forEach((label) => (label.style.visibility = 'visible'))
+    labels.sort((label) =>
+      label.classList.contains('candidate-plot-map-label-selected') ? -1 : 1,
+    )
+
+    const visible: Array<DOMRect> = []
+    for (const label of labels) {
+      const bounds = label.getBoundingClientRect()
+      const overlaps = visible.some(
+        (other) =>
+          bounds.left < other.right &&
+          bounds.right > other.left &&
+          bounds.top < other.bottom &&
+          bounds.bottom > other.top,
+      )
+      if (overlaps) label.style.visibility = 'hidden'
+      else visible.push(bounds)
+    }
+  }
+
   const draw = () => {
     const plots = props.plots
     const selectedPlotId = props.selectedPlotId
@@ -51,7 +77,9 @@ export function CandidatePlotsMap(props: {
         boundary.bindTooltip(plot.label, {
           permanent: true,
           direction: 'center',
-          className: 'candidate-plot-map-label',
+          className: `candidate-plot-map-label ${
+            selected ? 'candidate-plot-map-label-selected' : ''
+          }`,
         })
         boundary.addTo(layer)
         bounds.extend(boundary.getBounds())
@@ -71,7 +99,9 @@ export function CandidatePlotsMap(props: {
       location.bindTooltip(plot.label, {
         permanent: true,
         direction: 'center',
-        className: 'candidate-plot-map-label',
+        className: `candidate-plot-map-label ${
+          selected ? 'candidate-plot-map-label-selected' : ''
+        }`,
       })
       location.addTo(layer)
       bounds.extend(location.getBounds())
@@ -80,6 +110,7 @@ export function CandidatePlotsMap(props: {
     if (bounds.isValid()) {
       map.fitBounds(bounds, { padding: [28, 28], maxZoom: 17 })
     }
+    requestAnimationFrame(resolveLabelCollisions)
   }
 
   const init = (element: HTMLDivElement) => {
@@ -95,6 +126,7 @@ export function CandidatePlotsMap(props: {
         .addTo(map)
       loaded.control.zoom({ position: 'bottomright' }).addTo(map)
       layer = loaded.layerGroup().addTo(map)
+      map.on('zoomend moveend', resolveLabelCollisions)
       resizeObserver = new ResizeObserver(() => map?.invalidateSize())
       resizeObserver.observe(element)
       draw()
