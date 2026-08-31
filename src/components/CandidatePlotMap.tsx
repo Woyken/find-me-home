@@ -1,4 +1,4 @@
-import { createEffect, onCleanup } from 'solid-js'
+import { onCleanup } from 'solid-js'
 import 'leaflet/dist/leaflet.css'
 import type * as Leaflet from 'leaflet'
 import type { Feature, Polygon } from 'geojson'
@@ -62,13 +62,6 @@ export function CandidatePlotMap(props: {
     })
   }
 
-  createEffect(() => {
-    props.lat
-    props.lng
-    props.boundary
-    props.precision
-    draw()
-  })
   onCleanup(() => {
     resizeObserver?.disconnect()
     map?.remove()

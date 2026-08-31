@@ -289,6 +289,8 @@ function LocationField(props: {
     <label class="text-sm font-bold">
       {props.label}
       <input
+        name={props.label.toLowerCase().replace(/\s+/g, '-')}
+        autocomplete="off"
         class="mt-2 w-full border border-[#17231d]/25 bg-transparent px-3 py-3 font-normal outline-none focus:border-[#315f73]"
         value={props.value}
         inputmode={props.inputMode}
