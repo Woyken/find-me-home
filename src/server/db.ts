@@ -80,6 +80,7 @@ function migrate(database: Database.Database) {
       coordinate_clue_precision TEXT CHECK (coordinate_clue_precision IN ('exact', 'approx')),
       address_clue TEXT,
       location_revision INTEGER NOT NULL DEFAULT 0,
+      checks_revision INTEGER NOT NULL DEFAULT 0,
       location_resolution_state TEXT NOT NULL DEFAULT 'missing'
         CHECK (location_resolution_state IN ('missing', 'running', 'resolved', 'unresolved')),
       effective_location_source TEXT
@@ -100,6 +101,20 @@ function migrate(database: Database.Database) {
 
     CREATE INDEX IF NOT EXISTS idx_candidate_plots_source_listing
       ON candidate_plots(source_listing_id);
+
+    CREATE TABLE IF NOT EXISTS candidate_plot_checks (
+      candidate_plot_id INTEGER NOT NULL REFERENCES candidate_plots(id) ON DELETE CASCADE,
+      check_key TEXT NOT NULL
+        CHECK (check_key IN ('price', 'area', 'radius', 'purpose', 'eso_cost', 'legal_flags', 'water_sewage')),
+      revision INTEGER NOT NULL,
+      state TEXT NOT NULL
+        CHECK (state IN ('running', 'completed', 'missing_input', 'failed')),
+      status TEXT CHECK (status IN ('pass', 'warning', 'fail', 'unknown')),
+      value TEXT,
+      detail TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (candidate_plot_id, check_key)
+    );
 
     CREATE TABLE IF NOT EXISTS import_secrets (
       source TEXT PRIMARY KEY,
@@ -131,6 +146,7 @@ function migrate(database: Database.Database) {
 
   const resolvedLocationColumns = [
     ['location_revision', `INTEGER NOT NULL DEFAULT 0`],
+    ['checks_revision', `INTEGER NOT NULL DEFAULT 0`],
     [
       'location_resolution_state',
       `TEXT NOT NULL DEFAULT 'missing' CHECK (location_resolution_state IN ('missing', 'running', 'resolved', 'unresolved'))`,
@@ -149,6 +165,15 @@ function migrate(database: Database.Database) {
       'resolved_precision',
       `TEXT CHECK (resolved_precision IN ('exact', 'approx'))`,
     ],
+    [
+      'road_access_rating',
+      `INTEGER CHECK (road_access_rating BETWEEN 1 AND 5)`,
+    ],
+    [
+      'area_feeling_rating',
+      `INTEGER CHECK (area_feeling_rating BETWEEN 1 AND 5)`,
+    ],
+    ['view_rating', `INTEGER CHECK (view_rating BETWEEN 1 AND 5)`],
   ] as const
   for (const [column, definition] of resolvedLocationColumns) {
     if (!candidatePlotColumns.some((existing) => existing.name === column)) {
@@ -156,6 +181,38 @@ function migrate(database: Database.Database) {
         `ALTER TABLE candidate_plots ADD COLUMN ${column} ${definition}`,
       )
     }
+  }
+
+  const checksTable = database
+    .prepare(
+      `SELECT sql FROM sqlite_master
+       WHERE type = 'table' AND name = 'candidate_plot_checks'`,
+    )
+    .get() as { sql: string } | undefined
+  if (checksTable?.sql.includes("'warn'")) {
+    database.exec(`
+      ALTER TABLE candidate_plot_checks RENAME TO candidate_plot_checks_legacy;
+      CREATE TABLE candidate_plot_checks (
+        candidate_plot_id INTEGER NOT NULL REFERENCES candidate_plots(id) ON DELETE CASCADE,
+        check_key TEXT NOT NULL
+          CHECK (check_key IN ('price', 'area', 'radius', 'purpose', 'eso_cost', 'legal_flags', 'water_sewage')),
+        revision INTEGER NOT NULL,
+        state TEXT NOT NULL
+          CHECK (state IN ('running', 'completed', 'missing_input', 'failed')),
+        status TEXT CHECK (status IN ('pass', 'warning', 'fail', 'unknown')),
+        value TEXT,
+        detail TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (candidate_plot_id, check_key)
+      );
+      INSERT INTO candidate_plot_checks
+        (candidate_plot_id, check_key, revision, state, status, value, detail, updated_at)
+      SELECT candidate_plot_id, check_key, revision, state,
+             CASE status WHEN 'warn' THEN 'warning' ELSE status END,
+             value, detail, updated_at
+      FROM candidate_plot_checks_legacy;
+      DROP TABLE candidate_plot_checks_legacy;
+    `)
   }
 
   database.exec(`

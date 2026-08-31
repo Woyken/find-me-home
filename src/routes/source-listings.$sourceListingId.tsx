@@ -4,11 +4,13 @@ import { CandidatePlotMap } from '../components/CandidatePlotMap'
 import {
   deleteSavedSourceListing,
   fetchSourceListing,
+  saveCandidatePlotFacts,
+  saveCandidatePlotHouseholdNotes,
   saveCandidatePlotLocation,
   updateVisitPlan,
 } from '../server-functions/source-listings'
 import type { SourceListingDetail } from '../server/source-listings'
-import { formatArea, formatDate, formatPrice } from './index'
+import { formatDate } from './index'
 
 export const Route = createFileRoute('/source-listings/$sourceListingId')({
   loader: ({ params }) =>
@@ -180,6 +182,19 @@ function CandidatePlotCard(props: {
     props.plot.longitudeClue?.toString() ?? '',
   )
   const [address, setAddress] = createSignal(props.plot.addressClue ?? '')
+  const [price, setPrice] = createSignal(props.plot.priceEur?.toString() ?? '')
+  const [area, setArea] = createSignal(props.plot.areaAres?.toString() ?? '')
+  const [purpose, setPurpose] = createSignal(props.plot.purposeText ?? '')
+  const [notes, setNotes] = createSignal(props.plot.notes ?? '')
+  const [roadAccessRating, setRoadAccessRating] = createSignal(
+    props.plot.roadAccessRating?.toString() ?? '',
+  )
+  const [areaFeelingRating, setAreaFeelingRating] = createSignal(
+    props.plot.areaFeelingRating?.toString() ?? '',
+  )
+  const [viewRating, setViewRating] = createSignal(
+    props.plot.viewRating?.toString() ?? '',
+  )
   const [busy, setBusy] = createSignal(false)
   const [error, setError] = createSignal('')
   const [saved, setSaved] = createSignal(false)
@@ -218,6 +233,54 @@ function CandidatePlotCard(props: {
     }
   }
 
+  const saveFacts = () =>
+    saveSection(async () => {
+      await saveCandidatePlotFacts({
+        data: {
+          sourceListingId: props.sourceListingId,
+          plotId: props.plot.id,
+          priceEur: parseOptionalNumber(price(), 'Price'),
+          areaAres: parseOptionalNumber(area(), 'Area'),
+          purposeText: optionalText(purpose()),
+        },
+      })
+    })
+
+  const saveHouseholdNotes = () =>
+    saveSection(async () => {
+      await saveCandidatePlotHouseholdNotes({
+        data: {
+          sourceListingId: props.sourceListingId,
+          plotId: props.plot.id,
+          notes: optionalText(notes()),
+          roadAccessRating: parseOptionalRating(
+            roadAccessRating(),
+            'Road/access',
+          ),
+          areaFeelingRating: parseOptionalRating(
+            areaFeelingRating(),
+            'Area feeling',
+          ),
+          viewRating: parseOptionalRating(viewRating(), 'View'),
+        },
+      })
+    })
+
+  async function saveSection(action: () => Promise<void>) {
+    setBusy(true)
+    setError('')
+    setSaved(false)
+    try {
+      await action()
+      setSaved(true)
+      await router.invalidate({ sync: true })
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <article class="border-l-4 border-[#d96a45] bg-white p-5 sm:p-6">
       <p class="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#607067]">
@@ -226,11 +289,42 @@ function CandidatePlotCard(props: {
       <h3 class="mt-2 font-serif text-2xl">
         {props.plot.name ?? 'Candidate Plot'}
       </h3>
-      <div class="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <Detail label="Price" value={formatPrice(props.plot.priceEur)} />
-        <Detail label="Area" value={formatArea(props.plot.areaAres)} />
-        <Detail label="Purpose" value={props.plot.purposeText ?? 'Unknown'} />
-      </div>
+      <section class="mt-5 grid gap-4 sm:grid-cols-3">
+        <LocationField
+          label="Price (€)"
+          value={price()}
+          onInput={setPrice}
+          inputMode="decimal"
+        />
+        <LocationField
+          label="Area (a)"
+          value={area()}
+          onInput={setArea}
+          inputMode="decimal"
+        />
+        <LocationField label="Purpose" value={purpose()} onInput={setPurpose} />
+        <button
+          class="bg-[#24483a] px-5 py-3 text-sm font-bold text-white disabled:opacity-50 sm:col-span-3 sm:justify-self-start"
+          disabled={busy()}
+          onClick={saveFacts}
+        >
+          {busy() ? 'Saving…' : 'Save Candidate Plot facts'}
+        </button>
+      </section>
+
+      <section class="mt-6 border-t border-[#17231d]/10 pt-5">
+        <div class="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+          <h4 class="font-serif text-xl">Automatic Checks</h4>
+          <span class="font-mono text-[9px] uppercase tracking-[0.14em] text-[#748078]">
+            Refresh to reveal completed checks
+          </span>
+        </div>
+        <div class="mt-4 grid gap-px bg-[#17231d]/10 sm:grid-cols-2">
+          <For each={props.plot.automaticChecks}>
+            {(check) => <AutomaticCheckCard check={check} />}
+          </For>
+        </div>
+      </section>
 
       <section class="mt-6 border-t border-[#17231d]/10 pt-5">
         <div class="flex items-baseline justify-between gap-4">
@@ -367,11 +461,50 @@ function CandidatePlotCard(props: {
         </Show>
       </section>
 
-      <Show when={props.plot.notes}>
-        <p class="mt-5 border-t border-[#17231d]/10 pt-4 text-sm text-[#526058]">
-          {props.plot.notes}
-        </p>
-      </Show>
+      <section class="mt-6 border-t border-[#17231d]/10 pt-5">
+        <h4 class="font-serif text-xl">Household Notes</h4>
+        <label class="mt-4 block text-sm font-bold">
+          Notes
+          <textarea
+            name="candidate-plot-notes"
+            class="mt-2 min-h-24 w-full border border-[#17231d]/25 bg-transparent px-3 py-3 font-normal outline-none focus:border-[#315f73]"
+            value={notes()}
+            onInput={(event) => setNotes(event.currentTarget.value)}
+          />
+        </label>
+        <div class="mt-4 grid gap-4 sm:grid-cols-3">
+          <RatingField
+            label="Road/access"
+            value={roadAccessRating()}
+            onInput={setRoadAccessRating}
+          />
+          <RatingField
+            label="Area feeling"
+            value={areaFeelingRating()}
+            onInput={setAreaFeelingRating}
+          />
+          <RatingField
+            label="View"
+            value={viewRating()}
+            onInput={setViewRating}
+          />
+        </div>
+        <Show when={error()}>
+          <p class="mt-3 text-sm font-bold text-[#a13d22]">{error()}</p>
+        </Show>
+        <div class="mt-4 flex items-center gap-3">
+          <button
+            class="bg-[#24483a] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+            disabled={busy()}
+            onClick={saveHouseholdNotes}
+          >
+            {busy() ? 'Saving…' : 'Save notes and ratings'}
+          </button>
+          <Show when={saved()}>
+            <span class="text-sm text-[#526058]">Saved</span>
+          </Show>
+        </div>
+      </section>
     </article>
   )
 }
@@ -380,7 +513,7 @@ function LocationField(props: {
   label: string
   value: string
   onInput: (value: string) => void
-  inputMode?: 'decimal'
+  inputMode?: 'decimal' | 'numeric'
   placeholder?: string
 }) {
   return (
@@ -396,6 +529,93 @@ function LocationField(props: {
         onInput={(event) => props.onInput(event.currentTarget.value)}
       />
     </label>
+  )
+}
+
+function RatingField(props: {
+  label: string
+  value: string
+  onInput: (value: string) => void
+}) {
+  return (
+    <label class="text-sm font-bold">
+      {props.label}
+      <select
+        name={props.label.toLowerCase().replace(/[^a-z]+/g, '-')}
+        class="mt-2 w-full border border-[#17231d]/25 bg-white px-3 py-3 font-normal outline-none focus:border-[#315f73]"
+        value={props.value}
+        onChange={(event) => props.onInput(event.currentTarget.value)}
+      >
+        <option value="">Not rated</option>
+        <For each={[1, 2, 3, 4, 5]}>
+          {(rating) => <option value={rating}>{rating} / 5</option>}
+        </For>
+      </select>
+    </label>
+  )
+}
+
+function AutomaticCheckCard(props: {
+  check: CandidatePlot['automaticChecks'][number]
+}) {
+  const labels = {
+    price: 'Price',
+    area: 'Area',
+    radius: 'Radius',
+    purpose: 'Purpose',
+    eso_cost: 'ESO cost',
+    legal_flags: 'Legal flags',
+    water_sewage: 'Water / sewage',
+  } as const
+  const colors = {
+    pass: 'bg-[#e4efe7] text-[#24483a]',
+    warning: 'bg-[#f6e9ce] text-[#765516]',
+    fail: 'bg-[#f7dfd7] text-[#a13d22]',
+    unknown: 'bg-[#e7edf0] text-[#52616a]',
+  } as const
+  return (
+    <div class="min-h-24 bg-[#f6f4ec] p-4">
+      <div class="flex items-start justify-between gap-3">
+        <p class="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#607067]">
+          {labels[props.check.key]}
+        </p>
+        <Show when={props.check.state === 'completed' && props.check.status}>
+          {(status) => (
+            <span
+              class={`px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.12em] ${colors[status()]}`}
+            >
+              {status()}
+            </span>
+          )}
+        </Show>
+      </div>
+      <Show
+        when={props.check.state === 'completed'}
+        fallback={
+          props.check.state === 'running' ? (
+            <div
+              class="mt-3 animate-pulse"
+              aria-label="Running automatic check"
+            >
+              <div class="h-4 w-2/3 bg-[#ddd9cd]" />
+              <div class="mt-2 h-3 w-full bg-[#e5e1d6]" />
+            </div>
+          ) : (
+            <div
+              class="mt-3 h-9 border border-dashed border-[#17231d]/15"
+              aria-label="Automatic check unavailable"
+            />
+          )
+        }
+      >
+        <p class="mt-3 text-sm font-bold">{props.check.value}</p>
+        <Show when={props.check.detail}>
+          <p class="mt-1 text-xs leading-relaxed text-[#607067]">
+            {props.check.detail}
+          </p>
+        </Show>
+      </Show>
+    </div>
   )
 }
 
@@ -449,6 +669,22 @@ const parseOptionalCoordinate = (value: string, label: string) => {
   if (!value.trim()) return null
   const parsed = Number(value.replace(',', '.'))
   if (!Number.isFinite(parsed)) throw new Error(`${label} must be a number.`)
+  return parsed
+}
+const parseOptionalNumber = (value: string, label: string) => {
+  if (!value.trim()) return null
+  const parsed = Number(value.replace(',', '.'))
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`${label} must be a positive number.`)
+  }
+  return parsed
+}
+const parseOptionalRating = (value: string, label: string) => {
+  if (!value) return null
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 5) {
+    throw new Error(`${label} must be rated from 1 to 5.`)
+  }
   return parsed
 }
 

@@ -1,7 +1,14 @@
 import { getDb } from './db'
 import { startCandidatePlotLocationResolution } from './location'
+import {
+  invalidateAutomaticChecks,
+  invalidateSourceListingAutomaticChecks,
+  loadAutomaticChecks,
+  startCandidatePlotAutomaticChecks,
+} from './automatic-checks'
 import { chooseImportedLocationClue } from '../location-clue'
 import type { AruodasImport } from './aruodas-import'
+import type { AutomaticCheck } from './automatic-checks'
 
 export interface SourceListingSummary {
   id: number
@@ -27,6 +34,9 @@ export interface SourceListingDetail extends SourceListingSummary {
     areaAres: number | null
     purposeText: string | null
     notes: string | null
+    roadAccessRating: number | null
+    areaFeelingRating: number | null
+    viewRating: number | null
     parcelNumberClue: string | null
     latitudeClue: number | null
     longitudeClue: number | null
@@ -41,6 +51,7 @@ export interface SourceListingDetail extends SourceListingSummary {
     resolvedCadastralNumber: string | null
     resolvedBoundary: GeoJSON.Polygon | null
     resolvedPrecision: 'exact' | 'approx' | null
+    automaticChecks: Array<AutomaticCheck>
   }>
 }
 
@@ -144,7 +155,8 @@ export function getSourceListing(id: number): SourceListingDetail | null {
               location_resolution_state, effective_location_source,
               resolved_latitude, resolved_longitude, resolved_address,
               resolved_parcel_number, resolved_cadastral_number,
-              resolved_boundary_json, resolved_precision
+               resolved_boundary_json, resolved_precision,
+               road_access_rating, area_feeling_rating, view_rating
        FROM candidate_plots WHERE source_listing_id = ? ORDER BY id`,
     )
     .all(id) as Array<{
@@ -169,8 +181,14 @@ export function getSourceListing(id: number): SourceListingDetail | null {
     resolved_cadastral_number: string | null
     resolved_boundary_json: string | null
     resolved_precision: 'exact' | 'approx' | null
+    road_access_rating: number | null
+    area_feeling_rating: number | null
+    view_rating: number | null
   }>
-  for (const plot of plots) startCandidatePlotLocationResolution(plot.id)
+  for (const plot of plots) {
+    startCandidatePlotLocationResolution(plot.id)
+    startCandidatePlotAutomaticChecks(plot.id)
+  }
   return {
     ...summary,
     description: row.description,
@@ -181,6 +199,9 @@ export function getSourceListing(id: number): SourceListingDetail | null {
       areaAres: plot.area_ares,
       purposeText: plot.purpose_text,
       notes: plot.notes,
+      roadAccessRating: plot.road_access_rating,
+      areaFeelingRating: plot.area_feeling_rating,
+      viewRating: plot.view_rating,
       parcelNumberClue: plot.parcel_number_clue,
       latitudeClue: plot.latitude_clue,
       longitudeClue: plot.longitude_clue,
@@ -199,6 +220,7 @@ export function getSourceListing(id: number): SourceListingDetail | null {
       resolvedCadastralNumber: plot.resolved_cadastral_number,
       resolvedBoundary: parseBoundary(plot.resolved_boundary_json),
       resolvedPrecision: plot.resolved_precision,
+      automaticChecks: loadAutomaticChecks(plot.id),
     })),
   }
 }
@@ -237,9 +259,11 @@ export function updateCandidatePlotLocation(input: {
     Number(input.latitudeClue !== null || input.longitudeClue !== null) +
     Number(input.addressClue !== null)
   if (clueCount > 1) throw new Error('Choose one location clue')
-  const result = getDb()
-    .prepare(
-      `UPDATE candidate_plots
+  const database = getDb()
+  const result = database.transaction(() => {
+    const updated = database
+      .prepare(
+        `UPDATE candidate_plots
        SET parcel_number_clue = ?, latitude_clue = ?, longitude_clue = ?,
            coordinate_clue_precision = CASE
              WHEN ? IS NULL OR ? IS NULL THEN NULL
@@ -247,7 +271,8 @@ export function updateCandidatePlotLocation(input: {
                THEN coordinate_clue_precision
              ELSE 'exact'
            END,
-           address_clue = ?, location_revision = location_revision + 1,
+            address_clue = ?, location_revision = location_revision + 1,
+            checks_revision = checks_revision + 1,
            location_resolution_state = 'missing', effective_location_source = NULL,
            resolved_latitude = NULL, resolved_longitude = NULL,
            resolved_address = NULL, resolved_parcel_number = NULL,
@@ -255,21 +280,79 @@ export function updateCandidatePlotLocation(input: {
            resolved_boundary_json = NULL, resolved_precision = NULL,
            updated_at = datetime('now')
        WHERE id = ? AND source_listing_id = ?`,
+      )
+      .run(
+        input.parcelNumberClue,
+        input.latitudeClue,
+        input.longitudeClue,
+        input.latitudeClue,
+        input.longitudeClue,
+        input.latitudeClue,
+        input.longitudeClue,
+        input.addressClue,
+        input.plotId,
+        input.sourceListingId,
+      )
+    if (updated.changes > 0) invalidateAutomaticChecks(input.plotId)
+    return updated
+  })()
+  if (result.changes === 0) throw new Error('Candidate Plot not found')
+  startCandidatePlotLocationResolution(input.plotId)
+}
+
+export function updateCandidatePlotFacts(input: {
+  sourceListingId: number
+  plotId: number
+  priceEur: number | null
+  areaAres: number | null
+  purposeText: string | null
+}) {
+  const database = getDb()
+  const update = database.transaction(() => {
+    const result = database
+      .prepare(
+        `UPDATE candidate_plots
+         SET price_eur = ?, area_ares = ?, purpose_text = ?,
+             checks_revision = checks_revision + 1, updated_at = datetime('now')
+         WHERE id = ? AND source_listing_id = ?`,
+      )
+      .run(
+        input.priceEur,
+        input.areaAres,
+        input.purposeText,
+        input.plotId,
+        input.sourceListingId,
+      )
+    if (result.changes === 0) throw new Error('Candidate Plot not found')
+    invalidateAutomaticChecks(input.plotId)
+  })
+  update()
+}
+
+export function updateCandidatePlotHouseholdNotes(input: {
+  sourceListingId: number
+  plotId: number
+  notes: string | null
+  roadAccessRating: number | null
+  areaFeelingRating: number | null
+  viewRating: number | null
+}) {
+  const result = getDb()
+    .prepare(
+      `UPDATE candidate_plots
+       SET notes = ?, road_access_rating = ?, area_feeling_rating = ?,
+           view_rating = ?, updated_at = datetime('now')
+       WHERE id = ? AND source_listing_id = ?`,
     )
     .run(
-      input.parcelNumberClue,
-      input.latitudeClue,
-      input.longitudeClue,
-      input.latitudeClue,
-      input.longitudeClue,
-      input.latitudeClue,
-      input.longitudeClue,
-      input.addressClue,
+      input.notes,
+      input.roadAccessRating,
+      input.areaFeelingRating,
+      input.viewRating,
       input.plotId,
       input.sourceListingId,
     )
   if (result.changes === 0) throw new Error('Candidate Plot not found')
-  startCandidatePlotLocationResolution(input.plotId)
 }
 
 export function getImportDraft(token: string): ImportDraft | null {
@@ -345,6 +428,7 @@ export function saveImportDraft(input: {
           JSON.stringify(imported.raw),
           sourceListingId,
         )
+      invalidateSourceListingAutomaticChecks(sourceListingId)
     } else {
       sourceListingId = Number(
         database

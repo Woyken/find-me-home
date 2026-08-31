@@ -9,6 +9,8 @@ import {
   setVisitPlanMembership,
   setVisitPlanOrder,
   updateCandidatePlotLocation,
+  updateCandidatePlotFacts,
+  updateCandidatePlotHouseholdNotes,
 } from '../server/source-listings'
 import {
   createAruodasBookmarklet,
@@ -37,14 +39,7 @@ export const saveCandidatePlotLocation = createServerFn({ method: 'POST' })
       longitudeClue: number | null
       addressClue: string | null
     }) => {
-      if (
-        !Number.isSafeInteger(data.sourceListingId) ||
-        data.sourceListingId <= 0 ||
-        !Number.isSafeInteger(data.plotId) ||
-        data.plotId <= 0
-      ) {
-        throw new Error('Source Listing and Candidate Plot IDs are required')
-      }
+      validateCandidatePlotIds(data)
       if (
         (data.latitudeClue !== null &&
           (!Number.isFinite(data.latitudeClue) ||
@@ -71,6 +66,79 @@ export const saveCandidatePlotLocation = createServerFn({ method: 'POST' })
   )
   .handler(({ data }) => {
     updateCandidatePlotLocation(data)
+    return { updated: true as const }
+  })
+
+const validateCandidatePlotIds = (data: {
+  sourceListingId: number
+  plotId: number
+}) => {
+  if (
+    !Number.isSafeInteger(data.sourceListingId) ||
+    data.sourceListingId <= 0 ||
+    !Number.isSafeInteger(data.plotId) ||
+    data.plotId <= 0
+  ) {
+    throw new Error('Source Listing and Candidate Plot IDs are required')
+  }
+}
+
+export const saveCandidatePlotFacts = createServerFn({ method: 'POST' })
+  .validator(
+    (data: {
+      sourceListingId: number
+      plotId: number
+      priceEur: number | null
+      areaAres: number | null
+      purposeText: string | null
+    }) => {
+      validateCandidatePlotIds(data)
+      for (const [label, value] of [
+        ['Price', data.priceEur],
+        ['Area', data.areaAres],
+      ] as const) {
+        if (value !== null && (!Number.isFinite(value) || value < 0)) {
+          throw new Error(`${label} must be a positive number`)
+        }
+      }
+      return data
+    },
+  )
+  .handler(({ data }) => {
+    updateCandidatePlotFacts(data)
+    return { updated: true as const }
+  })
+
+export const saveCandidatePlotHouseholdNotes = createServerFn({
+  method: 'POST',
+})
+  .validator(
+    (data: {
+      sourceListingId: number
+      plotId: number
+      notes: string | null
+      roadAccessRating: number | null
+      areaFeelingRating: number | null
+      viewRating: number | null
+    }) => {
+      validateCandidatePlotIds(data)
+      for (const value of [
+        data.roadAccessRating,
+        data.areaFeelingRating,
+        data.viewRating,
+      ]) {
+        if (
+          value !== null &&
+          (!Number.isSafeInteger(value) || value < 1 || value > 5)
+        ) {
+          throw new Error('Manual Ratings must be whole numbers from 1 to 5')
+        }
+      }
+      return data
+    },
+  )
+  .handler(({ data }) => {
+    updateCandidatePlotHouseholdNotes(data)
     return { updated: true as const }
   })
 
