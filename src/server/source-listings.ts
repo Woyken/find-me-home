@@ -110,6 +110,15 @@ export function listSourceListings(): Array<SourceListingSummary> {
   }))
 }
 
+export function listVisitPlan(): Array<SourceListingSummary> {
+  return listSourceListings()
+    .filter((item) => item.visitPlanPosition !== null)
+    .sort(
+      (left, right) =>
+        (left.visitPlanPosition ?? 0) - (right.visitPlanPosition ?? 0),
+    )
+}
+
 export function getSourceListing(id: number): SourceListingDetail | null {
   const summary = listSourceListings().find((item) => item.id === id)
   if (!summary) return null
@@ -322,6 +331,41 @@ export function setVisitPlanMembership(id: number, included: boolean) {
       )
       planned.forEach((item, index) => position.run(index + 1, item.id))
     }
+  })
+  update()
+}
+
+export function setVisitPlanOrder(ids: Array<number>) {
+  const database = getDb()
+  const update = database.transaction(() => {
+    if (new Set(ids).size !== ids.length) {
+      throw new Error('Visit Plan cannot contain duplicate Source Listings')
+    }
+
+    const planned = database
+      .prepare(
+        `SELECT id FROM source_listings WHERE visit_plan_position IS NOT NULL
+         ORDER BY visit_plan_position`,
+      )
+      .all() as Array<{ id: number }>
+    const plannedIds = new Set(planned.map((item) => item.id))
+    if (
+      ids.length !== plannedIds.size ||
+      ids.some((id) => !plannedIds.has(id))
+    ) {
+      throw new Error('Visit Plan changed. Refresh and try again.')
+    }
+
+    database
+      .prepare(
+        `UPDATE source_listings SET visit_plan_position = NULL
+         WHERE visit_plan_position IS NOT NULL`,
+      )
+      .run()
+    const setPosition = database.prepare(
+      `UPDATE source_listings SET visit_plan_position = ? WHERE id = ?`,
+    )
+    ids.forEach((id, index) => setPosition.run(index + 1, id))
   })
   update()
 }

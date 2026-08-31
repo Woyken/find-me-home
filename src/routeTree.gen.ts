@@ -9,12 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VisitPlanRouteImport } from './routes/visit-plan'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SourceListingsSourceListingIdRouteImport } from './routes/source-listings.$sourceListingId'
 import { Route as ImportsTokenRouteImport } from './routes/imports.$token'
 import { Route as ApiAruodasImportRouteImport } from './routes/api/aruodas-import'
 import { Route as ApiAruodasBookmarkletDotjsRouteImport } from './routes/api/aruodas-bookmarklet[.]js'
 
+const VisitPlanRoute = VisitPlanRouteImport.update({
+  id: '/visit-plan',
+  path: '/visit-plan',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -45,6 +51,7 @@ const ApiAruodasBookmarkletDotjsRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/visit-plan': typeof VisitPlanRoute
   '/api/aruodas-bookmarklet.js': typeof ApiAruodasBookmarkletDotjsRoute
   '/api/aruodas-import': typeof ApiAruodasImportRoute
   '/imports/$token': typeof ImportsTokenRoute
@@ -52,6 +59,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/visit-plan': typeof VisitPlanRoute
   '/api/aruodas-bookmarklet.js': typeof ApiAruodasBookmarkletDotjsRoute
   '/api/aruodas-import': typeof ApiAruodasImportRoute
   '/imports/$token': typeof ImportsTokenRoute
@@ -60,6 +68,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/visit-plan': typeof VisitPlanRoute
   '/api/aruodas-bookmarklet.js': typeof ApiAruodasBookmarkletDotjsRoute
   '/api/aruodas-import': typeof ApiAruodasImportRoute
   '/imports/$token': typeof ImportsTokenRoute
@@ -69,6 +78,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/visit-plan'
     | '/api/aruodas-bookmarklet.js'
     | '/api/aruodas-import'
     | '/imports/$token'
@@ -76,6 +86,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/visit-plan'
     | '/api/aruodas-bookmarklet.js'
     | '/api/aruodas-import'
     | '/imports/$token'
@@ -83,6 +94,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/visit-plan'
     | '/api/aruodas-bookmarklet.js'
     | '/api/aruodas-import'
     | '/imports/$token'
@@ -91,6 +103,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  VisitPlanRoute: typeof VisitPlanRoute
   ApiAruodasBookmarkletDotjsRoute: typeof ApiAruodasBookmarkletDotjsRoute
   ApiAruodasImportRoute: typeof ApiAruodasImportRoute
   ImportsTokenRoute: typeof ImportsTokenRoute
@@ -99,6 +112,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/solid-router' {
   interface FileRoutesByPath {
+    '/visit-plan': {
+      id: '/visit-plan'
+      path: '/visit-plan'
+      fullPath: '/visit-plan'
+      preLoaderRoute: typeof VisitPlanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -139,6 +159,7 @@ declare module '@tanstack/solid-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  VisitPlanRoute: VisitPlanRoute,
   ApiAruodasBookmarkletDotjsRoute: ApiAruodasBookmarkletDotjsRoute,
   ApiAruodasImportRoute: ApiAruodasImportRoute,
   ImportsTokenRoute: ImportsTokenRoute,

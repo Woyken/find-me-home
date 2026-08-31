@@ -24,7 +24,12 @@ function Home() {
         <header class="flex flex-wrap items-center justify-between gap-3 border-b border-[#18241e] px-4 py-4 sm:px-7">
           <h1 class="font-serif text-2xl">Find Me Home</h1>
           <div class="flex items-center gap-3">
-            <span class="font-mono text-xs">{visitCount()} in Visit Plan</span>
+            <Link
+              class="border-b border-[#204d3a] font-mono text-xs font-bold text-[#204d3a]"
+              to="/visit-plan"
+            >
+              {visitCount()} in Visit Plan
+            </Link>
             <button
               class="bg-[#204d3a] px-4 py-2 text-sm font-bold text-white"
               onClick={() => setShowImport((shown) => !shown)}

@@ -3,8 +3,10 @@ import {
   getImportDraft,
   getSourceListing,
   listSourceListings,
+  listVisitPlan,
   saveImportDraft,
   setVisitPlanMembership,
+  setVisitPlanOrder,
 } from '../server/source-listings'
 import {
   createAruodasBookmarklet,
@@ -13,6 +15,10 @@ import {
 
 export const fetchSourceListings = createServerFn({ method: 'GET' }).handler(
   () => listSourceListings(),
+)
+
+export const fetchVisitPlan = createServerFn({ method: 'GET' }).handler(() =>
+  listVisitPlan(),
 )
 
 export const fetchSourceListing = createServerFn({ method: 'GET' })
@@ -56,9 +62,29 @@ export const saveDraft = createServerFn({ method: 'POST' })
   .handler(({ data }) => saveImportDraft(data))
 
 export const updateVisitPlan = createServerFn({ method: 'POST' })
-  .validator((data: { id: number; included: boolean }) => data)
+  .validator((data: { id: number; included: boolean }) => {
+    if (!Number.isSafeInteger(data.id) || data.id <= 0) {
+      throw new Error('Source Listing ID must be a positive integer')
+    }
+    return data
+  })
   .handler(({ data }) => {
     setVisitPlanMembership(data.id, data.included)
+    return { updated: true as const }
+  })
+
+export const reorderVisitPlan = createServerFn({ method: 'POST' })
+  .validator((data: { ids: Array<number> }) => {
+    if (
+      !Array.isArray(data.ids) ||
+      data.ids.some((id) => !Number.isSafeInteger(id) || id <= 0)
+    ) {
+      throw new Error('Visit Plan IDs must be positive integers')
+    }
+    return data
+  })
+  .handler(({ data }) => {
+    setVisitPlanOrder(data.ids)
     return { updated: true as const }
   })
 
