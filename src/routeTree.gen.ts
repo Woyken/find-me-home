@@ -9,9 +9,15 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as CapturePrototypeRouteImport } from './routes/capture-prototype'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiAruodasImportRouteImport } from './routes/api/aruodas-import'
 
+const CapturePrototypeRoute = CapturePrototypeRouteImport.update({
+  id: '/capture-prototype',
+  path: '/capture-prototype',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -25,32 +31,43 @@ const ApiAruodasImportRoute = ApiAruodasImportRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/capture-prototype': typeof CapturePrototypeRoute
   '/api/aruodas-import': typeof ApiAruodasImportRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/capture-prototype': typeof CapturePrototypeRoute
   '/api/aruodas-import': typeof ApiAruodasImportRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/capture-prototype': typeof CapturePrototypeRoute
   '/api/aruodas-import': typeof ApiAruodasImportRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/aruodas-import'
+  fullPaths: '/' | '/capture-prototype' | '/api/aruodas-import'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/aruodas-import'
-  id: '__root__' | '/' | '/api/aruodas-import'
+  to: '/' | '/capture-prototype' | '/api/aruodas-import'
+  id: '__root__' | '/' | '/capture-prototype' | '/api/aruodas-import'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CapturePrototypeRoute: typeof CapturePrototypeRoute
   ApiAruodasImportRoute: typeof ApiAruodasImportRoute
 }
 
 declare module '@tanstack/solid-router' {
   interface FileRoutesByPath {
+    '/capture-prototype': {
+      id: '/capture-prototype'
+      path: '/capture-prototype'
+      fullPath: '/capture-prototype'
+      preLoaderRoute: typeof CapturePrototypeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -70,6 +87,7 @@ declare module '@tanstack/solid-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CapturePrototypeRoute: CapturePrototypeRoute,
   ApiAruodasImportRoute: ApiAruodasImportRoute,
 }
 export const routeTree = rootRouteImport
