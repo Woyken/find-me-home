@@ -97,6 +97,8 @@ export interface BoundaryResult {
   source: 'cadastral' | 'point'
   /** Cadastral number of the matched parcel (canonical RC form). */
   cadastralNumber: string | null
+  /** Unique NTR registry number (canonical XXXX-XXXX-XXXX form). */
+  uniqueRegistryNumber: string | null
   /** Registered parcel area in square metres. */
   areaM2: number
   /** Human-readable land-use purpose, if known. */
@@ -533,10 +535,18 @@ function toBoundaryResult(
     geometry: toWgs84Polygon(rings),
     source,
     cadastralNumber: row.cadastral_number,
+    uniqueRegistryNumber: formatUniqueRegistryNumber(row.unique_number),
     areaM2,
     purposeText,
     centroid,
   }
+}
+
+function formatUniqueRegistryNumber(value: string | null): string | null {
+  const digits = value?.replace(/\D/g, '') ?? ''
+  return digits.length === 12
+    ? `${digits.slice(0, 4)}-${digits.slice(4, 8)}-${digits.slice(8)}`
+    : null
 }
 
 // ---------------------------------------------------------------------------
@@ -554,7 +564,7 @@ export async function resolveByCadastral(
   const candidates = cadastralCandidates(cadastral)
   if (candidates.length === 0) return null
 
-  const cacheKey = `boundary:cad:${candidates[candidates.length - 1]}`
+  const cacheKey = `boundary:v2:cad:${candidates[candidates.length - 1]}`
   const cached = geoCacheGet<BoundaryResult>(cacheKey, CACHE_MAX_AGE_DAYS)
   if (cached !== undefined) return cached
 
@@ -579,7 +589,7 @@ export async function resolveByUniqueNumber(
   const normalized = uniqueNumber?.replace(/\D/g, '') ?? ''
   if (!normalized) return null
 
-  const cacheKey = `boundary:unique:${normalized}`
+  const cacheKey = `boundary:v2:unique:${normalized}`
   const cached = geoCacheGet<BoundaryResult>(cacheKey, CACHE_MAX_AGE_DAYS)
   if (cached !== undefined) return cached
 
@@ -602,7 +612,7 @@ export async function resolveByPoint(
   lat: number,
   lng: number,
 ): Promise<BoundaryResult | null> {
-  const cacheKey = `boundary:pt:${lat.toFixed(5)},${lng.toFixed(5)}`
+  const cacheKey = `boundary:v2:pt:${lat.toFixed(5)},${lng.toFixed(5)}`
   const cached = geoCacheGet<BoundaryResult>(cacheKey, CACHE_MAX_AGE_DAYS)
   if (cached !== undefined) return cached
 

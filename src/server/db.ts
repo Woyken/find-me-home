@@ -88,6 +88,7 @@ function migrate(database: Database.Database) {
       resolved_longitude REAL,
       resolved_address TEXT,
       resolved_parcel_number TEXT,
+      resolved_cadastral_number TEXT,
       resolved_boundary_json TEXT,
       resolved_precision TEXT CHECK (resolved_precision IN ('exact', 'approx')),
       road_access_rating INTEGER CHECK (road_access_rating BETWEEN 1 AND 5),
@@ -142,6 +143,7 @@ function migrate(database: Database.Database) {
     ['resolved_longitude', 'REAL'],
     ['resolved_address', 'TEXT'],
     ['resolved_parcel_number', 'TEXT'],
+    ['resolved_cadastral_number', 'TEXT'],
     ['resolved_boundary_json', 'TEXT'],
     [
       'resolved_precision',
@@ -155,4 +157,18 @@ function migrate(database: Database.Database) {
       )
     }
   }
+
+  database.exec(`
+    UPDATE candidate_plots
+    SET resolved_cadastral_number = resolved_parcel_number,
+        resolved_parcel_number = NULL,
+        location_resolution_state = 'missing'
+    WHERE resolved_parcel_number GLOB '*/*:*';
+
+    UPDATE candidate_plots
+    SET resolved_precision = coordinate_clue_precision
+    WHERE effective_location_source = 'coordinates'
+      AND coordinate_clue_precision IS NOT NULL
+      AND resolved_precision IS NOT coordinate_clue_precision;
+  `)
 }

@@ -18,7 +18,7 @@ export interface AruodasImport {
   priceEur?: number
   areaAres?: number
   purposeText?: string
-  cadastralNumber?: string
+  uniqueRegistryNumber?: string
   lat?: number
   lng?: number
   locationConfidence: 'exact' | 'approx' | 'unknown'
@@ -40,7 +40,7 @@ interface AruodasImportInput {
   priceEur?: unknown
   areaAres?: unknown
   purposeText?: unknown
-  cadastralNumber?: unknown
+  uniqueRegistryNumber?: unknown
   lat?: unknown
   lng?: unknown
   locationConfidence?: unknown
@@ -77,6 +77,11 @@ function optionalNumber(
     throw new Error(`${field} must be within [${min}, ${max}]`)
   }
   return value
+}
+
+function uniqueRegistryNumber(value: unknown) {
+  const text = optionalText(value, 'uniqueRegistryNumber', 500)
+  return text && /^\d{4}-\d{4}-\d{4}$/.test(text) ? text : undefined
 }
 
 function canonicalAruodasListingUrl(value: unknown) {
@@ -164,11 +169,7 @@ export function parseAruodasImport(input: unknown): AruodasImport {
     priceEur: optionalNumber(value.priceEur, 'priceEur', 0, 100_000_000),
     areaAres: optionalNumber(value.areaAres, 'areaAres', 0, 100_000),
     purposeText: optionalText(value.purposeText, 'purposeText', 500),
-    cadastralNumber: optionalText(
-      value.cadastralNumber,
-      'cadastralNumber',
-      500,
-    ),
+    uniqueRegistryNumber: uniqueRegistryNumber(value.uniqueRegistryNumber),
     lat,
     lng,
     locationConfidence:

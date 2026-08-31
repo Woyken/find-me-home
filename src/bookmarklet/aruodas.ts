@@ -91,22 +91,27 @@ if (
     clean(definition('Koordinatės'))?.match(
       /(5[3-6](?:\.\d+)?)\D+(2[3-7](?:\.\d+)?)/,
     ) ?? mapCoordinates()
+  const listedAddress =
+    definition('Adresas') ??
+    definition('Gyvenvietė') ??
+    elementText('.obj-header-text-address')
+  const plotNumber = definition('Sklypo numeris')
+  const address =
+    listedAddress && plotNumber && !/\d/.test(listedAddress)
+      ? `${listedAddress} ${plotNumber}`
+      : listedAddress
   const payload = {
     url: url.toString(),
     title:
       elementText('.action-bar-advert-always-sticky--title-line') ??
       elementText('.obj-header-text-details') ??
       document.title,
-    address:
-      definition('Adresas') ??
-      definition('Gyvenvietė') ??
-      elementText('.obj-header-text-address'),
+    address,
     priceEur:
       numberFrom(String(offer?.price ?? '')) ?? numberFrom(definition('Kaina')),
     areaAres: numberFrom(definition('Plotas')),
     purposeText: definition('Paskirtis'),
-    cadastralNumber:
-      definition('Sklypo numeris') ?? definition('Unikalus numeris'),
+    uniqueRegistryNumber: definition('Unikalus numeris'),
     lat: coordinates ? Number(coordinates[1]) : undefined,
     lng: coordinates ? Number(coordinates[2]) : undefined,
     locationConfidence: coordinates ? 'approx' : 'unknown',

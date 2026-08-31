@@ -1,5 +1,6 @@
 import { Link, createFileRoute, useNavigate } from '@tanstack/solid-router'
 import { Show, createSignal, untrack } from 'solid-js'
+import { chooseImportedLocationClue } from '../location-clue'
 import {
   fetchImportDraft,
   saveDraft,
@@ -59,13 +60,24 @@ function ReviewSheet(props: {
   const draft = untrack(() => props.draft)
   const imported = draft.imported
   const reimporting = draft.existingSourceListingId !== null
+  const importedClue = chooseImportedLocationClue({
+    uniqueRegistryNumber: imported.uniqueRegistryNumber,
+    latitude: imported.lat,
+    longitude: imported.lng,
+    address: imported.address,
+    precision: imported.locationConfidence,
+  })
   const [price, setPrice] = createSignal(imported.priceEur?.toString() ?? '')
   const [area, setArea] = createSignal(imported.areaAres?.toString() ?? '')
   const [purpose, setPurpose] = createSignal(imported.purposeText ?? '')
-  const [address, setAddress] = createSignal(imported.address ?? '')
-  const [parcel, setParcel] = createSignal(imported.cadastralNumber ?? '')
-  const [lat, setLat] = createSignal(imported.lat?.toString() ?? '')
-  const [lng, setLng] = createSignal(imported.lng?.toString() ?? '')
+  const [address, setAddress] = createSignal(importedClue.addressClue ?? '')
+  const [parcel, setParcel] = createSignal(importedClue.parcelNumberClue ?? '')
+  const [lat, setLat] = createSignal(
+    importedClue.latitudeClue?.toString() ?? '',
+  )
+  const [lng, setLng] = createSignal(
+    importedClue.longitudeClue?.toString() ?? '',
+  )
   const [notes, setNotes] = createSignal('')
   const [advanced, setAdvanced] = createSignal(false)
   const [busy, setBusy] = createSignal(false)
@@ -87,10 +99,14 @@ function ReviewSheet(props: {
           priceEur: parseOptionalNumber(price(), 'Price'),
           areaAres: parseOptionalNumber(area(), 'Area'),
           purposeText: optionalText(purpose()),
-          addressClue: optionalText(address()),
-          parcelNumberClue: optionalText(parcel()),
-          latitudeClue,
-          longitudeClue,
+          addressClue:
+            importedClue.kind === 'address' ? optionalText(address()) : null,
+          parcelNumberClue:
+            importedClue.kind === 'registry' ? optionalText(parcel()) : null,
+          latitudeClue:
+            importedClue.kind === 'coordinates' ? latitudeClue : null,
+          longitudeClue:
+            importedClue.kind === 'coordinates' ? longitudeClue : null,
           notes: optionalText(notes()),
         },
       })
@@ -190,12 +206,6 @@ function ReviewSheet(props: {
               onInput={setPurpose}
               readOnly={reimporting}
             />
-            <Field
-              label="Address"
-              value={address()}
-              onInput={setAddress}
-              readOnly={reimporting}
-            />
           </div>
           <Show when={!reimporting}>
             <button
@@ -210,23 +220,34 @@ function ReviewSheet(props: {
             </button>
             <Show when={advanced()}>
               <div class="mt-5 grid gap-5 sm:grid-cols-2">
-                <Field
-                  label="Unique parcel number"
-                  value={parcel()}
-                  onInput={setParcel}
-                />
-                <Field
-                  label="Latitude"
-                  value={lat()}
-                  onInput={setLat}
-                  inputMode="decimal"
-                />
-                <Field
-                  label="Longitude"
-                  value={lng()}
-                  onInput={setLng}
-                  inputMode="decimal"
-                />
+                <Show when={importedClue.kind === 'registry'}>
+                  <Field
+                    label="Unique registry number"
+                    value={parcel()}
+                    onInput={setParcel}
+                  />
+                </Show>
+                <Show when={importedClue.kind === 'coordinates'}>
+                  <Field
+                    label="Latitude"
+                    value={lat()}
+                    onInput={setLat}
+                    inputMode="decimal"
+                  />
+                  <Field
+                    label="Longitude"
+                    value={lng()}
+                    onInput={setLng}
+                    inputMode="decimal"
+                  />
+                </Show>
+                <Show when={importedClue.kind === 'address'}>
+                  <Field
+                    label="Address"
+                    value={address()}
+                    onInput={setAddress}
+                  />
+                </Show>
               </div>
             </Show>
             <label class="mt-6 block text-sm font-bold">
@@ -295,6 +316,7 @@ function Field(props: {
   )
 }
 const optionalText = (value: string) => value.trim() || null
+
 const parseOptionalNumber = (value: string, label: string) => {
   if (!value.trim()) return null
   const parsed = Number(value.replace(',', '.'))

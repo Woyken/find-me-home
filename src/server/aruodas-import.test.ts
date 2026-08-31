@@ -12,7 +12,7 @@ describe('parseAruodasImport', () => {
       priceEur: 85_000,
       areaAres: 15,
       purposeText: 'Namų valda',
-      cadastralNumber: '4174-0100-2219',
+      uniqueRegistryNumber: '4174-0100-2219',
       lat: 54.806548,
       lng: 25.213499,
       locationConfidence: 'exact',

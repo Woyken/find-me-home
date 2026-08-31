@@ -2,6 +2,7 @@ import { Link, createFileRoute, useRouter } from '@tanstack/solid-router'
 import { For, Show, createSignal } from 'solid-js'
 import { CandidatePlotMap } from '../components/CandidatePlotMap'
 import {
+  deleteSavedSourceListing,
   fetchSourceListing,
   saveCandidatePlotLocation,
   updateVisitPlan,
@@ -16,9 +17,10 @@ export const Route = createFileRoute('/source-listings/$sourceListingId')({
 })
 
 function SourceListingPage() {
-  const listing = () => Route.useLoaderData()()
+  const listing = Route.useLoaderData()
   const router = useRouter()
   const [busy, setBusy] = createSignal(false)
+  const [deleteError, setDeleteError] = createSignal('')
   const toggle = async () => {
     const current = listing()
     if (!current) return
@@ -29,6 +31,23 @@ function SourceListingPage() {
       })
       await router.invalidate({ sync: true })
     } finally {
+      setBusy(false)
+    }
+  }
+  const remove = async () => {
+    const current = listing()
+    if (!current) return
+    const confirmed = window.confirm(
+      `Delete "${current.title ?? 'Untitled Source Listing'}" and all of its Candidate Plots? This cannot be undone.`,
+    )
+    if (!confirmed) return
+    setBusy(true)
+    setDeleteError('')
+    try {
+      await deleteSavedSourceListing({ data: { id: current.id } })
+      await router.navigate({ to: '/' })
+    } catch (caught) {
+      setDeleteError(caught instanceof Error ? caught.message : String(caught))
       setBusy(false)
     }
   }
@@ -109,6 +128,26 @@ function SourceListingPage() {
                     Open original advert
                   </a>
                 </div>
+                <div class="border border-[#a13d22]/30 bg-[#fff1eb] p-5">
+                  <p class="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#a13d22]">
+                    Permanent action
+                  </p>
+                  <p class="mt-2 text-sm text-[#6f3525]">
+                    Deletes this Source Listing and all of its Candidate Plots.
+                  </p>
+                  <Show when={deleteError()}>
+                    <p class="mt-3 text-sm font-bold text-[#a13d22]">
+                      {deleteError()}
+                    </p>
+                  </Show>
+                  <button
+                    class="mt-4 w-full border border-[#a13d22] px-4 py-3 text-sm font-bold text-[#a13d22] hover:bg-[#a13d22] hover:text-white disabled:opacity-50"
+                    disabled={busy()}
+                    onClick={remove}
+                  >
+                    Delete Source Listing
+                  </button>
+                </div>
               </aside>
             </div>
           </div>
@@ -119,6 +158,7 @@ function SourceListingPage() {
 }
 
 type CandidatePlot = SourceListingDetail['candidatePlots'][number]
+type LocationClueKind = 'registry' | 'coordinates' | 'address'
 
 function CandidatePlotCard(props: {
   plot: CandidatePlot
@@ -126,6 +166,12 @@ function CandidatePlotCard(props: {
   sourceListingId: number
 }) {
   const router = useRouter()
+  const initialClueKind: LocationClueKind = props.plot.parcelNumberClue
+    ? 'registry'
+    : props.plot.latitudeClue !== null || props.plot.longitudeClue !== null
+      ? 'coordinates'
+      : 'address'
+  const [clueKind, setClueKind] = createSignal(initialClueKind)
   const [parcel, setParcel] = createSignal(props.plot.parcelNumberClue ?? '')
   const [latitude, setLatitude] = createSignal(
     props.plot.latitudeClue?.toString() ?? '',
@@ -143,16 +189,24 @@ function CandidatePlotCard(props: {
     setError('')
     setSaved(false)
     try {
-      const latitudeClue = parseOptionalCoordinate(latitude(), 'Latitude')
-      const longitudeClue = parseOptionalCoordinate(longitude(), 'Longitude')
+      const latitudeClue =
+        clueKind() === 'coordinates'
+          ? parseOptionalCoordinate(latitude(), 'Latitude')
+          : null
+      const longitudeClue =
+        clueKind() === 'coordinates'
+          ? parseOptionalCoordinate(longitude(), 'Longitude')
+          : null
       await saveCandidatePlotLocation({
         data: {
           sourceListingId: props.sourceListingId,
           plotId: props.plot.id,
-          parcelNumberClue: optionalText(parcel()),
-          latitudeClue,
-          longitudeClue,
-          addressClue: optionalText(address()),
+          parcelNumberClue:
+            clueKind() === 'registry' ? optionalText(parcel()) : null,
+          latitudeClue: clueKind() === 'coordinates' ? latitudeClue : null,
+          longitudeClue: clueKind() === 'coordinates' ? longitudeClue : null,
+          addressClue:
+            clueKind() === 'address' ? optionalText(address()) : null,
         },
       })
       setSaved(true)
@@ -180,34 +234,67 @@ function CandidatePlotCard(props: {
 
       <section class="mt-6 border-t border-[#17231d]/10 pt-5">
         <div class="flex items-baseline justify-between gap-4">
-          <h4 class="font-serif text-xl">Recorded Location Clues</h4>
+          <h4 class="font-serif text-xl">Recorded Location Clue</h4>
           <span class="font-mono text-[9px] uppercase tracking-[0.14em] text-[#748078]">
-            All optional
+            Choose one
           </span>
         </div>
-        <div class="mt-4 grid gap-4 sm:grid-cols-2">
-          <LocationField
-            label="Unique parcel number"
-            value={parcel()}
-            onInput={setParcel}
-          />
-          <LocationField
-            label="Address"
-            value={address()}
-            onInput={setAddress}
-          />
-          <LocationField
-            label="Latitude"
-            value={latitude()}
-            onInput={setLatitude}
-            inputMode="decimal"
-          />
-          <LocationField
-            label="Longitude"
-            value={longitude()}
-            onInput={setLongitude}
-            inputMode="decimal"
-          />
+        <div class="mt-4 grid grid-cols-3 border border-[#17231d]/20">
+          <ClueTypeButton
+            kind="registry"
+            current={clueKind()}
+            onSelect={setClueKind}
+          >
+            Registry number
+          </ClueTypeButton>
+          <ClueTypeButton
+            kind="coordinates"
+            current={clueKind()}
+            onSelect={setClueKind}
+          >
+            Coordinates
+          </ClueTypeButton>
+          <ClueTypeButton
+            kind="address"
+            current={clueKind()}
+            onSelect={setClueKind}
+          >
+            Address
+          </ClueTypeButton>
+        </div>
+        <div class="mt-4">
+          <Show when={clueKind() === 'registry'}>
+            <LocationField
+              label="Unique registry number"
+              value={parcel()}
+              onInput={setParcel}
+              placeholder="4400-1234-5678"
+            />
+          </Show>
+          <Show when={clueKind() === 'coordinates'}>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <LocationField
+                label="Latitude"
+                value={latitude()}
+                onInput={setLatitude}
+                inputMode="decimal"
+              />
+              <LocationField
+                label="Longitude"
+                value={longitude()}
+                onInput={setLongitude}
+                inputMode="decimal"
+              />
+            </div>
+          </Show>
+          <Show when={clueKind() === 'address'}>
+            <LocationField
+              label="Address"
+              value={address()}
+              onInput={setAddress}
+              placeholder="Street and plot or house number"
+            />
+          </Show>
         </div>
         <Show when={error()}>
           <p class="mt-3 text-sm font-bold text-[#a13d22]">{error()}</p>
@@ -218,7 +305,7 @@ function CandidatePlotCard(props: {
             disabled={busy()}
             onClick={save}
           >
-            {busy() ? 'Saving…' : 'Save location clues'}
+            {busy() ? 'Saving…' : 'Save location clue'}
           </button>
           <Show when={saved()}>
             <span class="text-sm text-[#526058]">Saved</span>
@@ -246,14 +333,29 @@ function CandidatePlotCard(props: {
           }
         >
           <div class="mt-3">
-            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <p class="text-sm text-[#526058]">
-                {props.plot.resolvedAddress ?? 'Address unavailable'}
-              </p>
+            <div class="mb-3 flex justify-end">
               <span class="bg-[#e7edf0] px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[#315f73]">
                 {props.plot.resolvedPrecision} ·{' '}
                 {formatLocationSource(props.plot.effectiveLocationSource)}
               </span>
+            </div>
+            <div class="mb-4 grid gap-3 bg-[#f6f4ec] p-4 sm:grid-cols-2">
+              <ReadOnlyLocation
+                label="Coordinates"
+                value={`${props.plot.resolvedLatitude}, ${props.plot.resolvedLongitude}`}
+              />
+              <ReadOnlyLocation
+                label="Resolved address"
+                value={props.plot.resolvedAddress ?? 'Unavailable'}
+              />
+              <ReadOnlyLocation
+                label="Unique registry number"
+                value={props.plot.resolvedParcelNumber ?? 'Unavailable'}
+              />
+              <ReadOnlyLocation
+                label="Cadastral number"
+                value={props.plot.resolvedCadastralNumber ?? 'Unavailable'}
+              />
             </div>
             <CandidatePlotMap
               lat={props.plot.resolvedLatitude!}
@@ -261,11 +363,6 @@ function CandidatePlotCard(props: {
               boundary={props.plot.resolvedBoundary}
               precision={props.plot.resolvedPrecision!}
             />
-            <Show when={props.plot.resolvedParcelNumber}>
-              <p class="mt-2 font-mono text-[10px] text-[#607067]">
-                Registered parcel {props.plot.resolvedParcelNumber}
-              </p>
-            </Show>
           </div>
         </Show>
       </section>
@@ -284,6 +381,7 @@ function LocationField(props: {
   value: string
   onInput: (value: string) => void
   inputMode?: 'decimal'
+  placeholder?: string
 }) {
   return (
     <label class="text-sm font-bold">
@@ -294,9 +392,39 @@ function LocationField(props: {
         class="mt-2 w-full border border-[#17231d]/25 bg-transparent px-3 py-3 font-normal outline-none focus:border-[#315f73]"
         value={props.value}
         inputmode={props.inputMode}
+        placeholder={props.placeholder}
         onInput={(event) => props.onInput(event.currentTarget.value)}
       />
     </label>
+  )
+}
+
+function ClueTypeButton(props: {
+  kind: LocationClueKind
+  current: LocationClueKind
+  onSelect: (kind: LocationClueKind) => void
+  children: string
+}) {
+  return (
+    <button
+      class={`min-w-0 px-2 py-3 text-xs font-bold sm:text-sm ${
+        props.current === props.kind ? 'bg-[#24483a] text-white' : ''
+      }`}
+      onClick={() => props.onSelect(props.kind)}
+    >
+      {props.children}
+    </button>
+  )
+}
+
+function ReadOnlyLocation(props: { label: string; value: string }) {
+  return (
+    <div>
+      <p class="font-mono text-[9px] uppercase tracking-[0.12em] text-[#748078]">
+        {props.label}
+      </p>
+      <p class="mt-1 break-words text-sm font-bold">{props.value}</p>
+    </div>
   )
 }
 

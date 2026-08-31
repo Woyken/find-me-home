@@ -24,6 +24,7 @@ interface ResolvedLocation {
   lng: number
   address: string | null
   parcelNumber: string | null
+  cadastralNumber: string | null
   boundary: GeoJsonPolygon | null
   precision: Precision
 }
@@ -122,7 +123,8 @@ function fromBoundary(
     lat: boundary.centroid.lat,
     lng: boundary.centroid.lng,
     address,
-    parcelNumber: boundary.cadastralNumber,
+    parcelNumber: boundary.uniqueRegistryNumber,
+    cadastralNumber: boundary.cadastralNumber,
     boundary: boundary.geometry,
     precision: 'exact',
   }
@@ -169,11 +171,10 @@ async function resolve(
       lat: row.latitude_clue,
       lng: row.longitude_clue,
       address,
-      parcelNumber: boundary?.cadastralNumber ?? null,
+      parcelNumber: boundary?.uniqueRegistryNumber ?? null,
+      cadastralNumber: boundary?.cadastralNumber ?? null,
       boundary: boundary?.geometry ?? null,
-      precision: boundary
-        ? 'exact'
-        : (row.coordinate_clue_precision ?? 'exact'),
+      precision: row.coordinate_clue_precision ?? 'exact',
     }
   }
 
@@ -192,9 +193,10 @@ async function resolve(
           lat: geocoded.lat,
           lng: geocoded.lng,
           address: geocoded.address,
-          parcelNumber: boundary?.cadastralNumber ?? null,
+          parcelNumber: boundary?.uniqueRegistryNumber ?? null,
+          cadastralNumber: boundary?.cadastralNumber ?? null,
           boundary: boundary?.geometry ?? null,
-          precision: boundary ? 'exact' : geocoded.precision,
+          precision: geocoded.precision,
         }
       }
     } catch (error) {
@@ -214,8 +216,9 @@ async function run(row: CandidatePlotLocationRow): Promise<void> {
         `UPDATE candidate_plots
          SET location_resolution_state = 'resolved', effective_location_source = ?,
              resolved_latitude = ?, resolved_longitude = ?, resolved_address = ?,
-             resolved_parcel_number = ?, resolved_boundary_json = ?,
-             resolved_precision = ?, updated_at = datetime('now')
+             resolved_parcel_number = ?, resolved_cadastral_number = ?,
+             resolved_boundary_json = ?, resolved_precision = ?,
+             updated_at = datetime('now')
          WHERE id = ? AND location_revision = ?`,
       )
       .run(
@@ -224,6 +227,7 @@ async function run(row: CandidatePlotLocationRow): Promise<void> {
         result.lng,
         result.address,
         result.parcelNumber,
+        result.cadastralNumber,
         result.boundary ? JSON.stringify(result.boundary) : null,
         result.precision,
         row.id,

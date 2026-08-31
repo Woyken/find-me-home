@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/solid-start'
 import {
+  deleteSourceListing,
   getImportDraft,
   getSourceListing,
   listSourceListings,
@@ -56,6 +57,15 @@ export const saveCandidatePlotLocation = createServerFn({ method: 'POST' })
       ) {
         throw new Error('Enter valid latitude and longitude')
       }
+      if ((data.latitudeClue === null) !== (data.longitudeClue === null)) {
+        throw new Error('Enter both latitude and longitude')
+      }
+      if (
+        data.parcelNumberClue !== null &&
+        !/^\d{4}-\d{4}-\d{4}$/.test(data.parcelNumberClue)
+      ) {
+        throw new Error('Unique registry number must use XXXX-XXXX-XXXX format')
+      }
       return data
     },
   )
@@ -95,6 +105,20 @@ export const saveDraft = createServerFn({ method: 'POST' })
       if ((data.latitudeClue === null) !== (data.longitudeClue === null)) {
         throw new Error('latitude and longitude must be supplied together')
       }
+      if (
+        (data.latitudeClue !== null &&
+          (data.latitudeClue < -90 || data.latitudeClue > 90)) ||
+        (data.longitudeClue !== null &&
+          (data.longitudeClue < -180 || data.longitudeClue > 180))
+      ) {
+        throw new Error('Enter valid latitude and longitude')
+      }
+      if (
+        data.parcelNumberClue !== null &&
+        !/^\d{4}-\d{4}-\d{4}$/.test(data.parcelNumberClue)
+      ) {
+        throw new Error('Unique registry number must use XXXX-XXXX-XXXX format')
+      }
       return data
     },
   )
@@ -110,6 +134,18 @@ export const updateVisitPlan = createServerFn({ method: 'POST' })
   .handler(({ data }) => {
     setVisitPlanMembership(data.id, data.included)
     return { updated: true as const }
+  })
+
+export const deleteSavedSourceListing = createServerFn({ method: 'POST' })
+  .validator((data: { id: number }) => {
+    if (!Number.isSafeInteger(data.id) || data.id <= 0) {
+      throw new Error('Source Listing ID must be a positive integer')
+    }
+    return data
+  })
+  .handler(({ data }) => {
+    deleteSourceListing(data.id)
+    return { deleted: true as const }
   })
 
 export const reorderVisitPlan = createServerFn({ method: 'POST' })

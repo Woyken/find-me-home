@@ -1,5 +1,6 @@
 import { getDb } from './db'
 import { startCandidatePlotLocationResolution } from './location'
+import { chooseImportedLocationClue } from '../location-clue'
 import type { AruodasImport } from './aruodas-import'
 
 export interface SourceListingSummary {
@@ -37,6 +38,7 @@ export interface SourceListingDetail extends SourceListingSummary {
     resolvedLongitude: number | null
     resolvedAddress: string | null
     resolvedParcelNumber: string | null
+    resolvedCadastralNumber: string | null
     resolvedBoundary: GeoJSON.Polygon | null
     resolvedPrecision: 'exact' | 'approx' | null
   }>
@@ -141,7 +143,8 @@ export function getSourceListing(id: number): SourceListingDetail | null {
               coordinate_clue_precision, address_clue,
               location_resolution_state, effective_location_source,
               resolved_latitude, resolved_longitude, resolved_address,
-              resolved_parcel_number, resolved_boundary_json, resolved_precision
+              resolved_parcel_number, resolved_cadastral_number,
+              resolved_boundary_json, resolved_precision
        FROM candidate_plots WHERE source_listing_id = ? ORDER BY id`,
     )
     .all(id) as Array<{
@@ -163,6 +166,7 @@ export function getSourceListing(id: number): SourceListingDetail | null {
     resolved_longitude: number | null
     resolved_address: string | null
     resolved_parcel_number: string | null
+    resolved_cadastral_number: string | null
     resolved_boundary_json: string | null
     resolved_precision: 'exact' | 'approx' | null
   }>
@@ -192,6 +196,7 @@ export function getSourceListing(id: number): SourceListingDetail | null {
       resolvedLongitude: plot.resolved_longitude,
       resolvedAddress: plot.resolved_address,
       resolvedParcelNumber: plot.resolved_parcel_number,
+      resolvedCadastralNumber: plot.resolved_cadastral_number,
       resolvedBoundary: parseBoundary(plot.resolved_boundary_json),
       resolvedPrecision: plot.resolved_precision,
     })),
@@ -227,6 +232,11 @@ export function updateCandidatePlotLocation(input: {
   longitudeClue: number | null
   addressClue: string | null
 }) {
+  const clueCount =
+    Number(input.parcelNumberClue !== null) +
+    Number(input.latitudeClue !== null || input.longitudeClue !== null) +
+    Number(input.addressClue !== null)
+  if (clueCount > 1) throw new Error('Choose one location clue')
   const result = getDb()
     .prepare(
       `UPDATE candidate_plots
@@ -241,6 +251,7 @@ export function updateCandidatePlotLocation(input: {
            location_resolution_state = 'missing', effective_location_source = NULL,
            resolved_latitude = NULL, resolved_longitude = NULL,
            resolved_address = NULL, resolved_parcel_number = NULL,
+           resolved_cadastral_number = NULL,
            resolved_boundary_json = NULL, resolved_precision = NULL,
            updated_at = datetime('now')
        WHERE id = ? AND source_listing_id = ?`,
@@ -355,6 +366,13 @@ export function saveImportDraft(input: {
             JSON.stringify(imported.raw),
           ).lastInsertRowid,
       )
+      const importedLocation = chooseImportedLocationClue({
+        uniqueRegistryNumber: input.parcelNumberClue,
+        latitude: input.latitudeClue,
+        longitude: input.longitudeClue,
+        address: input.addressClue,
+        precision: imported.locationConfidence,
+      })
       database
         .prepare(
           `INSERT INTO candidate_plots
@@ -372,15 +390,15 @@ export function saveImportDraft(input: {
           input.areaAres,
           input.purposeText,
           input.notes,
-          input.parcelNumberClue,
-          input.latitudeClue,
-          input.longitudeClue,
-          input.latitudeClue === null
+          importedLocation.parcelNumberClue,
+          importedLocation.latitudeClue,
+          importedLocation.longitudeClue,
+          importedLocation.latitudeClue === null
             ? null
             : imported.locationConfidence === 'exact'
               ? 'exact'
               : 'approx',
-          input.addressClue,
+          importedLocation.addressClue,
         )
       createdCandidatePlot = true
     }
@@ -430,6 +448,13 @@ export function setVisitPlanMembership(id: number, included: boolean) {
     }
   })
   update()
+}
+
+export function deleteSourceListing(id: number) {
+  const result = getDb()
+    .prepare(`DELETE FROM source_listings WHERE id = ?`)
+    .run(id)
+  if (result.changes === 0) throw new Error('Source Listing not found')
 }
 
 export function setVisitPlanOrder(ids: Array<number>) {
