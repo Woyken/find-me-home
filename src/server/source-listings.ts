@@ -300,6 +300,26 @@ export function updateCandidatePlotLocation(input: {
   startCandidatePlotLocationResolution(input.plotId)
 }
 
+export function createCandidatePlot(sourceListingId: number) {
+  const database = getDb()
+  const create = database.transaction(() => {
+    const sourceListing = database
+      .prepare(`SELECT id FROM source_listings WHERE id = ?`)
+      .get(sourceListingId)
+    if (!sourceListing) throw new Error('Source Listing not found')
+
+    const result = database
+      .prepare(
+        `INSERT INTO candidate_plots (source_listing_id, name)
+         VALUES (?, ?)`,
+      )
+      .run(sourceListingId, 'Candidate Plot')
+    return Number(result.lastInsertRowid)
+  })
+
+  return { plotId: create() }
+}
+
 export function updateCandidatePlotFacts(input: {
   sourceListingId: number
   plotId: number

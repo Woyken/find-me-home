@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/solid-start'
 import {
+  createCandidatePlot,
   deleteSourceListing,
   getImportDraft,
   getSourceListing,
@@ -28,6 +29,18 @@ export const fetchVisitPlan = createServerFn({ method: 'GET' }).handler(() =>
 export const fetchSourceListing = createServerFn({ method: 'GET' })
   .validator((data: { id: number }) => data)
   .handler(({ data }) => getSourceListing(data.id))
+
+export const addCandidatePlot = createServerFn({ method: 'POST' })
+  .validator((data: { sourceListingId: number }) => {
+    if (
+      !Number.isSafeInteger(data.sourceListingId) ||
+      data.sourceListingId <= 0
+    ) {
+      throw new Error('Source Listing ID must be a positive integer')
+    }
+    return data
+  })
+  .handler(({ data }) => createCandidatePlot(data.sourceListingId))
 
 export const saveCandidatePlotLocation = createServerFn({ method: 'POST' })
   .validator(

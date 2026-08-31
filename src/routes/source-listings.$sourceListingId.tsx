@@ -1,7 +1,8 @@
 import { Link, createFileRoute, useRouter } from '@tanstack/solid-router'
-import { For, Show, createSignal } from 'solid-js'
+import { For, Show, createMemo, createSignal } from 'solid-js'
 import { CandidatePlotMap } from '../components/CandidatePlotMap'
 import {
+  addCandidatePlot,
   deleteSavedSourceListing,
   fetchSourceListing,
   saveCandidatePlotFacts,
@@ -23,6 +24,45 @@ function SourceListingPage() {
   const router = useRouter()
   const [busy, setBusy] = createSignal(false)
   const [deleteError, setDeleteError] = createSignal('')
+  const [selectedPlotId, setSelectedPlotId] = createSignal<number | null>(null)
+  const [plotSearch, setPlotSearch] = createSignal('')
+  const [plotError, setPlotError] = createSignal('')
+  const plots = () => listing()?.candidatePlots ?? []
+  const selectedIndex = createMemo(() => {
+    const selectedId = selectedPlotId()
+    const index = plots().findIndex((plot) => plot.id === selectedId)
+    return index < 0 ? 0 : index
+  })
+  const selectedPlot = createMemo(() => plots()[selectedIndex()])
+  const filteredPlots = createMemo(() => {
+    const query = plotSearch().trim().toLocaleLowerCase()
+    if (!query) return plots()
+    return plots().filter((plot, index) =>
+      plotSearchText(plot, index).toLocaleLowerCase().includes(query),
+    )
+  })
+  const selectPlot = (plotId: number) => {
+    setSelectedPlotId(plotId)
+    setPlotSearch('')
+  }
+  const addPlot = async () => {
+    const current = listing()
+    if (!current) return
+    setBusy(true)
+    setPlotError('')
+    try {
+      const result = await addCandidatePlot({
+        data: { sourceListingId: current.id },
+      })
+      setSelectedPlotId(result.plotId)
+      setPlotSearch('')
+      await router.invalidate({ sync: true })
+    } catch (caught) {
+      setPlotError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
   const toggle = async () => {
     const current = listing()
     if (!current) return
@@ -87,17 +127,111 @@ function SourceListingPage() {
             </header>
             <div class="mt-8 grid gap-8 lg:grid-cols-[1fr_18rem]">
               <section>
-                <h2 class="font-serif text-3xl">Candidate Plots</h2>
-                <div class="mt-5 space-y-4">
-                  <For each={item().candidatePlots}>
-                    {(plot, index) => (
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <h2 class="font-serif text-3xl">Candidate Plots</h2>
+                  <button
+                    class="bg-[#d96a45] px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+                    disabled={busy()}
+                    onClick={addPlot}
+                  >
+                    {busy() ? 'Adding…' : '+ Add Candidate Plot'}
+                  </button>
+                </div>
+                <Show when={plotError()}>
+                  <p class="mt-3 text-sm font-bold text-[#a13d22]">
+                    {plotError()}
+                  </p>
+                </Show>
+                <div class="mt-5 border border-[#17231d]/20 bg-[#e7edf0] p-4 sm:p-5">
+                  <label class="block font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#52616a]">
+                    Find a Candidate Plot
+                    <input
+                      type="search"
+                      autocomplete="off"
+                      class="mt-2 w-full border border-[#17231d]/25 bg-white px-3 py-3 font-sans text-sm font-normal normal-case tracking-normal outline-none focus:border-[#315f73]"
+                      value={plotSearch()}
+                      placeholder="Search address, parcel number, or plot"
+                      onInput={(event) =>
+                        setPlotSearch(event.currentTarget.value)
+                      }
+                    />
+                  </label>
+                  <label class="mt-3 block font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#52616a]">
+                    Selected Candidate Plot
+                    <select
+                      class="mt-2 w-full border border-[#17231d]/25 bg-white px-3 py-3 font-sans text-sm font-bold normal-case tracking-normal outline-none focus:border-[#315f73]"
+                      value={
+                        filteredPlots().some(
+                          (plot) => plot.id === selectedPlot().id,
+                        )
+                          ? selectedPlot().id
+                          : ''
+                      }
+                      onChange={(event) =>
+                        selectPlot(Number(event.currentTarget.value))
+                      }
+                    >
+                      <Show
+                        when={
+                          plotSearch().trim() &&
+                          !filteredPlots().some(
+                            (plot) => plot.id === selectedPlot().id,
+                          )
+                        }
+                      >
+                        <option value="" disabled>
+                          Choose a matching Candidate Plot
+                        </option>
+                      </Show>
+                      <For each={filteredPlots()}>
+                        {(plot) => (
+                          <option value={plot.id}>
+                            {plotSelectorLabel(plot, plots().indexOf(plot))}
+                          </option>
+                        )}
+                      </For>
+                    </select>
+                  </label>
+                  <Show when={filteredPlots().length === 0}>
+                    <p class="mt-2 text-xs text-[#607067]">
+                      No Candidate Plots match this search. Clear it to see all
+                      plots.
+                    </p>
+                  </Show>
+                  <div class="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                    <button
+                      class="border border-[#24483a] px-3 py-2 text-sm font-bold text-[#24483a] disabled:opacity-35"
+                      disabled={selectedIndex() === 0}
+                      onClick={() =>
+                        selectPlot(plots()[selectedIndex() - 1].id)
+                      }
+                    >
+                      ← Previous
+                    </button>
+                    <span class="font-mono text-[10px] text-[#607067]">
+                      {selectedIndex() + 1} / {plots().length}
+                    </span>
+                    <button
+                      class="border border-[#24483a] px-3 py-2 text-sm font-bold text-[#24483a] disabled:opacity-35"
+                      disabled={selectedIndex() >= plots().length - 1}
+                      onClick={() =>
+                        selectPlot(plots()[selectedIndex() + 1].id)
+                      }
+                    >
+                      Next →
+                    </button>
+                  </div>
+                </div>
+                <div class="mt-4">
+                  <Show when={selectedPlot()} keyed>
+                    {(plot) => (
                       <CandidatePlotCard
                         plot={plot}
-                        number={index() + 1}
+                        number={selectedIndex() + 1}
                         sourceListingId={item().id}
                       />
                     )}
-                  </For>
+                  </Show>
                 </div>
               </section>
               <aside class="space-y-5">
@@ -161,6 +295,35 @@ function SourceListingPage() {
 
 type CandidatePlot = SourceListingDetail['candidatePlots'][number]
 type LocationClueKind = 'registry' | 'coordinates' | 'address'
+
+function plotSelectorLabel(plot: CandidatePlot, index: number) {
+  const displayLocation =
+    plot.resolvedAddress ??
+    plot.addressClue ??
+    plot.resolvedParcelNumber ??
+    plot.resolvedCadastralNumber ??
+    plot.parcelNumberClue ??
+    (plot.resolvedLatitude !== null && plot.resolvedLongitude !== null
+      ? `${plot.resolvedLatitude}, ${plot.resolvedLongitude}`
+      : plot.latitudeClue !== null && plot.longitudeClue !== null
+        ? `${plot.latitudeClue}, ${plot.longitudeClue}`
+        : null)
+  return `${index + 1}. ${displayLocation ?? 'Unpositioned Candidate Plot'}`
+}
+
+function plotSearchText(plot: CandidatePlot, index: number) {
+  return [
+    plotSelectorLabel(plot, index),
+    plot.name,
+    plot.addressClue,
+    plot.resolvedAddress,
+    plot.parcelNumberClue,
+    plot.resolvedParcelNumber,
+    plot.resolvedCadastralNumber,
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
 
 function CandidatePlotCard(props: {
   plot: CandidatePlot
