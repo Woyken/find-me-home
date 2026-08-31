@@ -1,9 +1,12 @@
 import { Link, createFileRoute, useRouter } from '@tanstack/solid-router'
 import { For, Show, createSignal } from 'solid-js'
+import { CandidatePlotMap } from '../components/CandidatePlotMap'
 import {
   fetchSourceListing,
+  saveCandidatePlotLocation,
   updateVisitPlan,
 } from '../server-functions/source-listings'
+import type { SourceListingDetail } from '../server/source-listings'
 import { formatArea, formatDate, formatPrice } from './index'
 
 export const Route = createFileRoute('/source-listings/$sourceListingId')({
@@ -67,64 +70,11 @@ function SourceListingPage() {
                 <div class="mt-5 space-y-4">
                   <For each={item().candidatePlots}>
                     {(plot, index) => (
-                      <article class="border-l-4 border-[#d96a45] bg-white p-6">
-                        <p class="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#607067]">
-                          Candidate Plot {index() + 1}
-                        </p>
-                        <h3 class="mt-2 font-serif text-2xl">
-                          {plot.name ?? 'Candidate Plot'}
-                        </h3>
-                        <div class="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
-                          <Detail
-                            label="Price"
-                            value={formatPrice(plot.priceEur)}
-                          />
-                          <Detail
-                            label="Area"
-                            value={formatArea(plot.areaAres)}
-                          />
-                          <Detail
-                            label="Purpose"
-                            value={plot.purposeText ?? 'Unknown'}
-                          />
-                          <div>
-                            <Detail
-                              label={
-                                plot.coordinateCluePrecision === 'approx'
-                                  ? 'Approximate location'
-                                  : 'Location clue'
-                              }
-                              value={
-                                plot.parcelNumberClue ??
-                                plot.addressClue ??
-                                (plot.latitudeClue !== null
-                                  ? `${plot.latitudeClue}, ${plot.longitudeClue}`
-                                  : 'Unknown')
-                              }
-                            />
-                            <Show
-                              when={
-                                plot.latitudeClue !== null &&
-                                plot.longitudeClue !== null
-                              }
-                            >
-                              <a
-                                class="mt-2 inline-block text-xs font-bold text-[#315f73] underline"
-                                href={`https://www.google.com/maps/dir/?api=1&destination=${plot.latitudeClue},${plot.longitudeClue}`}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Directions
-                              </a>
-                            </Show>
-                          </div>
-                        </div>
-                        <Show when={plot.notes}>
-                          <p class="mt-5 border-t border-[#17231d]/10 pt-4 text-sm text-[#526058]">
-                            {plot.notes}
-                          </p>
-                        </Show>
-                      </article>
+                      <CandidatePlotCard
+                        plot={plot}
+                        number={index() + 1}
+                        sourceListingId={item().id}
+                      />
                     )}
                   </For>
                 </div>
@@ -166,6 +116,210 @@ function SourceListingPage() {
       </Show>
     </main>
   )
+}
+
+type CandidatePlot = SourceListingDetail['candidatePlots'][number]
+
+function CandidatePlotCard(props: {
+  plot: CandidatePlot
+  number: number
+  sourceListingId: number
+}) {
+  const router = useRouter()
+  const [parcel, setParcel] = createSignal(props.plot.parcelNumberClue ?? '')
+  const [latitude, setLatitude] = createSignal(
+    props.plot.latitudeClue?.toString() ?? '',
+  )
+  const [longitude, setLongitude] = createSignal(
+    props.plot.longitudeClue?.toString() ?? '',
+  )
+  const [address, setAddress] = createSignal(props.plot.addressClue ?? '')
+  const [busy, setBusy] = createSignal(false)
+  const [error, setError] = createSignal('')
+  const [saved, setSaved] = createSignal(false)
+
+  const save = async () => {
+    setBusy(true)
+    setError('')
+    setSaved(false)
+    try {
+      const latitudeClue = parseOptionalCoordinate(latitude(), 'Latitude')
+      const longitudeClue = parseOptionalCoordinate(longitude(), 'Longitude')
+      await saveCandidatePlotLocation({
+        data: {
+          sourceListingId: props.sourceListingId,
+          plotId: props.plot.id,
+          parcelNumberClue: optionalText(parcel()),
+          latitudeClue,
+          longitudeClue,
+          addressClue: optionalText(address()),
+        },
+      })
+      setSaved(true)
+      await router.invalidate({ sync: true })
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <article class="border-l-4 border-[#d96a45] bg-white p-5 sm:p-6">
+      <p class="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#607067]">
+        Candidate Plot {props.number}
+      </p>
+      <h3 class="mt-2 font-serif text-2xl">
+        {props.plot.name ?? 'Candidate Plot'}
+      </h3>
+      <div class="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <Detail label="Price" value={formatPrice(props.plot.priceEur)} />
+        <Detail label="Area" value={formatArea(props.plot.areaAres)} />
+        <Detail label="Purpose" value={props.plot.purposeText ?? 'Unknown'} />
+      </div>
+
+      <section class="mt-6 border-t border-[#17231d]/10 pt-5">
+        <div class="flex items-baseline justify-between gap-4">
+          <h4 class="font-serif text-xl">Recorded Location Clues</h4>
+          <span class="font-mono text-[9px] uppercase tracking-[0.14em] text-[#748078]">
+            All optional
+          </span>
+        </div>
+        <div class="mt-4 grid gap-4 sm:grid-cols-2">
+          <LocationField
+            label="Unique parcel number"
+            value={parcel()}
+            onInput={setParcel}
+          />
+          <LocationField
+            label="Address"
+            value={address()}
+            onInput={setAddress}
+          />
+          <LocationField
+            label="Latitude"
+            value={latitude()}
+            onInput={setLatitude}
+            inputMode="decimal"
+          />
+          <LocationField
+            label="Longitude"
+            value={longitude()}
+            onInput={setLongitude}
+            inputMode="decimal"
+          />
+        </div>
+        <Show when={error()}>
+          <p class="mt-3 text-sm font-bold text-[#a13d22]">{error()}</p>
+        </Show>
+        <div class="mt-4 flex items-center gap-3">
+          <button
+            class="bg-[#24483a] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+            disabled={busy()}
+            onClick={save}
+          >
+            {busy() ? 'Saving…' : 'Save location clues'}
+          </button>
+          <Show when={saved()}>
+            <span class="text-sm text-[#526058]">Saved</span>
+          </Show>
+        </div>
+      </section>
+
+      <section class="mt-6 border-t border-[#17231d]/10 pt-5">
+        <h4 class="font-serif text-xl">Effective Location</h4>
+        <Show
+          when={
+            props.plot.locationResolutionState === 'resolved' &&
+            props.plot.resolvedLatitude !== null &&
+            props.plot.resolvedLongitude !== null &&
+            props.plot.resolvedPrecision !== null
+          }
+          fallback={
+            props.plot.locationResolutionState === 'running' ? (
+              <LocationSkeleton />
+            ) : (
+              <div class="mt-3 border border-dashed border-[#17231d]/20 bg-[#f6f4ec] p-5 text-sm text-[#607067]">
+                No location could be resolved yet.
+              </div>
+            )
+          }
+        >
+          <div class="mt-3">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <p class="text-sm text-[#526058]">
+                {props.plot.resolvedAddress ?? 'Address unavailable'}
+              </p>
+              <span class="bg-[#e7edf0] px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[#315f73]">
+                {props.plot.resolvedPrecision} ·{' '}
+                {formatLocationSource(props.plot.effectiveLocationSource)}
+              </span>
+            </div>
+            <CandidatePlotMap
+              lat={props.plot.resolvedLatitude!}
+              lng={props.plot.resolvedLongitude!}
+              boundary={props.plot.resolvedBoundary}
+              precision={props.plot.resolvedPrecision!}
+            />
+            <Show when={props.plot.resolvedParcelNumber}>
+              <p class="mt-2 font-mono text-[10px] text-[#607067]">
+                Registered parcel {props.plot.resolvedParcelNumber}
+              </p>
+            </Show>
+          </div>
+        </Show>
+      </section>
+
+      <Show when={props.plot.notes}>
+        <p class="mt-5 border-t border-[#17231d]/10 pt-4 text-sm text-[#526058]">
+          {props.plot.notes}
+        </p>
+      </Show>
+    </article>
+  )
+}
+
+function LocationField(props: {
+  label: string
+  value: string
+  onInput: (value: string) => void
+  inputMode?: 'decimal'
+}) {
+  return (
+    <label class="text-sm font-bold">
+      {props.label}
+      <input
+        class="mt-2 w-full border border-[#17231d]/25 bg-transparent px-3 py-3 font-normal outline-none focus:border-[#315f73]"
+        value={props.value}
+        inputmode={props.inputMode}
+        onInput={(event) => props.onInput(event.currentTarget.value)}
+      />
+    </label>
+  )
+}
+
+function LocationSkeleton() {
+  return (
+    <div class="mt-3 animate-pulse" aria-label="Resolving location">
+      <div class="h-4 w-2/3 bg-[#e1ded3]" />
+      <div class="mt-3 h-64 bg-[#e1ded3]" />
+    </div>
+  )
+}
+
+function formatLocationSource(
+  source: CandidatePlot['effectiveLocationSource'],
+) {
+  if (source === 'parcel_number') return 'parcel number'
+  return source ?? 'location clue'
+}
+
+const optionalText = (value: string) => value.trim() || null
+const parseOptionalCoordinate = (value: string, label: string) => {
+  if (!value.trim()) return null
+  const parsed = Number(value.replace(',', '.'))
+  if (!Number.isFinite(parsed)) throw new Error(`${label} must be a number.`)
+  return parsed
 }
 
 function Detail(props: { label: string; value: string }) {

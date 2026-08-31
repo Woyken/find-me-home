@@ -79,6 +79,17 @@ function migrate(database: Database.Database) {
       longitude_clue REAL,
       coordinate_clue_precision TEXT CHECK (coordinate_clue_precision IN ('exact', 'approx')),
       address_clue TEXT,
+      location_revision INTEGER NOT NULL DEFAULT 0,
+      location_resolution_state TEXT NOT NULL DEFAULT 'missing'
+        CHECK (location_resolution_state IN ('missing', 'running', 'resolved', 'unresolved')),
+      effective_location_source TEXT
+        CHECK (effective_location_source IN ('parcel_number', 'coordinates', 'address')),
+      resolved_latitude REAL,
+      resolved_longitude REAL,
+      resolved_address TEXT,
+      resolved_parcel_number TEXT,
+      resolved_boundary_json TEXT,
+      resolved_precision TEXT CHECK (resolved_precision IN ('exact', 'approx')),
       road_access_rating INTEGER CHECK (road_access_rating BETWEEN 1 AND 5),
       area_feeling_rating INTEGER CHECK (area_feeling_rating BETWEEN 1 AND 5),
       view_rating INTEGER CHECK (view_rating BETWEEN 1 AND 5),
@@ -115,5 +126,33 @@ function migrate(database: Database.Database) {
       `ALTER TABLE candidate_plots ADD COLUMN coordinate_clue_precision TEXT
        CHECK (coordinate_clue_precision IN ('exact', 'approx'))`,
     )
+  }
+
+  const resolvedLocationColumns = [
+    ['location_revision', `INTEGER NOT NULL DEFAULT 0`],
+    [
+      'location_resolution_state',
+      `TEXT NOT NULL DEFAULT 'missing' CHECK (location_resolution_state IN ('missing', 'running', 'resolved', 'unresolved'))`,
+    ],
+    [
+      'effective_location_source',
+      `TEXT CHECK (effective_location_source IN ('parcel_number', 'coordinates', 'address'))`,
+    ],
+    ['resolved_latitude', 'REAL'],
+    ['resolved_longitude', 'REAL'],
+    ['resolved_address', 'TEXT'],
+    ['resolved_parcel_number', 'TEXT'],
+    ['resolved_boundary_json', 'TEXT'],
+    [
+      'resolved_precision',
+      `TEXT CHECK (resolved_precision IN ('exact', 'approx'))`,
+    ],
+  ] as const
+  for (const [column, definition] of resolvedLocationColumns) {
+    if (!candidatePlotColumns.some((existing) => existing.name === column)) {
+      database.exec(
+        `ALTER TABLE candidate_plots ADD COLUMN ${column} ${definition}`,
+      )
+    }
   }
 }

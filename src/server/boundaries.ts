@@ -153,6 +153,7 @@ function getParcelsDb(): Database.Database {
       geom_json TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_parcels_cad ON parcels(cadastral_number);
+    CREATE INDEX IF NOT EXISTS idx_parcels_unique ON parcels(unique_number);
     CREATE INDEX IF NOT EXISTS idx_parcels_muni ON parcels(municipality_code);
     CREATE INDEX IF NOT EXISTS idx_parcels_bbox
       ON parcels(min_x, max_x, min_y, max_y);
@@ -566,6 +567,27 @@ export async function resolveByCadastral(
       .get(cand) as ParcelRow | undefined
     if (row) break
   }
+  const result = row ? toBoundaryResult(db, row, 'cadastral') : null
+  geoCachePut(cacheKey, result)
+  return result
+}
+
+/** Resolve a parcel by its official unique number. */
+export async function resolveByUniqueNumber(
+  uniqueNumber: string | null,
+): Promise<BoundaryResult | null> {
+  const normalized = uniqueNumber?.replace(/\D/g, '') ?? ''
+  if (!normalized) return null
+
+  const cacheKey = `boundary:unique:${normalized}`
+  const cached = geoCacheGet<BoundaryResult>(cacheKey, CACHE_MAX_AGE_DAYS)
+  if (cached !== undefined) return cached
+
+  await ensureParcelsImported()
+  const db = getParcelsDb()
+  const row = db
+    .prepare(`SELECT * FROM parcels WHERE unique_number = ? LIMIT 1`)
+    .get(normalized) as ParcelRow | undefined
   const result = row ? toBoundaryResult(db, row, 'cadastral') : null
   geoCachePut(cacheKey, result)
   return result

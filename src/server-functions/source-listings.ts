@@ -7,6 +7,7 @@ import {
   saveImportDraft,
   setVisitPlanMembership,
   setVisitPlanOrder,
+  updateCandidatePlotLocation,
 } from '../server/source-listings'
 import {
   createAruodasBookmarklet,
@@ -24,6 +25,44 @@ export const fetchVisitPlan = createServerFn({ method: 'GET' }).handler(() =>
 export const fetchSourceListing = createServerFn({ method: 'GET' })
   .validator((data: { id: number }) => data)
   .handler(({ data }) => getSourceListing(data.id))
+
+export const saveCandidatePlotLocation = createServerFn({ method: 'POST' })
+  .validator(
+    (data: {
+      sourceListingId: number
+      plotId: number
+      parcelNumberClue: string | null
+      latitudeClue: number | null
+      longitudeClue: number | null
+      addressClue: string | null
+    }) => {
+      if (
+        !Number.isSafeInteger(data.sourceListingId) ||
+        data.sourceListingId <= 0 ||
+        !Number.isSafeInteger(data.plotId) ||
+        data.plotId <= 0
+      ) {
+        throw new Error('Source Listing and Candidate Plot IDs are required')
+      }
+      if (
+        (data.latitudeClue !== null &&
+          (!Number.isFinite(data.latitudeClue) ||
+            data.latitudeClue < -90 ||
+            data.latitudeClue > 90)) ||
+        (data.longitudeClue !== null &&
+          (!Number.isFinite(data.longitudeClue) ||
+            data.longitudeClue < -180 ||
+            data.longitudeClue > 180))
+      ) {
+        throw new Error('Enter valid latitude and longitude')
+      }
+      return data
+    },
+  )
+  .handler(({ data }) => {
+    updateCandidatePlotLocation(data)
+    return { updated: true as const }
+  })
 
 export const fetchImportDraft = createServerFn({ method: 'GET' })
   .validator((data: { token: string }) => data)

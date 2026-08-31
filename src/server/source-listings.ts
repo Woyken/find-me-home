@@ -1,4 +1,5 @@
 import { getDb } from './db'
+import { startCandidatePlotLocationResolution } from './location'
 import type { AruodasImport } from './aruodas-import'
 
 export interface SourceListingSummary {
@@ -30,6 +31,14 @@ export interface SourceListingDetail extends SourceListingSummary {
     longitudeClue: number | null
     coordinateCluePrecision: 'exact' | 'approx' | null
     addressClue: string | null
+    locationResolutionState: 'missing' | 'running' | 'resolved' | 'unresolved'
+    effectiveLocationSource: 'parcel_number' | 'coordinates' | 'address' | null
+    resolvedLatitude: number | null
+    resolvedLongitude: number | null
+    resolvedAddress: string | null
+    resolvedParcelNumber: string | null
+    resolvedBoundary: GeoJSON.Polygon | null
+    resolvedPrecision: 'exact' | 'approx' | null
   }>
 }
 
@@ -129,7 +138,10 @@ export function getSourceListing(id: number): SourceListingDetail | null {
     .prepare(
       `SELECT id, name, price_eur, area_ares, purpose_text, notes,
               parcel_number_clue, latitude_clue, longitude_clue,
-              coordinate_clue_precision, address_clue
+              coordinate_clue_precision, address_clue,
+              location_resolution_state, effective_location_source,
+              resolved_latitude, resolved_longitude, resolved_address,
+              resolved_parcel_number, resolved_boundary_json, resolved_precision
        FROM candidate_plots WHERE source_listing_id = ? ORDER BY id`,
     )
     .all(id) as Array<{
@@ -144,7 +156,17 @@ export function getSourceListing(id: number): SourceListingDetail | null {
     longitude_clue: number | null
     coordinate_clue_precision: 'exact' | 'approx' | null
     address_clue: string | null
+    location_resolution_state: 'missing' | 'running' | 'resolved' | 'unresolved'
+    effective_location_source:
+      'parcel_number' | 'coordinates' | 'address' | null
+    resolved_latitude: number | null
+    resolved_longitude: number | null
+    resolved_address: string | null
+    resolved_parcel_number: string | null
+    resolved_boundary_json: string | null
+    resolved_precision: 'exact' | 'approx' | null
   }>
+  for (const plot of plots) startCandidatePlotLocationResolution(plot.id)
   return {
     ...summary,
     description: row.description,
@@ -160,8 +182,83 @@ export function getSourceListing(id: number): SourceListingDetail | null {
       longitudeClue: plot.longitude_clue,
       coordinateCluePrecision: plot.coordinate_clue_precision,
       addressClue: plot.address_clue,
+      locationResolutionState:
+        plot.location_resolution_state === 'resolved' ||
+        plot.location_resolution_state === 'unresolved'
+          ? plot.location_resolution_state
+          : loadResolutionState(plot.id),
+      effectiveLocationSource: plot.effective_location_source,
+      resolvedLatitude: plot.resolved_latitude,
+      resolvedLongitude: plot.resolved_longitude,
+      resolvedAddress: plot.resolved_address,
+      resolvedParcelNumber: plot.resolved_parcel_number,
+      resolvedBoundary: parseBoundary(plot.resolved_boundary_json),
+      resolvedPrecision: plot.resolved_precision,
     })),
   }
+}
+
+function loadResolutionState(plotId: number) {
+  const row = getDb()
+    .prepare(
+      `SELECT location_resolution_state FROM candidate_plots WHERE id = ?`,
+    )
+    .get(plotId) as {
+    location_resolution_state: 'missing' | 'running' | 'resolved' | 'unresolved'
+  }
+  return row.location_resolution_state
+}
+
+function parseBoundary(value: string | null): GeoJSON.Polygon | null {
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(value) as { type?: unknown }
+    return parsed.type === 'Polygon' ? (parsed as GeoJSON.Polygon) : null
+  } catch {
+    return null
+  }
+}
+
+export function updateCandidatePlotLocation(input: {
+  sourceListingId: number
+  plotId: number
+  parcelNumberClue: string | null
+  latitudeClue: number | null
+  longitudeClue: number | null
+  addressClue: string | null
+}) {
+  const result = getDb()
+    .prepare(
+      `UPDATE candidate_plots
+       SET parcel_number_clue = ?, latitude_clue = ?, longitude_clue = ?,
+           coordinate_clue_precision = CASE
+             WHEN ? IS NULL OR ? IS NULL THEN NULL
+             WHEN latitude_clue IS ? AND longitude_clue IS ?
+               THEN coordinate_clue_precision
+             ELSE 'exact'
+           END,
+           address_clue = ?, location_revision = location_revision + 1,
+           location_resolution_state = 'missing', effective_location_source = NULL,
+           resolved_latitude = NULL, resolved_longitude = NULL,
+           resolved_address = NULL, resolved_parcel_number = NULL,
+           resolved_boundary_json = NULL, resolved_precision = NULL,
+           updated_at = datetime('now')
+       WHERE id = ? AND source_listing_id = ?`,
+    )
+    .run(
+      input.parcelNumberClue,
+      input.latitudeClue,
+      input.longitudeClue,
+      input.latitudeClue,
+      input.longitudeClue,
+      input.latitudeClue,
+      input.longitudeClue,
+      input.addressClue,
+      input.plotId,
+      input.sourceListingId,
+    )
+  if (result.changes === 0) throw new Error('Candidate Plot not found')
+  startCandidatePlotLocationResolution(input.plotId)
 }
 
 export function getImportDraft(token: string): ImportDraft | null {
