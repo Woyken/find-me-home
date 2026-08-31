@@ -1,4 +1,4 @@
-import { onCleanup } from 'solid-js'
+import { Show, createEffect, createSignal, onCleanup } from 'solid-js'
 import 'leaflet/dist/leaflet.css'
 import type * as Leaflet from 'leaflet'
 import type { Feature, Polygon } from 'geojson'
@@ -18,15 +18,24 @@ export function CandidatePlotsMap(props: {
   onSelect: (plotId: number) => void
 }) {
   let map: Leaflet.Map | undefined
-  let layer: Leaflet.LayerGroup | undefined
+  let plotLayer: Leaflet.LayerGroup | undefined
   let leaflet: typeof Leaflet | undefined
   let resizeObserver: ResizeObserver | undefined
+  let householdLayer: Leaflet.LayerGroup | undefined
+  let container: HTMLDivElement | undefined
+  const [locationState, setLocationState] = createSignal<
+    'idle' | 'locating' | 'available' | 'unavailable'
+  >('idle')
+  const [locationMessage, setLocationMessage] = createSignal('')
+  const [fullscreen, setFullscreen] = createSignal(false)
 
   const resolveLabelCollisions = () => {
     if (!map) return
-    const container = map.getContainer()
+    const mapContainer = map.getContainer()
     const labels = [
-      ...container.querySelectorAll<HTMLElement>('.candidate-plot-map-label'),
+      ...mapContainer.querySelectorAll<HTMLElement>(
+        '.candidate-plot-map-label',
+      ),
     ]
     labels.forEach((label) => (label.style.visibility = 'visible'))
     labels.sort((label) =>
@@ -48,12 +57,12 @@ export function CandidatePlotsMap(props: {
     }
   }
 
-  const draw = () => {
+  const draw = (fitBounds: boolean) => {
     const plots = props.plots
     const selectedPlotId = props.selectedPlotId
-    if (!map || !leaflet || !layer) return
+    if (!map || !leaflet || !plotLayer) return
 
-    layer.clearLayers()
+    plotLayer.clearLayers()
     const bounds = leaflet.latLngBounds([])
     for (const plot of plots) {
       const selected = plot.id === selectedPlotId
@@ -81,7 +90,7 @@ export function CandidatePlotsMap(props: {
             selected ? 'candidate-plot-map-label-selected' : ''
           }`,
         })
-        boundary.addTo(layer)
+        boundary.addTo(plotLayer)
         bounds.extend(boundary.getBounds())
         continue
       }
@@ -103,11 +112,11 @@ export function CandidatePlotsMap(props: {
           selected ? 'candidate-plot-map-label-selected' : ''
         }`,
       })
-      location.addTo(layer)
+      location.addTo(plotLayer)
       bounds.extend(location.getBounds())
     }
 
-    if (bounds.isValid()) {
+    if (fitBounds && bounds.isValid()) {
       map.fitBounds(bounds, { padding: [28, 28], maxZoom: 17 })
     }
     requestAnimationFrame(resolveLabelCollisions)
@@ -125,24 +134,135 @@ export function CandidatePlotsMap(props: {
         })
         .addTo(map)
       loaded.control.zoom({ position: 'bottomright' }).addTo(map)
-      layer = loaded.layerGroup().addTo(map)
+      plotLayer = loaded.layerGroup().addTo(map)
+      householdLayer = loaded.layerGroup().addTo(map)
       map.on('zoomend moveend', resolveLabelCollisions)
       resizeObserver = new ResizeObserver(() => map?.invalidateSize())
       resizeObserver.observe(element)
-      draw()
+      draw(true)
+      locate()
     })
   }
+
+  createEffect(() => {
+    props.plots
+    props.selectedPlotId
+    draw(false)
+  })
 
   onCleanup(() => {
     resizeObserver?.disconnect()
     map?.remove()
   })
 
+  const locate = () => {
+    if (!('geolocation' in navigator) || !leaflet || !map || !householdLayer) {
+      setLocationState('unavailable')
+      setLocationMessage(
+        'Live location is unavailable. Map and field notes remain usable.',
+      )
+      return
+    }
+    setLocationState('locating')
+    setLocationMessage('Finding your location…')
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        if (!leaflet || !map || !householdLayer) return
+        householdLayer.clearLayers()
+        leaflet
+          .circle([coords.latitude, coords.longitude], {
+            radius: coords.accuracy,
+            color: '#315f73',
+            weight: 1,
+            fillColor: '#315f73',
+            fillOpacity: 0.1,
+          })
+          .addTo(householdLayer)
+        leaflet
+          .circleMarker([coords.latitude, coords.longitude], {
+            radius: 7,
+            color: '#faf9f4',
+            weight: 3,
+            fillColor: '#315f73',
+            fillOpacity: 1,
+          })
+          .bindTooltip(`You · ±${Math.round(coords.accuracy)} m`)
+          .addTo(householdLayer)
+        map.setView(
+          [coords.latitude, coords.longitude],
+          Math.max(map.getZoom(), 16),
+        )
+        setLocationState('available')
+        setLocationMessage(
+          `Live location accuracy ±${Math.round(coords.accuracy)} m`,
+        )
+      },
+      (error) => {
+        setLocationState('unavailable')
+        setLocationMessage(
+          error.code === error.PERMISSION_DENIED
+            ? 'Location access denied. Map and field notes remain usable.'
+            : error.code === error.TIMEOUT
+              ? 'Location timed out. Map and field notes remain usable.'
+              : 'Live location is unavailable. Map and field notes remain usable.',
+        )
+      },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 15_000 },
+    )
+  }
+
+  const toggleFullscreen = async () => {
+    const element = container
+    if (!element) return
+    if (document.fullscreenElement) await document.exitFullscreen()
+    else await element.requestFullscreen()
+  }
+
+  const onFullscreenChange = () => {
+    setFullscreen(document.fullscreenElement === container)
+    requestAnimationFrame(() => map?.invalidateSize())
+  }
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    onCleanup(() =>
+      document.removeEventListener('fullscreenchange', onFullscreenChange),
+    )
+  }
+
   return (
     <div
-      ref={init}
-      class="h-80 w-full border border-[#17231d]/15"
-      aria-label="Map of Candidate Plots"
-    />
+      ref={container}
+      class="relative h-80 w-full border border-[#17231d]/15 bg-[#f6f4ec] fullscreen:h-screen"
+    >
+      <div
+        ref={init}
+        class="h-full w-full"
+        aria-label="Map of Candidate Plots"
+      />
+      <div class="absolute left-3 top-3 z-[500] flex max-w-[calc(100%-1.5rem)] flex-wrap gap-2">
+        <button
+          class="min-h-11 border border-[#17231d]/25 bg-[#faf9f4] px-3 text-xs font-bold shadow"
+          disabled={locationState() === 'locating'}
+          onClick={locate}
+        >
+          {locationState() === 'locating' ? 'Locating…' : 'Center on me'}
+        </button>
+        <button
+          class="min-h-11 border border-[#17231d]/25 bg-[#faf9f4] px-3 text-xs font-bold shadow"
+          onClick={() => void toggleFullscreen()}
+        >
+          {fullscreen() ? 'Exit full screen' : 'Full screen'}
+        </button>
+      </div>
+      <Show when={locationMessage()}>
+        <p
+          class="absolute bottom-3 left-3 z-[500] max-w-[calc(100%-5rem)] bg-[#faf9f4] px-3 py-2 text-xs font-bold shadow"
+          role="status"
+        >
+          {locationMessage()}
+        </p>
+      </Show>
+    </div>
   )
 }

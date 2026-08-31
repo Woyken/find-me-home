@@ -43,6 +43,8 @@ function migrate(database: Database.Database) {
       photos_json TEXT NOT NULL DEFAULT '[]',
       utilities_json TEXT NOT NULL DEFAULT '{}',
       raw_json TEXT,
+      source_plan_latitude REAL,
+      source_plan_longitude REAL,
       visited_at TEXT,
       visit_plan_position INTEGER,
       imported_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -129,6 +131,15 @@ function migrate(database: Database.Database) {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `)
+
+  const sourceListingColumns = database
+    .prepare(`pragma table_info(source_listings)`)
+    .all() as Array<{ name: string }>
+  for (const column of ['source_plan_latitude', 'source_plan_longitude']) {
+    if (!sourceListingColumns.some((existing) => existing.name === column)) {
+      database.exec(`ALTER TABLE source_listings ADD COLUMN ${column} REAL`)
+    }
+  }
 
   const candidatePlotColumns = database
     .prepare(`pragma table_info(candidate_plots)`)

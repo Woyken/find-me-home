@@ -23,6 +23,9 @@ export interface SourceListingSummary {
   areaAres: number | null
   visitedAt: string | null
   visitPlanPosition: number | null
+  mapLatitude: number | null
+  mapLongitude: number | null
+  mapSource: 'candidate_plot' | 'advertisement_plan' | null
 }
 
 export interface SourceListingDetail extends SourceListingSummary {
@@ -78,10 +81,13 @@ export function listSourceListings(): Array<SourceListingSummary> {
       `SELECT source_listings.id, source_listings.source_id, source_listings.url,
               source_listings.title, source_listings.address,
               source_listings.photos_json, source_listings.visited_at,
+              source_listings.source_plan_latitude,
+              source_listings.source_plan_longitude,
               source_listings.visit_plan_position, COUNT(candidate_plots.id) AS plot_count,
                default_plot.price_eur, default_plot.area_ares,
                default_plot.address_clue, default_plot.parcel_number_clue,
-               default_plot.latitude_clue, default_plot.longitude_clue
+               default_plot.latitude_clue, default_plot.longitude_clue,
+               positioned_plot.resolved_latitude, positioned_plot.resolved_longitude
        FROM source_listings
        LEFT JOIN candidate_plots
          ON candidate_plots.source_listing_id = source_listings.id
@@ -89,6 +95,14 @@ export function listSourceListings(): Array<SourceListingSummary> {
          ON default_plot.id = (
            SELECT id FROM candidate_plots
            WHERE source_listing_id = source_listings.id ORDER BY id LIMIT 1
+         )
+       LEFT JOIN candidate_plots AS positioned_plot
+         ON positioned_plot.id = (
+           SELECT id FROM candidate_plots
+           WHERE source_listing_id = source_listings.id
+             AND resolved_latitude IS NOT NULL AND resolved_longitude IS NOT NULL
+           ORDER BY CASE WHEN resolved_boundary_json IS NOT NULL THEN 0 ELSE 1 END, id
+           LIMIT 1
          )
        GROUP BY source_listings.id
        ORDER BY source_listings.updated_at DESC, source_listings.id DESC`,
@@ -109,6 +123,10 @@ export function listSourceListings(): Array<SourceListingSummary> {
     parcel_number_clue: string | null
     latitude_clue: number | null
     longitude_clue: number | null
+    source_plan_latitude: number | null
+    source_plan_longitude: number | null
+    resolved_latitude: number | null
+    resolved_longitude: number | null
   }>
 
   return rows.map((row) => ({
@@ -129,6 +147,15 @@ export function listSourceListings(): Array<SourceListingSummary> {
     areaAres: row.area_ares,
     visitedAt: row.visited_at,
     visitPlanPosition: row.visit_plan_position,
+    mapLatitude: row.resolved_latitude,
+    mapLongitude: row.resolved_longitude,
+    mapSource:
+      row.resolved_latitude !== null && row.resolved_longitude !== null
+        ? 'candidate_plot'
+        : row.source_plan_latitude !== null &&
+            row.source_plan_longitude !== null
+          ? 'advertisement_plan'
+          : null,
   }))
 }
 
@@ -435,7 +462,8 @@ export function saveImportDraft(input: {
       database
         .prepare(
           `UPDATE source_listings SET url = ?, title = ?, address = ?, description = ?,
-             photos_json = ?, utilities_json = ?, raw_json = ?, updated_at = datetime('now')
+              photos_json = ?, utilities_json = ?, raw_json = ?,
+              source_plan_latitude = ?, source_plan_longitude = ?, updated_at = datetime('now')
            WHERE id = ?`,
         )
         .run(
@@ -446,6 +474,8 @@ export function saveImportDraft(input: {
           JSON.stringify(imported.photos),
           JSON.stringify(imported.utilities ?? {}),
           JSON.stringify(imported.raw),
+          imported.lat ?? null,
+          imported.lng ?? null,
           sourceListingId,
         )
       invalidateSourceListingAutomaticChecks(sourceListingId)
@@ -455,8 +485,8 @@ export function saveImportDraft(input: {
           .prepare(
             `INSERT INTO source_listings
                (source, source_id, url, title, address, description, photos_json,
-                utilities_json, raw_json)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 utilities_json, raw_json, source_plan_latitude, source_plan_longitude)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .run(
             imported.source,
@@ -468,6 +498,8 @@ export function saveImportDraft(input: {
             JSON.stringify(imported.photos),
             JSON.stringify(imported.utilities ?? {}),
             JSON.stringify(imported.raw),
+            imported.lat ?? null,
+            imported.lng ?? null,
           ).lastInsertRowid,
       )
       const importedLocation = chooseImportedLocationClue({

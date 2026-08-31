@@ -1,5 +1,6 @@
 import { Link, createFileRoute, useRouter } from '@tanstack/solid-router'
 import { For, Show, createSignal } from 'solid-js'
+import { VisitPlanMap } from '../components/VisitPlanMap'
 import {
   fetchVisitPlan,
   reorderVisitPlan,
@@ -17,6 +18,7 @@ function VisitPlanPage() {
   const plan = Route.useLoaderData()
   const router = useRouter()
   const [busyId, setBusyId] = createSignal<number | null>(null)
+  const [view, setView] = createSignal<'list' | 'map'>('list')
 
   const move = async (index: number, offset: -1 | 1) => {
     const destination = index + offset
@@ -56,9 +58,28 @@ function VisitPlanPage() {
             </p>
             <h1 class="mt-2 font-serif text-4xl sm:text-5xl">Visit Plan</h1>
           </div>
-          <p class="mt-4 font-mono text-xs sm:mt-0">
-            {plan().length} {plan().length === 1 ? 'stop' : 'stops'}
-          </p>
+          <div class="mt-4 flex items-center gap-4 sm:mt-0">
+            <p class="font-mono text-xs">
+              {plan().length} {plan().length === 1 ? 'stop' : 'stops'}
+            </p>
+            <div
+              class="flex border border-[#18241e]"
+              aria-label="Visit Plan view"
+            >
+              <ViewButton
+                selected={view() === 'list'}
+                onClick={() => setView('list')}
+              >
+                List
+              </ViewButton>
+              <ViewButton
+                selected={view() === 'map'}
+                onClick={() => setView('map')}
+              >
+                Map
+              </ViewButton>
+            </div>
+          </div>
         </header>
 
         <Show
@@ -79,23 +100,44 @@ function VisitPlanPage() {
             </section>
           }
         >
-          <ol class="border-b border-[#18241e] bg-[#faf9f4]">
-            <For each={plan()}>
-              {(listing, index) => (
-                <VisitPlanEntry
-                  listing={listing}
-                  index={index()}
-                  count={plan().length}
-                  busy={busyId() !== null}
-                  onMove={(offset) => move(index(), offset)}
-                  onRemove={() => remove(listing.id)}
-                />
-              )}
-            </For>
-          </ol>
+          <Show
+            when={view() === 'list'}
+            fallback={<VisitPlanMap listings={plan()} />}
+          >
+            <ol class="border-b border-[#18241e] bg-[#faf9f4]">
+              <For each={plan()}>
+                {(listing, index) => (
+                  <VisitPlanEntry
+                    listing={listing}
+                    index={index()}
+                    count={plan().length}
+                    busy={busyId() !== null}
+                    onMove={(offset) => move(index(), offset)}
+                    onRemove={() => remove(listing.id)}
+                  />
+                )}
+              </For>
+            </ol>
+          </Show>
         </Show>
       </div>
     </main>
+  )
+}
+
+function ViewButton(props: {
+  selected: boolean
+  onClick: () => void
+  children: string
+}) {
+  return (
+    <button
+      class={`min-h-11 px-4 text-sm font-bold ${props.selected ? 'bg-[#18241e] text-white' : 'bg-[#faf9f4]'}`}
+      aria-pressed={props.selected ? 'true' : 'false'}
+      onClick={props.onClick}
+    >
+      {props.children}
+    </button>
   )
 }
 

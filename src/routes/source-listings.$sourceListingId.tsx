@@ -61,15 +61,6 @@ function SourceListingPage() {
           ],
     ),
   )
-  const mapRenderKey = createMemo(
-    () =>
-      `${selectedPlot().id}:${positionedPlots()
-        .map(
-          (plot) =>
-            `${plot.id}:${plot.latitude}:${plot.longitude}:${JSON.stringify(plot.boundary)}`,
-        )
-        .join('|')}`,
-  )
   const selectPlot = (plotId: number) => {
     setSelectedPlotId(plotId)
     setPlotSearch('')
@@ -194,18 +185,22 @@ function SourceListingPage() {
                 </Show>
                 <Show when={positionedPlots().length > 0}>
                   <div class="mt-5">
-                    <Show when={mapRenderKey()} keyed>
-                      {(renderKey) => (
-                        <CandidatePlotsMap
-                          plots={positionedPlots()}
-                          selectedPlotId={Number(renderKey.split(':')[0])}
-                          onSelect={selectPlot}
-                        />
-                      )}
-                    </Show>
+                    <CandidatePlotsMap
+                      plots={positionedPlots()}
+                      selectedPlotId={selectedPlot().id}
+                      onSelect={selectPlot}
+                    />
                     <p class="mt-2 text-xs text-[#607067]">
                       Select a boundary, approximate location, or address below.
                     </p>
+                  </div>
+                </Show>
+                <Show when={item().mapSource === 'advertisement_plan'}>
+                  <div class="mt-5 border border-dashed border-[#765516] bg-[#f6e9ce] p-4 text-sm text-[#765516]">
+                    <b>Advertisement plan reference only.</b> It is not a
+                    Candidate Plot location and is intentionally not selectable
+                    or positioned on the field map. Use the address index below
+                    to choose a Candidate Plot.
                   </div>
                 </Show>
                 <div class="mt-5">
