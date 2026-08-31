@@ -1,6 +1,6 @@
 import { Link, createFileRoute, useRouter } from '@tanstack/solid-router'
 import { For, Show, createMemo, createSignal } from 'solid-js'
-import { CandidatePlotMap } from '../components/CandidatePlotMap'
+import { CandidatePlotsMap } from '../components/CandidatePlotsMap'
 import {
   addCandidatePlot,
   deleteSavedSourceListing,
@@ -41,6 +41,33 @@ function SourceListingPage() {
       plotSearchText(plot, index).toLocaleLowerCase().includes(query),
     )
   })
+  const positionedPlots = createMemo(() =>
+    plots().flatMap((plot) =>
+      plot.resolvedLatitude === null ||
+      plot.resolvedLongitude === null ||
+      plot.resolvedPrecision === null
+        ? []
+        : [
+            {
+              id: plot.id,
+              label: compactPlotLabel(plot),
+              latitude: plot.resolvedLatitude,
+              longitude: plot.resolvedLongitude,
+              boundary: plot.resolvedBoundary,
+              precision: plot.resolvedPrecision,
+            },
+          ],
+    ),
+  )
+  const mapRenderKey = createMemo(
+    () =>
+      `${selectedPlot().id}:${positionedPlots()
+        .map(
+          (plot) =>
+            `${plot.id}:${plot.latitude}:${plot.longitude}:${JSON.stringify(plot.boundary)}`,
+        )
+        .join('|')}`,
+  )
   const selectPlot = (plotId: number) => {
     setSelectedPlotId(plotId)
     setPlotSearch('')
@@ -141,6 +168,22 @@ function SourceListingPage() {
                   <p class="mt-3 text-sm font-bold text-[#a13d22]">
                     {plotError()}
                   </p>
+                </Show>
+                <Show when={positionedPlots().length > 0}>
+                  <div class="mt-5">
+                    <Show when={mapRenderKey()} keyed>
+                      {(renderKey) => (
+                        <CandidatePlotsMap
+                          plots={positionedPlots()}
+                          selectedPlotId={Number(renderKey.split(':')[0])}
+                          onSelect={selectPlot}
+                        />
+                      )}
+                    </Show>
+                    <p class="mt-2 text-xs text-[#607067]">
+                      Select a boundary, approximate location, or address below.
+                    </p>
+                  </div>
                 </Show>
                 <div class="mt-5">
                   <div class="flex items-center justify-between gap-3">
@@ -312,6 +355,12 @@ function plotAddressLabel(plot: CandidatePlot) {
         : null) ??
     'Unpositioned plot'
   )
+}
+
+function compactPlotLabel(plot: CandidatePlot) {
+  const address = plot.resolvedAddress ?? plot.addressClue
+  if (address) return address.split(' — ')[0]
+  return plot.resolvedParcelNumber ?? plot.parcelNumberClue ?? 'Candidate Plot'
 }
 
 function plotPositionLabel(plot: CandidatePlot) {
@@ -630,12 +679,6 @@ function CandidatePlotCard(props: {
                 value={props.plot.resolvedCadastralNumber ?? 'Unavailable'}
               />
             </div>
-            <CandidatePlotMap
-              lat={props.plot.resolvedLatitude!}
-              lng={props.plot.resolvedLongitude!}
-              boundary={props.plot.resolvedBoundary}
-              precision={props.plot.resolvedPrecision!}
-            />
           </div>
         </Show>
       </section>
