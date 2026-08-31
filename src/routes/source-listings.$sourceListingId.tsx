@@ -473,6 +473,11 @@ function CandidatePlotCard(props: {
   const [viewRating, setViewRating] = createSignal(
     props.plot.viewRating?.toString() ?? '',
   )
+  const hasRecordedLocationClue =
+    props.plot.parcelNumberClue !== null ||
+    props.plot.latitudeClue !== null ||
+    props.plot.longitudeClue !== null ||
+    props.plot.addressClue !== null
   const [busy, setBusy] = createSignal(false)
   const [error, setError] = createSignal('')
   const [saved, setSaved] = createSignal(false)
@@ -672,13 +677,17 @@ function CandidatePlotCard(props: {
         </div>
       </section>
 
-      <section class="mt-6 border-t border-[#17231d]/10 pt-5">
-        <div class="flex items-baseline justify-between gap-4">
+      <details
+        class="group mt-6 border-t border-[#17231d]/10 pt-5"
+        open={hasRecordedLocationClue ? undefined : true}
+      >
+        <summary class="flex cursor-pointer list-none items-baseline justify-between gap-4 marker:hidden">
           <h4 class="font-serif text-xl">Recorded Location Clue</h4>
-          <span class="font-mono text-[9px] uppercase tracking-[0.14em] text-[#748078]">
-            Choose one
+          <span class="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[#748078]">
+            <span class="group-open:hidden">Edit location</span>
+            <span class="hidden group-open:inline">Close editor</span>
           </span>
-        </div>
+        </summary>
         <div class="mt-4 grid grid-cols-3 border border-[#17231d]/20">
           <ClueTypeButton
             kind="registry"
@@ -751,7 +760,7 @@ function CandidatePlotCard(props: {
             <span class="text-sm text-[#526058]">Saved</span>
           </Show>
         </div>
-      </section>
+      </details>
 
       <section class="mt-6 border-t border-[#17231d]/10 pt-5">
         <h4 class="font-serif text-xl">Effective Location</h4>
@@ -815,7 +824,7 @@ function CandidatePlotCard(props: {
             }}
           />
         </label>
-        <div class="mt-4 grid gap-4 sm:grid-cols-3">
+        <div class="mt-5 space-y-5">
           <RatingField
             label="Road/access"
             value={roadAccessRating()}
@@ -892,21 +901,49 @@ function RatingField(props: {
   value: string
   onInput: (value: string) => void
 }) {
+  const selectedRating = () => Number(props.value) || 0
+
   return (
-    <label class="text-sm font-bold">
-      {props.label}
-      <select
-        name={props.label.toLowerCase().replace(/[^a-z]+/g, '-')}
-        class="mt-2 w-full border border-[#17231d]/25 bg-white px-3 py-3 font-normal outline-none focus:border-[#315f73]"
-        value={props.value}
-        onChange={(event) => props.onInput(event.currentTarget.value)}
+    <div>
+      <div class="mb-2 flex items-center justify-between gap-3">
+        <span class="text-sm font-bold">{props.label}</span>
+        <Show
+          when={selectedRating() > 0}
+          fallback={<span class="text-xs text-[#748078]">Not rated</span>}
+        >
+          <button
+            class="text-xs font-bold text-[#526058] underline"
+            aria-label={`Clear ${props.label} rating`}
+            onClick={() => props.onInput('')}
+          >
+            {selectedRating()} / 5 · Clear
+          </button>
+        </Show>
+      </div>
+      <div
+        class="grid grid-cols-5 gap-2"
+        role="radiogroup"
+        aria-label={props.label}
       >
-        <option value="">Not rated</option>
         <For each={[1, 2, 3, 4, 5]}>
-          {(rating) => <option value={rating}>{rating} / 5</option>}
+          {(rating) => (
+            <button
+              class={`min-h-11 border text-lg font-bold ${
+                rating <= selectedRating()
+                  ? 'border-[#24483a] bg-[#24483a] text-white'
+                  : 'border-[#17231d]/25 bg-[#f6f4ec] text-[#748078]'
+              }`}
+              role="radio"
+              aria-label={`${props.label}: ${rating} of 5`}
+              aria-checked={rating === selectedRating() ? 'true' : 'false'}
+              onClick={() => props.onInput(String(rating))}
+            >
+              {rating}
+            </button>
+          )}
         </For>
-      </select>
-    </label>
+      </div>
+    </div>
   )
 }
 
