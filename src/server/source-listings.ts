@@ -539,19 +539,40 @@ export function setVisitPlanMembership(id: number, included: boolean) {
           `UPDATE source_listings SET visit_plan_position = NULL WHERE id = ?`,
         )
         .run(id)
-      const planned = database
-        .prepare(
-          `SELECT id FROM source_listings WHERE visit_plan_position IS NOT NULL
-           ORDER BY visit_plan_position`,
-        )
-        .all() as Array<{ id: number }>
-      const position = database.prepare(
-        `UPDATE source_listings SET visit_plan_position = ? WHERE id = ?`,
-      )
-      planned.forEach((item, index) => position.run(index + 1, item.id))
+      compactVisitPlan(database)
     }
   })
   update()
+}
+
+export function markSourceListingVisited(id: number) {
+  const database = getDb()
+  const update = database.transaction(() => {
+    const result = database
+      .prepare(
+        `UPDATE source_listings
+         SET visited_at = datetime('now'), visit_plan_position = NULL
+         WHERE id = ?`,
+      )
+      .run(id)
+    if (result.changes === 0) throw new Error('Source Listing not found')
+
+    compactVisitPlan(database)
+  })
+  update()
+}
+
+function compactVisitPlan(database: ReturnType<typeof getDb>) {
+  const planned = database
+    .prepare(
+      `SELECT id FROM source_listings WHERE visit_plan_position IS NOT NULL
+       ORDER BY visit_plan_position`,
+    )
+    .all() as Array<{ id: number }>
+  const setPosition = database.prepare(
+    `UPDATE source_listings SET visit_plan_position = ? WHERE id = ?`,
+  )
+  planned.forEach((item, index) => setPosition.run(index + 1, item.id))
 }
 
 export function deleteSourceListing(id: number) {

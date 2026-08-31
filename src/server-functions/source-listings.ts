@@ -6,6 +6,7 @@ import {
   getSourceListing,
   listSourceListings,
   listVisitPlan,
+  markSourceListingVisited,
   saveImportDraft,
   setVisitPlanMembership,
   setVisitPlanOrder,
@@ -214,6 +215,18 @@ export const updateVisitPlan = createServerFn({ method: 'POST' })
   })
   .handler(({ data }) => {
     setVisitPlanMembership(data.id, data.included)
+    return { updated: true as const }
+  })
+
+export const markVisited = createServerFn({ method: 'POST' })
+  .validator((data: { id: number }) => {
+    if (!Number.isSafeInteger(data.id) || data.id <= 0) {
+      throw new Error('Source Listing ID must be a positive integer')
+    }
+    return data
+  })
+  .handler(({ data }) => {
+    markSourceListingVisited(data.id)
     return { updated: true as const }
   })
 

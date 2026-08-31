@@ -1,10 +1,11 @@
 import { Link, createFileRoute, useRouter } from '@tanstack/solid-router'
-import { For, Show, createMemo, createSignal } from 'solid-js'
+import { For, Show, createMemo, createSignal, onCleanup } from 'solid-js'
 import { CandidatePlotsMap } from '../components/CandidatePlotsMap'
 import {
   addCandidatePlot,
   deleteSavedSourceListing,
   fetchSourceListing,
+  markVisited,
   saveCandidatePlotFacts,
   saveCandidatePlotHouseholdNotes,
   saveCandidatePlotLocation,
@@ -24,6 +25,7 @@ function SourceListingPage() {
   const router = useRouter()
   const [busy, setBusy] = createSignal(false)
   const [deleteError, setDeleteError] = createSignal('')
+  const [visitError, setVisitError] = createSignal('')
   const [selectedPlotId, setSelectedPlotId] = createSignal<number | null>(null)
   const [plotSearch, setPlotSearch] = createSignal('')
   const [plotError, setPlotError] = createSignal('')
@@ -103,6 +105,19 @@ function SourceListingPage() {
       setBusy(false)
     }
   }
+  const completeVisit = async () => {
+    const current = listing()
+    if (!current) return
+    setBusy(true)
+    setVisitError('')
+    try {
+      await markVisited({ data: { id: current.id } })
+      await router.navigate({ to: '/visit-plan' })
+    } catch (caught) {
+      setVisitError(caught instanceof Error ? caught.message : String(caught))
+      setBusy(false)
+    }
+  }
   const remove = async () => {
     const current = listing()
     if (!current) return
@@ -125,9 +140,17 @@ function SourceListingPage() {
       <Show when={listing()} fallback={<p>Source Listing not found.</p>}>
         {(item) => (
           <div class="mx-auto max-w-5xl">
-            <Link class="text-sm font-bold text-[#315f73] underline" to="/">
-              ← Saved Source Listings
-            </Link>
+            <div class="flex flex-wrap gap-x-5 gap-y-2">
+              <Link
+                class="text-sm font-bold text-[#315f73] underline"
+                to="/visit-plan"
+              >
+                ← Visit Plan
+              </Link>
+              <Link class="text-sm font-bold text-[#315f73] underline" to="/">
+                Saved Source Listings
+              </Link>
+            </div>
             <header class="mt-8 border-b border-[#17231d]/20 pb-8">
               <div class="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
                 <div>
@@ -273,6 +296,7 @@ function SourceListingPage() {
                           plot={plot}
                           number={selectedIndex() + 1}
                           sourceListingId={item().id}
+                          sourceListingAddress={item().address}
                         />
                       </>
                     )}
@@ -308,6 +332,28 @@ function SourceListingPage() {
                   >
                     Open original advert
                   </a>
+                </div>
+                <div class="border border-[#24483a] bg-[#e4efe7] p-5">
+                  <p class="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#24483a]">
+                    Visit complete
+                  </p>
+                  <p class="mt-2 text-sm text-[#526058]">
+                    Records the latest visit time and removes this Source
+                    Listing from the Visit Plan. Your Candidate Plot
+                    observations stay saved.
+                  </p>
+                  <Show when={visitError()}>
+                    <p class="mt-3 text-sm font-bold text-[#a13d22]">
+                      {visitError()}
+                    </p>
+                  </Show>
+                  <button
+                    class="mt-4 w-full bg-[#24483a] px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+                    disabled={busy()}
+                    onClick={completeVisit}
+                  >
+                    {busy() ? 'Recording…' : 'Mark Source Listing visited'}
+                  </button>
                 </div>
                 <div class="border border-[#a13d22]/30 bg-[#fff1eb] p-5">
                   <p class="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#a13d22]">
@@ -397,6 +443,7 @@ function CandidatePlotCard(props: {
   plot: CandidatePlot
   number: number
   sourceListingId: number
+  sourceListingAddress: string | null
 }) {
   const router = useRouter()
   const initialClueKind: LocationClueKind = props.plot.parcelNumberClue
@@ -429,6 +476,12 @@ function CandidatePlotCard(props: {
   const [busy, setBusy] = createSignal(false)
   const [error, setError] = createSignal('')
   const [saved, setSaved] = createSignal(false)
+  const [observationState, setObservationState] = createSignal<
+    'idle' | 'pending' | 'saving' | 'saved' | 'error'
+  >('idle')
+  let observationTimer: ReturnType<typeof setTimeout> | undefined
+  let observationQueue = Promise.resolve()
+  let observationRevision = 0
 
   const save = async () => {
     setBusy(true)
@@ -477,25 +530,68 @@ function CandidatePlotCard(props: {
       })
     })
 
-  const saveHouseholdNotes = () =>
-    saveSection(async () => {
-      await saveCandidatePlotHouseholdNotes({
-        data: {
-          sourceListingId: props.sourceListingId,
-          plotId: props.plot.id,
-          notes: optionalText(notes()),
-          roadAccessRating: parseOptionalRating(
-            roadAccessRating(),
-            'Road/access',
-          ),
-          areaFeelingRating: parseOptionalRating(
-            areaFeelingRating(),
-            'Area feeling',
-          ),
-          viewRating: parseOptionalRating(viewRating(), 'View'),
-        },
-      })
+  const saveHouseholdNotes = () => {
+    if (observationTimer) clearTimeout(observationTimer)
+    observationTimer = undefined
+    const revision = observationRevision
+    const data = {
+      sourceListingId: props.sourceListingId,
+      plotId: props.plot.id,
+      notes: optionalText(notes()),
+      roadAccessRating: parseOptionalRating(roadAccessRating(), 'Road/access'),
+      areaFeelingRating: parseOptionalRating(
+        areaFeelingRating(),
+        'Area feeling',
+      ),
+      viewRating: parseOptionalRating(viewRating(), 'View'),
+    }
+    observationQueue = observationQueue.then(async () => {
+      if (revision === observationRevision) setObservationState('saving')
+      try {
+        await saveCandidatePlotHouseholdNotes({ data })
+        if (revision === observationRevision) setObservationState('saved')
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : String(caught))
+        if (revision === observationRevision) setObservationState('error')
+      }
     })
+  }
+
+  const queueHouseholdNotesSave = () => {
+    observationRevision += 1
+    setError('')
+    setObservationState('pending')
+    if (observationTimer) clearTimeout(observationTimer)
+    observationTimer = setTimeout(saveHouseholdNotes, 500)
+  }
+
+  onCleanup(() => {
+    if (observationTimer) saveHouseholdNotes()
+  })
+
+  const directionsDestination = () => {
+    if (
+      props.plot.resolvedLatitude !== null &&
+      props.plot.resolvedLongitude !== null
+    ) {
+      return `${props.plot.resolvedLatitude},${props.plot.resolvedLongitude}`
+    }
+    if (props.plot.latitudeClue !== null && props.plot.longitudeClue !== null) {
+      return `${props.plot.latitudeClue},${props.plot.longitudeClue}`
+    }
+    return (
+      props.plot.resolvedAddress ??
+      props.plot.addressClue ??
+      props.sourceListingAddress
+    )
+  }
+
+  const directionsUrl = () => {
+    const destination = directionsDestination()
+    return destination
+      ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`
+      : null
+  }
 
   async function saveSection(action: () => Promise<void>) {
     setBusy(true)
@@ -520,6 +616,25 @@ function CandidatePlotCard(props: {
       <h3 class="mt-2 font-serif text-2xl">
         {props.plot.name ?? 'Candidate Plot'}
       </h3>
+      <Show
+        when={directionsUrl()}
+        fallback={
+          <p class="mt-3 text-sm text-[#748078]">
+            Add a location to make directions available.
+          </p>
+        }
+      >
+        {(url) => (
+          <a
+            class="mt-3 inline-block text-sm font-bold text-[#315f73] underline"
+            href={url()}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open directions for this Candidate Plot
+          </a>
+        )}
+      </Show>
       <section class="mt-5 grid gap-4 sm:grid-cols-3">
         <LocationField
           label="Price (€)"
@@ -694,41 +809,56 @@ function CandidatePlotCard(props: {
             name="candidate-plot-notes"
             class="mt-2 min-h-24 w-full border border-[#17231d]/25 bg-transparent px-3 py-3 font-normal outline-none focus:border-[#315f73]"
             value={notes()}
-            onInput={(event) => setNotes(event.currentTarget.value)}
+            onInput={(event) => {
+              setNotes(event.currentTarget.value)
+              queueHouseholdNotesSave()
+            }}
           />
         </label>
         <div class="mt-4 grid gap-4 sm:grid-cols-3">
           <RatingField
             label="Road/access"
             value={roadAccessRating()}
-            onInput={setRoadAccessRating}
+            onInput={(value) => {
+              setRoadAccessRating(value)
+              queueHouseholdNotesSave()
+            }}
           />
           <RatingField
             label="Area feeling"
             value={areaFeelingRating()}
-            onInput={setAreaFeelingRating}
+            onInput={(value) => {
+              setAreaFeelingRating(value)
+              queueHouseholdNotesSave()
+            }}
           />
           <RatingField
             label="View"
             value={viewRating()}
-            onInput={setViewRating}
+            onInput={(value) => {
+              setViewRating(value)
+              queueHouseholdNotesSave()
+            }}
           />
         </div>
         <Show when={error()}>
           <p class="mt-3 text-sm font-bold text-[#a13d22]">{error()}</p>
         </Show>
-        <div class="mt-4 flex items-center gap-3">
-          <button
-            class="bg-[#24483a] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
-            disabled={busy()}
-            onClick={saveHouseholdNotes}
-          >
-            {busy() ? 'Saving…' : 'Save notes and ratings'}
-          </button>
-          <Show when={saved()}>
-            <span class="text-sm text-[#526058]">Saved</span>
-          </Show>
-        </div>
+        <p
+          class="mt-4 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#526058]"
+          role="status"
+          aria-live="polite"
+        >
+          {observationState() === 'pending'
+            ? 'Pending…'
+            : observationState() === 'saving'
+              ? 'Saving…'
+              : observationState() === 'saved'
+                ? 'Saved'
+                : observationState() === 'error'
+                  ? 'Not saved'
+                  : 'Autosaves as you edit'}
+        </p>
       </section>
     </article>
   )
