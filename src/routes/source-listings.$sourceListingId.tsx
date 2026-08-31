@@ -126,7 +126,7 @@ function SourceListingPage() {
               </div>
             </header>
             <div class="mt-8 grid gap-8 lg:grid-cols-[1fr_18rem]">
-              <section>
+              <section class="min-w-0">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <h2 class="font-serif text-3xl">Candidate Plots</h2>
                   <button
@@ -142,94 +142,96 @@ function SourceListingPage() {
                     {plotError()}
                   </p>
                 </Show>
-                <div class="mt-5 border border-[#17231d]/20 bg-[#e7edf0] p-4 sm:p-5">
-                  <label class="block font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#52616a]">
-                    Find a Candidate Plot
-                    <input
-                      type="search"
-                      autocomplete="off"
-                      class="mt-2 w-full border border-[#17231d]/25 bg-white px-3 py-3 font-sans text-sm font-normal normal-case tracking-normal outline-none focus:border-[#315f73]"
-                      value={plotSearch()}
-                      placeholder="Search address, parcel number, or plot"
-                      onInput={(event) =>
-                        setPlotSearch(event.currentTarget.value)
-                      }
-                    />
-                  </label>
-                  <label class="mt-3 block font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#52616a]">
-                    Selected Candidate Plot
-                    <select
-                      class="mt-2 w-full border border-[#17231d]/25 bg-white px-3 py-3 font-sans text-sm font-bold normal-case tracking-normal outline-none focus:border-[#315f73]"
-                      value={
-                        filteredPlots().some(
-                          (plot) => plot.id === selectedPlot().id,
-                        )
-                          ? selectedPlot().id
-                          : ''
-                      }
-                      onChange={(event) =>
-                        selectPlot(Number(event.currentTarget.value))
-                      }
-                    >
-                      <Show
-                        when={
-                          plotSearch().trim() &&
-                          !filteredPlots().some(
-                            (plot) => plot.id === selectedPlot().id,
-                          )
+                <div class="mt-5">
+                  <div class="flex items-center justify-between gap-3">
+                    <p class="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#52616a]">
+                      {plots().length} Candidate Plots
+                    </p>
+                    <Show when={plots().length > 6}>
+                      <input
+                        type="search"
+                        aria-label="Find Candidate Plot by address"
+                        autocomplete="off"
+                        class="min-w-0 flex-1 border border-[#17231d]/25 bg-white px-3 py-2 text-sm outline-none focus:border-[#315f73]"
+                        value={plotSearch()}
+                        placeholder="Find address…"
+                        onInput={(event) =>
+                          setPlotSearch(event.currentTarget.value)
                         }
-                      >
-                        <option value="" disabled>
-                          Choose a matching Candidate Plot
-                        </option>
-                      </Show>
-                      <For each={filteredPlots()}>
-                        {(plot) => (
-                          <option value={plot.id}>
-                            {plotSelectorLabel(plot, plots().indexOf(plot))}
-                          </option>
-                        )}
-                      </For>
-                    </select>
-                  </label>
+                      />
+                    </Show>
+                  </div>
+                  <div
+                    class={`mt-2 gap-2 ${
+                      plots().length > 6
+                        ? 'flex snap-x overflow-x-auto pb-2'
+                        : 'grid grid-cols-2 sm:grid-cols-3'
+                    }`}
+                  >
+                    <For each={filteredPlots()}>
+                      {(plot) => (
+                        <button
+                          class={`snap-start border p-3 text-left ${
+                            plots().length > 6 ? 'min-w-32' : ''
+                          } ${
+                            selectedPlot().id === plot.id
+                              ? 'border-[#24483a] bg-[#e4efe7]'
+                              : 'border-[#17231d]/20 bg-white'
+                          }`}
+                          aria-pressed={
+                            selectedPlot().id === plot.id ? 'true' : 'false'
+                          }
+                          onClick={() => selectPlot(plot.id)}
+                        >
+                          <b class="block truncate text-sm">
+                            {plotAddressLabel(plot)}
+                          </b>
+                          <span class="mt-1 block text-[10px] leading-tight text-[#607067]">
+                            {plotPositionLabel(plot)}
+                          </span>
+                        </button>
+                      )}
+                    </For>
+                  </div>
                   <Show when={filteredPlots().length === 0}>
-                    <p class="mt-2 text-xs text-[#607067]">
-                      No Candidate Plots match this search. Clear it to see all
-                      plots.
+                    <p class="py-4 text-center text-sm text-[#607067]">
+                      No matching address
                     </p>
                   </Show>
-                  <div class="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                    <button
-                      class="border border-[#24483a] px-3 py-2 text-sm font-bold text-[#24483a] disabled:opacity-35"
-                      disabled={selectedIndex() === 0}
-                      onClick={() =>
-                        selectPlot(plots()[selectedIndex() - 1].id)
-                      }
-                    >
-                      ← Previous
-                    </button>
-                    <span class="font-mono text-[10px] text-[#607067]">
-                      {selectedIndex() + 1} / {plots().length}
-                    </span>
-                    <button
-                      class="border border-[#24483a] px-3 py-2 text-sm font-bold text-[#24483a] disabled:opacity-35"
-                      disabled={selectedIndex() >= plots().length - 1}
-                      onClick={() =>
-                        selectPlot(plots()[selectedIndex() + 1].id)
-                      }
-                    >
-                      Next →
-                    </button>
-                  </div>
                 </div>
                 <div class="mt-4">
                   <Show when={selectedPlot()} keyed>
                     {(plot) => (
-                      <CandidatePlotCard
-                        plot={plot}
-                        number={selectedIndex() + 1}
-                        sourceListingId={item().id}
-                      />
+                      <>
+                        <div class="mb-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                          <button
+                            class="border border-[#24483a] px-3 py-2 text-sm font-bold text-[#24483a] disabled:opacity-35"
+                            disabled={selectedIndex() === 0}
+                            onClick={() =>
+                              selectPlot(plots()[selectedIndex() - 1].id)
+                            }
+                          >
+                            ← Previous
+                          </button>
+                          <span class="font-mono text-[10px] text-[#607067]">
+                            {selectedIndex() + 1} / {plots().length}
+                          </span>
+                          <button
+                            class="border border-[#24483a] px-3 py-2 text-sm font-bold text-[#24483a] disabled:opacity-35"
+                            disabled={selectedIndex() >= plots().length - 1}
+                            onClick={() =>
+                              selectPlot(plots()[selectedIndex() + 1].id)
+                            }
+                          >
+                            Next →
+                          </button>
+                        </div>
+                        <CandidatePlotCard
+                          plot={plot}
+                          number={selectedIndex() + 1}
+                          sourceListingId={item().id}
+                        />
+                      </>
                     )}
                   </Show>
                 </div>
@@ -296,8 +298,8 @@ function SourceListingPage() {
 type CandidatePlot = SourceListingDetail['candidatePlots'][number]
 type LocationClueKind = 'registry' | 'coordinates' | 'address'
 
-function plotSelectorLabel(plot: CandidatePlot, index: number) {
-  const displayLocation =
+function plotAddressLabel(plot: CandidatePlot) {
+  return (
     plot.resolvedAddress ??
     plot.addressClue ??
     plot.resolvedParcelNumber ??
@@ -307,13 +309,27 @@ function plotSelectorLabel(plot: CandidatePlot, index: number) {
       ? `${plot.resolvedLatitude}, ${plot.resolvedLongitude}`
       : plot.latitudeClue !== null && plot.longitudeClue !== null
         ? `${plot.latitudeClue}, ${plot.longitudeClue}`
-        : null)
-  return `${index + 1}. ${displayLocation ?? 'Unpositioned Candidate Plot'}`
+        : null) ??
+    'Unpositioned plot'
+  )
+}
+
+function plotPositionLabel(plot: CandidatePlot) {
+  if (plot.resolvedBoundary) return 'Boundary available'
+  if (
+    plot.resolvedLatitude !== null ||
+    plot.latitudeClue !== null ||
+    plot.addressClue
+  ) {
+    return 'Location only'
+  }
+  return 'No location yet'
 }
 
 function plotSearchText(plot: CandidatePlot, index: number) {
   return [
-    plotSelectorLabel(plot, index),
+    index + 1,
+    plotAddressLabel(plot),
     plot.name,
     plot.addressClue,
     plot.resolvedAddress,
