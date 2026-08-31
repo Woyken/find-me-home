@@ -9,9 +9,15 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as FieldVisitPrototypeRouteImport } from './routes/field-visit-prototype'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiAruodasImportRouteImport } from './routes/api/aruodas-import'
 
+const FieldVisitPrototypeRoute = FieldVisitPrototypeRouteImport.update({
+  id: '/field-visit-prototype',
+  path: '/field-visit-prototype',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -25,32 +31,43 @@ const ApiAruodasImportRoute = ApiAruodasImportRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/field-visit-prototype': typeof FieldVisitPrototypeRoute
   '/api/aruodas-import': typeof ApiAruodasImportRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/field-visit-prototype': typeof FieldVisitPrototypeRoute
   '/api/aruodas-import': typeof ApiAruodasImportRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/field-visit-prototype': typeof FieldVisitPrototypeRoute
   '/api/aruodas-import': typeof ApiAruodasImportRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/aruodas-import'
+  fullPaths: '/' | '/field-visit-prototype' | '/api/aruodas-import'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/aruodas-import'
-  id: '__root__' | '/' | '/api/aruodas-import'
+  to: '/' | '/field-visit-prototype' | '/api/aruodas-import'
+  id: '__root__' | '/' | '/field-visit-prototype' | '/api/aruodas-import'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  FieldVisitPrototypeRoute: typeof FieldVisitPrototypeRoute
   ApiAruodasImportRoute: typeof ApiAruodasImportRoute
 }
 
 declare module '@tanstack/solid-router' {
   interface FileRoutesByPath {
+    '/field-visit-prototype': {
+      id: '/field-visit-prototype'
+      path: '/field-visit-prototype'
+      fullPath: '/field-visit-prototype'
+      preLoaderRoute: typeof FieldVisitPrototypeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -70,6 +87,7 @@ declare module '@tanstack/solid-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  FieldVisitPrototypeRoute: FieldVisitPrototypeRoute,
   ApiAruodasImportRoute: ApiAruodasImportRoute,
 }
 export const routeTree = rootRouteImport
