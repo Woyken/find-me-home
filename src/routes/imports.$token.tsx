@@ -129,6 +129,23 @@ function ReviewSheet(props: {
           <p class="mt-3 text-sm text-[#dce7d5]">
             {imported.address ?? 'No location imported'}
           </p>
+          <Show when={imported.lat !== undefined && imported.lng !== undefined}>
+            <div class="mt-5 border border-[#dce7d5]/35 p-4">
+              <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-[#bfd0c2]">
+                {imported.locationConfidence === 'approx'
+                  ? 'Approximate location'
+                  : 'Location'}
+              </p>
+              <a
+                class="mt-2 block font-bold underline"
+                href={`https://www.google.com/maps/dir/?api=1&destination=${imported.lat},${imported.lng}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {imported.lat}, {imported.lng} · Open directions
+              </a>
+            </div>
+          </Show>
           <a
             class="mt-6 inline-block text-sm font-bold underline"
             href={imported.url}

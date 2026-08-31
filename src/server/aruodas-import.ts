@@ -220,6 +220,13 @@ export function createImportDraft(payloadText: unknown, key: unknown) {
     throw new Error('import payload is not JSON')
   }
   const imported = parseAruodasImport(payload)
+  console.info('[aruodas-import] extracted draft', {
+    sourceId: imported.sourceId,
+    hasAddress: Boolean(imported.address),
+    hasCoordinates: imported.lat !== undefined && imported.lng !== undefined,
+    locationConfidence: imported.locationConfidence,
+    photoCount: imported.photos.length,
+  })
   const token = randomBytes(24).toString('base64url')
   const database = getDb()
   database
@@ -241,7 +248,15 @@ export function createImportDraft(payloadText: unknown, key: unknown) {
 }
 
 export function createAruodasBookmarklet(endpoint: string, key: string) {
-  return `javascript:${bookmarkletSource
+  const scriptUrl = new URL('/api/aruodas-bookmarklet.js', endpoint)
+  scriptUrl.searchParams.set('key', key)
+  const loader = `(()=>{const s=document.createElement("script");s.src=${JSON.stringify(scriptUrl.toString())};s.onerror=()=>alert("Find Me Home: Could not load the import tool.");document.head.append(s)})()`
+  return `javascript:${loader}`
+}
+
+export function createAruodasBookmarkletScript(endpoint: string, key: unknown) {
+  if (!hasValidImportKey(key)) throw new Error('invalid import key')
+  return bookmarkletSource
     .replace('"__FMH_ENDPOINT__"', JSON.stringify(endpoint))
-    .replace('"__FMH_KEY__"', JSON.stringify(key))}`
+    .replace('"__FMH_KEY__"', JSON.stringify(key))
 }

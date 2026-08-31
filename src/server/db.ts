@@ -77,6 +77,7 @@ function migrate(database: Database.Database) {
       parcel_number_clue TEXT,
       latitude_clue REAL,
       longitude_clue REAL,
+      coordinate_clue_precision TEXT CHECK (coordinate_clue_precision IN ('exact', 'approx')),
       address_clue TEXT,
       road_access_rating INTEGER CHECK (road_access_rating BETWEEN 1 AND 5),
       area_feeling_rating INTEGER CHECK (area_feeling_rating BETWEEN 1 AND 5),
@@ -101,4 +102,18 @@ function migrate(database: Database.Database) {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `)
+
+  const candidatePlotColumns = database
+    .prepare(`pragma table_info(candidate_plots)`)
+    .all() as Array<{ name: string }>
+  if (
+    !candidatePlotColumns.some(
+      (column) => column.name === 'coordinate_clue_precision',
+    )
+  ) {
+    database.exec(
+      `ALTER TABLE candidate_plots ADD COLUMN coordinate_clue_precision TEXT
+       CHECK (coordinate_clue_precision IN ('exact', 'approx'))`,
+    )
+  }
 }

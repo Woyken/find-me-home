@@ -28,6 +28,7 @@ export interface SourceListingDetail extends SourceListingSummary {
     parcelNumberClue: string | null
     latitudeClue: number | null
     longitudeClue: number | null
+    coordinateCluePrecision: 'exact' | 'approx' | null
     addressClue: string | null
   }>
 }
@@ -118,7 +119,8 @@ export function getSourceListing(id: number): SourceListingDetail | null {
   const plots = getDb()
     .prepare(
       `SELECT id, name, price_eur, area_ares, purpose_text, notes,
-              parcel_number_clue, latitude_clue, longitude_clue, address_clue
+              parcel_number_clue, latitude_clue, longitude_clue,
+              coordinate_clue_precision, address_clue
        FROM candidate_plots WHERE source_listing_id = ? ORDER BY id`,
     )
     .all(id) as Array<{
@@ -131,6 +133,7 @@ export function getSourceListing(id: number): SourceListingDetail | null {
     parcel_number_clue: string | null
     latitude_clue: number | null
     longitude_clue: number | null
+    coordinate_clue_precision: 'exact' | 'approx' | null
     address_clue: string | null
   }>
   return {
@@ -146,6 +149,7 @@ export function getSourceListing(id: number): SourceListingDetail | null {
       parcelNumberClue: plot.parcel_number_clue,
       latitudeClue: plot.latitude_clue,
       longitudeClue: plot.longitude_clue,
+      coordinateCluePrecision: plot.coordinate_clue_precision,
       addressClue: plot.address_clue,
     })),
   }
@@ -249,8 +253,9 @@ export function saveImportDraft(input: {
         .prepare(
           `INSERT INTO candidate_plots
              (source_listing_id, name, price_eur, area_ares, purpose_text, notes,
-              parcel_number_clue, latitude_clue, longitude_clue, address_clue)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              parcel_number_clue, latitude_clue, longitude_clue,
+              coordinate_clue_precision, address_clue)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           sourceListingId,
@@ -264,6 +269,11 @@ export function saveImportDraft(input: {
           input.parcelNumberClue,
           input.latitudeClue,
           input.longitudeClue,
+          input.latitudeClue === null
+            ? null
+            : imported.locationConfidence === 'exact'
+              ? 'exact'
+              : 'approx',
           input.addressClue,
         )
       createdCandidatePlot = true

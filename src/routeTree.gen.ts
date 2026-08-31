@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SourceListingsSourceListingIdRouteImport } from './routes/source-listings.$sourceListingId'
 import { Route as ImportsTokenRouteImport } from './routes/imports.$token'
 import { Route as ApiAruodasImportRouteImport } from './routes/api/aruodas-import'
+import { Route as ApiAruodasBookmarkletDotjsRouteImport } from './routes/api/aruodas-bookmarklet[.]js'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -35,15 +36,23 @@ const ApiAruodasImportRoute = ApiAruodasImportRouteImport.update({
   path: '/api/aruodas-import',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAruodasBookmarkletDotjsRoute =
+  ApiAruodasBookmarkletDotjsRouteImport.update({
+    id: '/api/aruodas-bookmarklet.js',
+    path: '/api/aruodas-bookmarklet.js',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/aruodas-bookmarklet.js': typeof ApiAruodasBookmarkletDotjsRoute
   '/api/aruodas-import': typeof ApiAruodasImportRoute
   '/imports/$token': typeof ImportsTokenRoute
   '/source-listings/$sourceListingId': typeof SourceListingsSourceListingIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/aruodas-bookmarklet.js': typeof ApiAruodasBookmarkletDotjsRoute
   '/api/aruodas-import': typeof ApiAruodasImportRoute
   '/imports/$token': typeof ImportsTokenRoute
   '/source-listings/$sourceListingId': typeof SourceListingsSourceListingIdRoute
@@ -51,6 +60,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/aruodas-bookmarklet.js': typeof ApiAruodasBookmarkletDotjsRoute
   '/api/aruodas-import': typeof ApiAruodasImportRoute
   '/imports/$token': typeof ImportsTokenRoute
   '/source-listings/$sourceListingId': typeof SourceListingsSourceListingIdRoute
@@ -59,18 +69,21 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/api/aruodas-bookmarklet.js'
     | '/api/aruodas-import'
     | '/imports/$token'
     | '/source-listings/$sourceListingId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/api/aruodas-bookmarklet.js'
     | '/api/aruodas-import'
     | '/imports/$token'
     | '/source-listings/$sourceListingId'
   id:
     | '__root__'
     | '/'
+    | '/api/aruodas-bookmarklet.js'
     | '/api/aruodas-import'
     | '/imports/$token'
     | '/source-listings/$sourceListingId'
@@ -78,6 +91,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiAruodasBookmarkletDotjsRoute: typeof ApiAruodasBookmarkletDotjsRoute
   ApiAruodasImportRoute: typeof ApiAruodasImportRoute
   ImportsTokenRoute: typeof ImportsTokenRoute
   SourceListingsSourceListingIdRoute: typeof SourceListingsSourceListingIdRoute
@@ -113,11 +127,19 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof ApiAruodasImportRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/aruodas-bookmarklet.js': {
+      id: '/api/aruodas-bookmarklet.js'
+      path: '/api/aruodas-bookmarklet.js'
+      fullPath: '/api/aruodas-bookmarklet.js'
+      preLoaderRoute: typeof ApiAruodasBookmarkletDotjsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiAruodasBookmarkletDotjsRoute: ApiAruodasBookmarkletDotjsRoute,
   ApiAruodasImportRoute: ApiAruodasImportRoute,
   ImportsTokenRoute: ImportsTokenRoute,
   SourceListingsSourceListingIdRoute: SourceListingsSourceListingIdRoute,

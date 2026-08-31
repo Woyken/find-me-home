@@ -1,4 +1,4 @@
-import { defineConfig, transformWithEsbuild } from 'vite'
+import { defineConfig, transformWithOxc } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
 
 import { tanstackStart } from '@tanstack/solid-start/plugin/vite'
@@ -18,14 +18,11 @@ const bookmarkletPlugin = () => ({
   async load(id: string) {
     if (id !== resolvedBookmarkletModuleId) return undefined
     const fileName = path.resolve('src/bookmarklet/aruodas.ts')
-    const result = await transformWithEsbuild(
+    const result = await transformWithOxc(
       fs.readFileSync(fileName, 'utf8'),
       fileName,
       {
-        loader: 'ts',
-        minify: true,
-        target: 'es2022',
-        format: 'iife',
+        lang: 'ts',
       },
     )
     return `export const bookmarkletSource = ${JSON.stringify(result.code)}`

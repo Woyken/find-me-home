@@ -87,16 +87,37 @@ function SourceListingPage() {
                             label="Purpose"
                             value={plot.purposeText ?? 'Unknown'}
                           />
-                          <Detail
-                            label="Location clue"
-                            value={
-                              plot.parcelNumberClue ??
-                              plot.addressClue ??
-                              (plot.latitudeClue !== null
-                                ? `${plot.latitudeClue}, ${plot.longitudeClue}`
-                                : 'Unknown')
-                            }
-                          />
+                          <div>
+                            <Detail
+                              label={
+                                plot.coordinateCluePrecision === 'approx'
+                                  ? 'Approximate location'
+                                  : 'Location clue'
+                              }
+                              value={
+                                plot.parcelNumberClue ??
+                                plot.addressClue ??
+                                (plot.latitudeClue !== null
+                                  ? `${plot.latitudeClue}, ${plot.longitudeClue}`
+                                  : 'Unknown')
+                              }
+                            />
+                            <Show
+                              when={
+                                plot.latitudeClue !== null &&
+                                plot.longitudeClue !== null
+                              }
+                            >
+                              <a
+                                class="mt-2 inline-block text-xs font-bold text-[#315f73] underline"
+                                href={`https://www.google.com/maps/dir/?api=1&destination=${plot.latitudeClue},${plot.longitudeClue}`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Directions
+                              </a>
+                            </Show>
+                          </div>
                         </div>
                         <Show when={plot.notes}>
                           <p class="mt-5 border-t border-[#17231d]/10 pt-4 text-sm text-[#526058]">
