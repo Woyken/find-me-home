@@ -8,7 +8,9 @@
       :root {
         color: #17231d;
         background: #f4f0e4;
-        font: 16px/1.45 system-ui, sans-serif;
+        font:
+          16px/1.45 system-ui,
+          sans-serif;
       }
       body {
         max-width: 800px;
@@ -90,6 +92,8 @@
             <option value="observed">Observed listing shape</option>
             <option value="large">Large realistic listing</option>
             <option value="maximum">Parser maximum</option>
+            <option value="stress-1">Transport stress: 1 MiB JSON</option>
+            <option value="stress-3">Transport stress: 3 MiB JSON</option>
           </select>
         </label>
         <textarea id="payload" aria-label="Payload JSON"></textarea>
@@ -127,12 +131,21 @@
 
     <script>
       // Minimal URI-safe LZ-string implementation, kept inline so the probe is one file.
-      const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$'
-      const reverse = Object.fromEntries([...alphabet].map((char, index) => [char, index]))
+      const alphabet =
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$'
+      const reverse = Object.fromEntries(
+        [...alphabet].map((char, index) => [char, index]),
+      )
       function compress(text) {
-        const dictionary = {}, pending = {}
-        let phrase = '', enlarge = 2, dictionarySize = 3, bits = 2
-        let value = 0, position = 0, result = ''
+        const dictionary = {},
+          pending = {}
+        let phrase = '',
+          enlarge = 2,
+          dictionarySize = 3,
+          bits = 2
+        let value = 0,
+          position = 0,
+          result = ''
         const write = (bit) => {
           value = (value << 1) | bit
           if (position === 5) {
@@ -184,7 +197,9 @@
         return result
       }
       function decompress(input) {
-        let value = reverse[input[0]], position = 32, index = 1
+        let value = reverse[input[0]],
+          position = 32,
+          index = 1
         const read = () => {
           const bit = value & position ? 1 : 0
           position >>= 1
@@ -195,7 +210,8 @@
           return bit
         }
         const readBits = (count) => {
-          let result = 0, power = 1
+          let result = 0,
+            power = 1
           while (count--) {
             result |= read() * power
             power <<= 1
@@ -206,11 +222,16 @@
         let code = readBits(2)
         let current = String.fromCharCode(readBits(code === 0 ? 8 : 16))
         dictionary[3] = current
-        let result = current, dictionarySize = 4, enlarge = 4, bits = 3
+        let result = current,
+          dictionarySize = 4,
+          enlarge = 4,
+          bits = 3
         while (index <= input.length) {
           code = readBits(bits)
           if (code === 0 || code === 1) {
-            dictionary[dictionarySize++] = String.fromCharCode(readBits(code ? 16 : 8))
+            dictionary[dictionarySize++] = String.fromCharCode(
+              readBits(code ? 16 : 8),
+            )
             code = dictionarySize - 1
             enlarge--
           } else if (code === 2) return result
@@ -233,7 +254,8 @@
 
       const base = {
         url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-zemuju-rusoku-k-upes-g-parduodamas-erdvus-aru-namu-valdos-sklypas-11-1472707/',
-        title: 'Namų valdos sklypas - Vilniaus r. sav., Žemųjų Rusokų k., Upės g.',
+        title:
+          'Namų valdos sklypas - Vilniaus r. sav., Žemųjų Rusokų k., Upės g.',
         address: 'Vilniaus r. sav., Žemųjų Rusokų k., Upės g. 8',
         priceEur: 85000,
         areaAres: 15,
@@ -242,9 +264,17 @@
         lat: 54.806548,
         lng: 25.213499,
         locationConfidence: 'approx',
-        description: 'Parduodamas erdvus 15 arų namų valdos sklypas strategiškai patogioje vietoje, vos 15 km nuo Vilniaus centro.',
+        description:
+          'Parduodamas erdvus 15 arų namų valdos sklypas strategiškai patogioje vietoje, vos 15 km nuo Vilniaus centro.',
         photos: [],
-        features: ['Su statybos leidimu', 'Elektra', 'Greta miško', 'Be pastatų', 'Geodeziniai matavimai', 'Asfaltuotas privažiavimas'],
+        features: [
+          'Su statybos leidimu',
+          'Elektra',
+          'Greta miško',
+          'Be pastatų',
+          'Geodeziniai matavimai',
+          'Asfaltuotas privažiavimas',
+        ],
         utilities: { electricity: 'mentioned by Aruodas' },
       }
       const profile = document.querySelector('#profile')
@@ -252,17 +282,70 @@
       const measurements = document.querySelector('#measurements')
       const report = document.querySelector('#report')
       const receiverUrl = () => `${location.href.split(/[?#]/)[0]}?receiver=1`
-      let outcomes = { fragment: 'not tested', immediatePopup: 'not tested', delayedPopup: 'not tested' }
+      let outcomes = {
+        fragment: 'not tested',
+        immediatePopup: 'not tested',
+        delayedPopup: 'not tested',
+      }
+
+      function fingerprint(value) {
+        let hash = 2166136261
+        for (let index = 0; index < value.length; index++) {
+          hash ^= value.charCodeAt(index)
+          hash = Math.imul(hash, 16777619)
+        }
+        return `${value.length}:${(hash >>> 0).toString(16)}`
+      }
+
+      function stressText(length) {
+        let state = 0x12345678
+        let result = ''
+        while (result.length < length) {
+          state ^= state << 13
+          state ^= state >>> 17
+          state ^= state << 5
+          result += (state >>> 0).toString(36).padStart(7, '0')
+        }
+        return result.slice(0, length)
+      }
 
       function makePayload(kind) {
+        if (kind.startsWith('stress-')) {
+          const target = Number(kind.slice(7)) * 1024 * 1024
+          const shell = JSON.stringify({
+            ...base,
+            description: '',
+            transportStress: '',
+          })
+          return {
+            ...base,
+            description:
+              'Transport-only stress payload; exceeds production parser limits.',
+            transportStress: stressText(target - shell.length),
+          }
+        }
         const count = kind === 'observed' ? 0 : 50
-        const descriptionLength = kind === 'maximum' ? 20000 : kind === 'large' ? 5000 : base.description.length
+        const descriptionLength =
+          kind === 'maximum'
+            ? 20000
+            : kind === 'large'
+              ? 5000
+              : base.description.length
         const featureCount = kind === 'maximum' ? 100 : base.features.length
         return {
           ...base,
-          description: base.description.repeat(Math.ceil(descriptionLength / base.description.length)).slice(0, descriptionLength),
-          photos: Array.from({ length: count }, (_, i) => `https://aruodas-img.dgn.lt/object_62_133921809/photo-${i}-${'x'.repeat(55)}.jpg`),
-          features: Array.from({ length: featureCount }, (_, i) => `${base.features[i % base.features.length]} ${i}`),
+          description: base.description
+            .repeat(Math.ceil(descriptionLength / base.description.length))
+            .slice(0, descriptionLength),
+          photos: Array.from(
+            { length: count },
+            (_, i) =>
+              `https://aruodas-img.dgn.lt/object_62_133921809/photo-${i}-${'x'.repeat(55)}.jpg`,
+          ),
+          features: Array.from(
+            { length: featureCount },
+            (_, i) => `${base.features[i % base.features.length]} ${i}`,
+          ),
         }
       }
       function encoded() {
@@ -271,9 +354,20 @@
       function render() {
         const bytes = new Blob([payload.value]).size
         const packed = encoded()
-        const urlLength = receiverUrl().length + '#import='.length + packed.length
+        const urlLength =
+          receiverUrl().length + '#import='.length + packed.length
         measurements.textContent = `JSON: ${payload.value.length.toLocaleString()} characters / ${bytes.toLocaleString()} UTF-8 bytes\nLZ fragment: ${packed.length.toLocaleString()} characters\nFull app URL: ${urlLength.toLocaleString()} characters\nRound trip: ${decompress(packed) === payload.value ? 'PASS' : 'FAIL'}`
-        report.textContent = JSON.stringify({ userAgent: navigator.userAgent, profile: profile.value, jsonCharacters: payload.value.length, fragmentCharacters: packed.length, ...outcomes }, null, 2)
+        report.textContent = JSON.stringify(
+          {
+            userAgent: navigator.userAgent,
+            profile: profile.value,
+            jsonCharacters: payload.value.length,
+            fragmentCharacters: packed.length,
+            ...outcomes,
+          },
+          null,
+          2,
+        )
       }
       function loadProfile() {
         payload.value = JSON.stringify(makePayload(profile.value))
@@ -285,7 +379,14 @@
 
       document.querySelector('#fragment').onclick = () => {
         outcomes.fragment = 'navigation started'
-        sessionStorage.setItem('handoff-probe-outcomes', JSON.stringify(outcomes))
+        sessionStorage.setItem(
+          'handoff-probe-outcomes',
+          JSON.stringify(outcomes),
+        )
+        sessionStorage.setItem(
+          'handoff-probe-expected',
+          fingerprint(payload.value),
+        )
         location.href = `${receiverUrl()}#import=${encoded()}`
       }
       function postMessageProbe(delay, key) {
@@ -314,8 +415,10 @@
         }
         delay ? setTimeout(run, 750) : run()
       }
-      document.querySelector('#message-now').onclick = () => postMessageProbe(false, 'immediatePopup')
-      document.querySelector('#message-later').onclick = () => postMessageProbe(true, 'delayedPopup')
+      document.querySelector('#message-now').onclick = () =>
+        postMessageProbe(false, 'immediatePopup')
+      document.querySelector('#message-later').onclick = () =>
+        postMessageProbe(true, 'delayedPopup')
 
       const stored = sessionStorage.getItem('handoff-probe-outcomes')
       if (stored) outcomes = JSON.parse(stored)
@@ -323,12 +426,22 @@
         document.querySelector('#launcher').hidden = true
         document.querySelector('#receiver').hidden = false
         const received = document.querySelector('#received')
-        const packed = location.hash.startsWith('#import=') ? location.hash.slice(8) : ''
+        const packed = location.hash.startsWith('#import=')
+          ? location.hash.slice(8)
+          : ''
         if (packed) {
           const value = decompress(packed)
-          received.innerHTML = `<span class="${value ? 'pass' : 'fail'}">Fragment ${value ? 'PASS' : 'FAIL'}</span>\nReceived ${value.length.toLocaleString()} characters.`
-          outcomes.fragment = value ? 'PASS' : 'FAIL'
-          sessionStorage.setItem('handoff-probe-outcomes', JSON.stringify(outcomes))
+          const expected = sessionStorage.getItem('handoff-probe-expected')
+          const actual = fingerprint(value)
+          const passed = actual === expected
+          received.innerHTML = `<span class="${passed ? 'pass' : 'fail'}">Fragment ${passed ? 'PASS' : 'FAIL'}</span>\nReceived ${value.length.toLocaleString()} characters.\nExpected fingerprint: ${expected}\nActual fingerprint: ${actual}`
+          outcomes.fragment = passed
+            ? `PASS: ${actual}`
+            : `FAIL: expected ${expected}, received ${actual}`
+          sessionStorage.setItem(
+            'handoff-probe-outcomes',
+            JSON.stringify(outcomes),
+          )
         }
         const announce = () => window.opener?.postMessage('fmh-ready', '*')
         document.querySelector('#ready').onclick = announce
@@ -338,7 +451,14 @@
           event.source?.postMessage('fmh-received', '*')
         })
         announce()
-      } else render()
+      } else {
+        addEventListener('pageshow', () => {
+          const latest = sessionStorage.getItem('handoff-probe-outcomes')
+          if (latest) outcomes = JSON.parse(latest)
+          render()
+        })
+        render()
+      }
     </script>
   </body>
 </html>
