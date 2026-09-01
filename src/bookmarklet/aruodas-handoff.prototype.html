@@ -71,7 +71,7 @@
     <h1>PROTOTYPE: serverless Aruodas handoff</h1>
     <p>
       Question: can a one-click Android bookmarklet reliably hand an Aruodas
-      payload to a static app, and should it use a compressed URL fragment or
+      payload to a static app, and should it use a URL fragment or
       <code>window.open</code> plus <code>postMessage</code>? This is throwaway
       browser instrumentation, not application code.
     </p>
@@ -106,7 +106,7 @@
           Navigates this tab, matching the reliable serverless proposal. Use
           Back to return and record whether the full payload survived.
         </p>
-        <button id="fragment">Navigate with compressed fragment</button>
+        <button id="fragment">Navigate with base64url fragment</button>
       </section>
 
       <section>
@@ -130,126 +130,27 @@
     </main>
 
     <script>
-      // Minimal URI-safe LZ-string implementation, kept inline so the probe is one file.
-      const alphabet =
-        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$'
-      const reverse = Object.fromEntries(
-        [...alphabet].map((char, index) => [char, index]),
-      )
-      function compress(text) {
-        const dictionary = {},
-          pending = {}
-        let phrase = '',
-          enlarge = 2,
-          dictionarySize = 3,
-          bits = 2
-        let value = 0,
-          position = 0,
-          result = ''
-        const write = (bit) => {
-          value = (value << 1) | bit
-          if (position === 5) {
-            result += alphabet[value]
-            value = position = 0
-          } else position++
+      function encode(text) {
+        const bytes = new TextEncoder().encode(text)
+        let binary = ''
+        for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+          binary += String.fromCharCode(
+            ...bytes.subarray(offset, offset + 0x8000),
+          )
         }
-        const writeBits = (count, number) => {
-          for (let index = 0; index < count; index++) {
-            write(number & 1)
-            number >>= 1
-          }
-        }
-        const emit = (word) => {
-          if (pending[word]) {
-            const code = word.charCodeAt(0)
-            writeBits(bits, code < 256 ? 0 : 1)
-            writeBits(code < 256 ? 8 : 16, code)
-            delete pending[word]
-          } else writeBits(bits, dictionary[word])
-          if (--enlarge === 0) {
-            enlarge = 2 ** bits
-            bits++
-          }
-        }
-        for (const char of text) {
-          if (!(char in dictionary)) {
-            dictionary[char] = dictionarySize++
-            pending[char] = true
-          }
-          const joined = phrase + char
-          if (joined in dictionary) phrase = joined
-          else {
-            emit(phrase)
-            dictionary[joined] = dictionarySize++
-            phrase = char
-          }
-        }
-        if (phrase) emit(phrase)
-        writeBits(bits, 2)
-        while (true) {
-          value <<= 1
-          if (position === 5) {
-            result += alphabet[value]
-            break
-          }
-          position++
-        }
-        return result
+        return btoa(binary)
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_')
+          .replace(/=+$/, '')
       }
-      function decompress(input) {
-        let value = reverse[input[0]],
-          position = 32,
-          index = 1
-        const read = () => {
-          const bit = value & position ? 1 : 0
-          position >>= 1
-          if (!position) {
-            position = 32
-            value = reverse[input[index++]]
-          }
-          return bit
-        }
-        const readBits = (count) => {
-          let result = 0,
-            power = 1
-          while (count--) {
-            result |= read() * power
-            power <<= 1
-          }
-          return result
-        }
-        const dictionary = [0, 1, 2]
-        let code = readBits(2)
-        let current = String.fromCharCode(readBits(code === 0 ? 8 : 16))
-        dictionary[3] = current
-        let result = current,
-          dictionarySize = 4,
-          enlarge = 4,
-          bits = 3
-        while (index <= input.length) {
-          code = readBits(bits)
-          if (code === 0 || code === 1) {
-            dictionary[dictionarySize++] = String.fromCharCode(
-              readBits(code ? 16 : 8),
-            )
-            code = dictionarySize - 1
-            enlarge--
-          } else if (code === 2) return result
-          if (!enlarge) {
-            enlarge = 2 ** bits
-            bits++
-          }
-          const entry = dictionary[code] ?? current + current[0]
-          result += entry
-          dictionary[dictionarySize++] = current + entry[0]
-          enlarge--
-          current = entry
-          if (!enlarge) {
-            enlarge = 2 ** bits
-            bits++
-          }
-        }
-        return ''
+
+      function decode(input) {
+        const padded =
+          input.replace(/-/g, '+').replace(/_/g, '/') +
+          '==='.slice((input.length + 3) % 4)
+        const binary = atob(padded)
+        const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
+        return new TextDecoder().decode(bytes)
       }
 
       const base = {
@@ -349,14 +250,14 @@
         }
       }
       function encoded() {
-        return compress(payload.value)
+        return encode(payload.value)
       }
       function render() {
         const bytes = new Blob([payload.value]).size
         const packed = encoded()
         const urlLength =
           receiverUrl().length + '#import='.length + packed.length
-        measurements.textContent = `JSON: ${payload.value.length.toLocaleString()} characters / ${bytes.toLocaleString()} UTF-8 bytes\nLZ fragment: ${packed.length.toLocaleString()} characters\nFull app URL: ${urlLength.toLocaleString()} characters\nRound trip: ${decompress(packed) === payload.value ? 'PASS' : 'FAIL'}`
+        measurements.textContent = `JSON: ${payload.value.length.toLocaleString()} characters / ${bytes.toLocaleString()} UTF-8 bytes\nBase64url fragment: ${packed.length.toLocaleString()} characters\nFull app URL: ${urlLength.toLocaleString()} characters\nRound trip: ${decode(packed) === payload.value ? 'PASS' : 'FAIL'}`
         report.textContent = JSON.stringify(
           {
             userAgent: navigator.userAgent,
@@ -430,7 +331,7 @@
           ? location.hash.slice(8)
           : ''
         if (packed) {
-          const value = decompress(packed)
+          const value = decode(packed)
           const expected = sessionStorage.getItem('handoff-probe-expected')
           const actual = fingerprint(value)
           const passed = actual === expected
