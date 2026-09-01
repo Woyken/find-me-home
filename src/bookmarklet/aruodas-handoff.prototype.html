@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PROTOTYPE: Aruodas handoff probe</title>
+    <style>
+      :root {
+        color: #17231d;
+        background: #f4f0e4;
+        font: 16px/1.45 system-ui, sans-serif;
+      }
+      body {
+        max-width: 800px;
+        margin: auto;
+        padding: 24px;
+      }
+      h1,
+      h2 {
+        font-family: Georgia, serif;
+      }
+      section {
+        margin: 20px 0;
+        border: 1px solid #b7b09e;
+        background: white;
+        padding: 20px;
+      }
+      button,
+      select,
+      textarea {
+        box-sizing: border-box;
+        width: 100%;
+        margin: 5px 0;
+        padding: 12px;
+        font: inherit;
+      }
+      button {
+        border: 0;
+        background: #24483a;
+        color: white;
+        font-weight: 700;
+      }
+      button.secondary {
+        background: #315f73;
+      }
+      textarea {
+        min-height: 120px;
+      }
+      output,
+      pre {
+        display: block;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+      }
+      .pass {
+        color: #176c3a;
+        font-weight: 700;
+      }
+      .fail {
+        color: #a13d22;
+        font-weight: 700;
+      }
+      .muted {
+        color: #607067;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>PROTOTYPE: serverless Aruodas handoff</h1>
+    <p>
+      Question: can a one-click Android bookmarklet reliably hand an Aruodas
+      payload to a static app, and should it use a compressed URL fragment or
+      <code>window.open</code> plus <code>postMessage</code>? This is throwaway
+      browser instrumentation, not application code.
+    </p>
+
+    <section id="receiver" hidden>
+      <h2>Receiving app</h2>
+      <output id="received">Waiting for a payload...</output>
+      <button id="ready">Send receiver-ready message</button>
+      <button class="secondary" onclick="history.back()">Back to advert</button>
+    </section>
+
+    <main id="launcher">
+      <section>
+        <h2>Payload</h2>
+        <label>
+          Payload profile
+          <select id="profile">
+            <option value="observed">Observed listing shape</option>
+            <option value="large">Large realistic listing</option>
+            <option value="maximum">Parser maximum</option>
+          </select>
+        </label>
+        <textarea id="payload" aria-label="Payload JSON"></textarea>
+        <output id="measurements"></output>
+      </section>
+
+      <section>
+        <h2>Fragment navigation</h2>
+        <p class="muted">
+          Navigates this tab, matching the reliable serverless proposal. Use
+          Back to return and record whether the full payload survived.
+        </p>
+        <button id="fragment">Navigate with compressed fragment</button>
+      </section>
+
+      <section>
+        <h2>Popup and postMessage</h2>
+        <p class="muted">
+          The delayed test models the current bookmarklet: a small loader first
+          fetches the scraper, then the scraper tries to open the app. Popup
+          permission often expires during that delay.
+        </p>
+        <button id="message-now">Open and send immediately</button>
+        <button id="message-later" class="secondary">
+          Open after async scraper delay
+        </button>
+        <output id="popup-result">Not tested.</output>
+      </section>
+
+      <section>
+        <h2>Result to report</h2>
+        <pre id="report"></pre>
+      </section>
+    </main>
+
+    <script>
+      // Minimal URI-safe LZ-string implementation, kept inline so the probe is one file.
+      const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$'
+      const reverse = Object.fromEntries([...alphabet].map((char, index) => [char, index]))
+      function compress(text) {
+        const dictionary = {}, pending = {}
+        let phrase = '', enlarge = 2, dictionarySize = 3, bits = 2
+        let value = 0, position = 0, result = ''
+        const write = (bit) => {
+          value = (value << 1) | bit
+          if (position === 5) {
+            result += alphabet[value]
+            value = position = 0
+          } else position++
+        }
+        const writeBits = (count, number) => {
+          for (let index = 0; index < count; index++) {
+            write(number & 1)
+            number >>= 1
+          }
+        }
+        const emit = (word) => {
+          if (pending[word]) {
+            const code = word.charCodeAt(0)
+            writeBits(bits, code < 256 ? 0 : 1)
+            writeBits(code < 256 ? 8 : 16, code)
+            delete pending[word]
+          } else writeBits(bits, dictionary[word])
+          if (--enlarge === 0) {
+            enlarge = 2 ** bits
+            bits++
+          }
+        }
+        for (const char of text) {
+          if (!(char in dictionary)) {
+            dictionary[char] = dictionarySize++
+            pending[char] = true
+          }
+          const joined = phrase + char
+          if (joined in dictionary) phrase = joined
+          else {
+            emit(phrase)
+            dictionary[joined] = dictionarySize++
+            phrase = char
+          }
+        }
+        if (phrase) emit(phrase)
+        writeBits(bits, 2)
+        while (true) {
+          value <<= 1
+          if (position === 5) {
+            result += alphabet[value]
+            break
+          }
+          position++
+        }
+        return result
+      }
+      function decompress(input) {
+        let value = reverse[input[0]], position = 32, index = 1
+        const read = () => {
+          const bit = value & position ? 1 : 0
+          position >>= 1
+          if (!position) {
+            position = 32
+            value = reverse[input[index++]]
+          }
+          return bit
+        }
+        const readBits = (count) => {
+          let result = 0, power = 1
+          while (count--) {
+            result |= read() * power
+            power <<= 1
+          }
+          return result
+        }
+        const dictionary = [0, 1, 2]
+        let code = readBits(2)
+        let current = String.fromCharCode(readBits(code === 0 ? 8 : 16))
+        dictionary[3] = current
+        let result = current, dictionarySize = 4, enlarge = 4, bits = 3
+        while (index <= input.length) {
+          code = readBits(bits)
+          if (code === 0 || code === 1) {
+            dictionary[dictionarySize++] = String.fromCharCode(readBits(code ? 16 : 8))
+            code = dictionarySize - 1
+            enlarge--
+          } else if (code === 2) return result
+          if (!enlarge) {
+            enlarge = 2 ** bits
+            bits++
+          }
+          const entry = dictionary[code] ?? current + current[0]
+          result += entry
+          dictionary[dictionarySize++] = current + entry[0]
+          enlarge--
+          current = entry
+          if (!enlarge) {
+            enlarge = 2 ** bits
+            bits++
+          }
+        }
+        return ''
+      }
+
+      const base = {
+        url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-zemuju-rusoku-k-upes-g-parduodamas-erdvus-aru-namu-valdos-sklypas-11-1472707/',
+        title: 'Namų valdos sklypas - Vilniaus r. sav., Žemųjų Rusokų k., Upės g.',
+        address: 'Vilniaus r. sav., Žemųjų Rusokų k., Upės g. 8',
+        priceEur: 85000,
+        areaAres: 15,
+        purposeText: 'Namų valda',
+        uniqueRegistryNumber: '4174-0100-2219',
+        lat: 54.806548,
+        lng: 25.213499,
+        locationConfidence: 'approx',
+        description: 'Parduodamas erdvus 15 arų namų valdos sklypas strategiškai patogioje vietoje, vos 15 km nuo Vilniaus centro.',
+        photos: [],
+        features: ['Su statybos leidimu', 'Elektra', 'Greta miško', 'Be pastatų', 'Geodeziniai matavimai', 'Asfaltuotas privažiavimas'],
+        utilities: { electricity: 'mentioned by Aruodas' },
+      }
+      const profile = document.querySelector('#profile')
+      const payload = document.querySelector('#payload')
+      const measurements = document.querySelector('#measurements')
+      const report = document.querySelector('#report')
+      const receiverUrl = () => `${location.href.split(/[?#]/)[0]}?receiver=1`
+      let outcomes = { fragment: 'not tested', immediatePopup: 'not tested', delayedPopup: 'not tested' }
+
+      function makePayload(kind) {
+        const count = kind === 'observed' ? 0 : 50
+        const descriptionLength = kind === 'maximum' ? 20000 : kind === 'large' ? 5000 : base.description.length
+        const featureCount = kind === 'maximum' ? 100 : base.features.length
+        return {
+          ...base,
+          description: base.description.repeat(Math.ceil(descriptionLength / base.description.length)).slice(0, descriptionLength),
+          photos: Array.from({ length: count }, (_, i) => `https://aruodas-img.dgn.lt/object_62_133921809/photo-${i}-${'x'.repeat(55)}.jpg`),
+          features: Array.from({ length: featureCount }, (_, i) => `${base.features[i % base.features.length]} ${i}`),
+        }
+      }
+      function encoded() {
+        return compress(payload.value)
+      }
+      function render() {
+        const bytes = new Blob([payload.value]).size
+        const packed = encoded()
+        const urlLength = receiverUrl().length + '#import='.length + packed.length
+        measurements.textContent = `JSON: ${payload.value.length.toLocaleString()} characters / ${bytes.toLocaleString()} UTF-8 bytes\nLZ fragment: ${packed.length.toLocaleString()} characters\nFull app URL: ${urlLength.toLocaleString()} characters\nRound trip: ${decompress(packed) === payload.value ? 'PASS' : 'FAIL'}`
+        report.textContent = JSON.stringify({ userAgent: navigator.userAgent, profile: profile.value, jsonCharacters: payload.value.length, fragmentCharacters: packed.length, ...outcomes }, null, 2)
+      }
+      function loadProfile() {
+        payload.value = JSON.stringify(makePayload(profile.value))
+        render()
+      }
+      profile.onchange = loadProfile
+      payload.oninput = render
+      loadProfile()
+
+      document.querySelector('#fragment').onclick = () => {
+        outcomes.fragment = 'navigation started'
+        sessionStorage.setItem('handoff-probe-outcomes', JSON.stringify(outcomes))
+        location.href = `${receiverUrl()}#import=${encoded()}`
+      }
+      function postMessageProbe(delay, key) {
+        const run = () => {
+          const target = window.open(receiverUrl(), '_blank')
+          outcomes[key] = target ? 'opened; waiting for receiver' : 'BLOCKED'
+          render()
+          if (!target) return
+          const send = (event) => {
+            if (event.source !== target) return
+            if (event.data === 'fmh-ready') {
+              target.postMessage(
+                { type: 'fmh-import', payload: payload.value },
+                '*',
+              )
+              outcomes[key] = 'sent; waiting for acknowledgment'
+              render()
+            }
+            if (event.data === 'fmh-received') {
+              outcomes[key] = 'PASS: receiver acknowledged'
+              render()
+              window.removeEventListener('message', send)
+            }
+          }
+          window.addEventListener('message', send)
+        }
+        delay ? setTimeout(run, 750) : run()
+      }
+      document.querySelector('#message-now').onclick = () => postMessageProbe(false, 'immediatePopup')
+      document.querySelector('#message-later').onclick = () => postMessageProbe(true, 'delayedPopup')
+
+      const stored = sessionStorage.getItem('handoff-probe-outcomes')
+      if (stored) outcomes = JSON.parse(stored)
+      if (new URLSearchParams(location.search).has('receiver')) {
+        document.querySelector('#launcher').hidden = true
+        document.querySelector('#receiver').hidden = false
+        const received = document.querySelector('#received')
+        const packed = location.hash.startsWith('#import=') ? location.hash.slice(8) : ''
+        if (packed) {
+          const value = decompress(packed)
+          received.innerHTML = `<span class="${value ? 'pass' : 'fail'}">Fragment ${value ? 'PASS' : 'FAIL'}</span>\nReceived ${value.length.toLocaleString()} characters.`
+          outcomes.fragment = value ? 'PASS' : 'FAIL'
+          sessionStorage.setItem('handoff-probe-outcomes', JSON.stringify(outcomes))
+        }
+        const announce = () => window.opener?.postMessage('fmh-ready', '*')
+        document.querySelector('#ready').onclick = announce
+        window.addEventListener('message', (event) => {
+          if (event.data?.type !== 'fmh-import') return
+          received.innerHTML = `<span class="pass">postMessage PASS</span>\nReceived ${event.data.payload.length.toLocaleString()} characters.`
+          event.source?.postMessage('fmh-received', '*')
+        })
+        announce()
+      } else render()
+    </script>
+  </body>
+</html>
