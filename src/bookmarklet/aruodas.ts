@@ -132,16 +132,14 @@ if (
     },
   }
   const payloadText = JSON.stringify(payload)
+  let hash = 2166136261
+  for (let index = 0; index < payloadText.length; index++) {
+    hash ^= payloadText.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  const fingerprint = `${payloadText.length}:${(hash >>> 0).toString(16)}`
   if (endpoint.includes('__FMH_FRAGMENT_RECEIVER__')) {
-    let hash = 2166136261
-    for (let index = 0; index < payloadText.length; index++) {
-      hash ^= payloadText.charCodeAt(index)
-      hash = Math.imul(hash, 16777619)
-    }
-    const envelope = JSON.stringify({
-      payload: payloadText,
-      fingerprint: `${payloadText.length}:${(hash >>> 0).toString(16)}`,
-    })
+    const envelope = JSON.stringify({ payload: payloadText, fingerprint })
     const bytes = new TextEncoder().encode(envelope)
     let binary = ''
     for (let offset = 0; offset < bytes.length; offset += 0x8000) {
@@ -155,6 +153,29 @@ if (
       '__FMH_FRAGMENT_RECEIVER__',
       encoded,
     )
+  } else if (endpoint.includes('__FMH_POSTMESSAGE_RECEIVER__')) {
+    const receiver = new URL(endpoint)
+    receiver.searchParams.delete('__FMH_POSTMESSAGE_RECEIVER__')
+    const delay = Number(receiver.searchParams.get('delay') ?? 0)
+    receiver.searchParams.delete('delay')
+    const openAndSend = () => {
+      const target = window.open(receiver, '_blank')
+      if (!target) {
+        fail('The browser blocked the app popup.')
+        return
+      }
+      const send = (event: MessageEvent) => {
+        if (event.source !== target || event.data !== 'fmh-ready') return
+        target.postMessage(
+          { type: 'fmh-import', payload: payloadText, fingerprint },
+          receiver.origin,
+        )
+        window.removeEventListener('message', send)
+      }
+      window.addEventListener('message', send)
+    }
+    if (delay) window.setTimeout(openAndSend, delay)
+    else openAndSend()
   } else {
     const form = document.createElement('form')
     form.method = 'POST'

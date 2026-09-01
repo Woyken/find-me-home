@@ -95,7 +95,13 @@
         </p>
         <a id="real-bookmarklet" href="#">Preparing test bookmarklet...</a>
         <button id="copy-bookmarklet" class="secondary" disabled>
-          Copy test bookmarklet URL
+          Copy fragment bookmarklet URL
+        </button>
+        <button id="copy-popup-bookmarklet" class="secondary" disabled>
+          Copy immediate popup bookmarklet URL
+        </button>
+        <button id="copy-delayed-popup-bookmarklet" class="secondary" disabled>
+          Copy delayed popup bookmarklet URL
         </button>
         <output id="bookmarklet-status"></output>
       </section>
@@ -209,18 +215,42 @@
         const source = await fetch(
           './aruodas-handoff.bookmarklet.prototype.js',
         ).then((response) => response.text())
-        const endpoint = `${receiverUrl()}#import=__FMH_FRAGMENT_RECEIVER__`
-        const bookmarklet = `javascript:${source.replace('"__FMH_ENDPOINT__"', JSON.stringify(endpoint))}`
+        const makeBookmarklet = (endpoint) =>
+          `javascript:${source.replace('"__FMH_ENDPOINT__"', JSON.stringify(endpoint))}`
+        const bookmarklet = makeBookmarklet(
+          `${receiverUrl()}#import=__FMH_FRAGMENT_RECEIVER__`,
+        )
+        const popupBookmarklet = makeBookmarklet(
+          `${receiverUrl()}&__FMH_POSTMESSAGE_RECEIVER__=1`,
+        )
+        const delayedPopupBookmarklet = makeBookmarklet(
+          `${receiverUrl()}&__FMH_POSTMESSAGE_RECEIVER__=1&delay=750`,
+        )
         const link = document.querySelector('#real-bookmarklet')
         const copy = document.querySelector('#copy-bookmarklet')
+        const copyPopup = document.querySelector('#copy-popup-bookmarklet')
+        const copyDelayedPopup = document.querySelector(
+          '#copy-delayed-popup-bookmarklet',
+        )
         const status = document.querySelector('#bookmarklet-status')
         link.href = bookmarklet
         link.textContent = 'Find Me Home: test real Aruodas import'
         copy.disabled = false
-        copy.onclick = async () => {
-          await navigator.clipboard.writeText(bookmarklet)
-          status.textContent = `Copied ${bookmarklet.length.toLocaleString()} characters. Paste this into the bookmark URL field.`
+        copyPopup.disabled = false
+        copyDelayedPopup.disabled = false
+        const copyToBookmark = (value, name) => async () => {
+          await navigator.clipboard.writeText(value)
+          status.textContent = `Copied ${name} (${value.length.toLocaleString()} characters). Paste this into the bookmark URL field.`
         }
+        copy.onclick = copyToBookmark(bookmarklet, 'fragment bookmarklet')
+        copyPopup.onclick = copyToBookmark(
+          popupBookmarklet,
+          'immediate popup bookmarklet',
+        )
+        copyDelayedPopup.onclick = copyToBookmark(
+          delayedPopupBookmarklet,
+          'delayed popup bookmarklet',
+        )
       }
 
       function fingerprint(value) {
@@ -396,7 +426,10 @@
         document.querySelector('#ready').onclick = announce
         window.addEventListener('message', (event) => {
           if (event.data?.type !== 'fmh-import') return
-          received.innerHTML = `<span class="pass">postMessage PASS</span>\nReceived ${event.data.payload.length.toLocaleString()} characters.`
+          const actual = fingerprint(event.data.payload)
+          const passed = actual === event.data.fingerprint
+          const imported = JSON.parse(event.data.payload)
+          received.innerHTML = `<span class="${passed ? 'pass' : 'fail'}">postMessage ${passed ? 'PASS' : 'FAIL'}</span>\nReceived ${event.data.payload.length.toLocaleString()} characters.\nExpected fingerprint: ${event.data.fingerprint}\nActual fingerprint: ${actual}\n\nTitle: ${imported.title ?? 'missing'}\nAddress: ${imported.address ?? 'missing'}\nPrice: ${imported.priceEur ?? 'missing'}\nArea: ${imported.areaAres ?? 'missing'}\nPhotos: ${imported.photos?.length ?? 0}\nDescription: ${imported.description?.length ?? 0} characters`
           event.source?.postMessage('fmh-received', '*')
         })
         announce()
