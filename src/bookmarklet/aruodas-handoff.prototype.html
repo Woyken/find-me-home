@@ -114,8 +114,18 @@
             <option value="observed">Observed listing shape</option>
             <option value="large">Large realistic listing</option>
             <option value="maximum">Parser maximum</option>
-            <option value="stress-1">Transport stress: 1 MiB JSON</option>
-            <option value="stress-3">Transport stress: 3 MiB JSON</option>
+            <option value="stress-kib-32">Fragment limit: 32 KiB JSON</option>
+            <option value="stress-kib-64">Fragment limit: 64 KiB JSON</option>
+            <option value="stress-kib-128">Fragment limit: 128 KiB JSON</option>
+            <option value="stress-kib-256">Fragment limit: 256 KiB JSON</option>
+            <option value="stress-kib-512">Fragment limit: 512 KiB JSON</option>
+            <option value="stress-kib-768">Fragment limit: 768 KiB JSON</option>
+            <option value="stress-kib-1024">Fragment limit: 1 MiB JSON</option>
+            <option value="stress-kib-1536">
+              Fragment limit: 1.5 MiB JSON
+            </option>
+            <option value="stress-kib-2048">Fragment limit: 2 MiB JSON</option>
+            <option value="stress-kib-3072">Fragment limit: 3 MiB JSON</option>
           </select>
         </label>
         <textarea id="payload" aria-label="Payload JSON"></textarea>
@@ -275,8 +285,8 @@
       }
 
       function makePayload(kind) {
-        if (kind.startsWith('stress-')) {
-          const target = Number(kind.slice(7)) * 1024 * 1024
+        if (kind.startsWith('stress-kib-')) {
+          const target = Number(kind.slice(11)) * 1024
           const shell = JSON.stringify({
             ...base,
             description: '',
