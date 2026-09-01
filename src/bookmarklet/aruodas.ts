@@ -131,21 +131,35 @@ if (
       gas: utility(/duj/i),
     },
   }
-  const form = document.createElement('form')
-  form.method = 'POST'
-  form.action = endpoint
-  form.target = '_blank'
-  for (const [name, value] of Object.entries({
-    key,
-    payload: JSON.stringify(payload),
-  })) {
-    const input = document.createElement('input')
-    input.type = 'hidden'
-    input.name = name
-    input.value = value
-    form.append(input)
+  const payloadText = JSON.stringify(payload)
+  if (endpoint.includes('__FMH_FRAGMENT_RECEIVER__')) {
+    const bytes = new TextEncoder().encode(payloadText)
+    let binary = ''
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
+    }
+    const encoded = btoa(binary)
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+    window.location.href = endpoint.replace(
+      '__FMH_FRAGMENT_RECEIVER__',
+      encoded,
+    )
+  } else {
+    const form = document.createElement('form')
+    form.method = 'POST'
+    form.action = endpoint
+    form.target = '_blank'
+    for (const [name, value] of Object.entries({ key, payload: payloadText })) {
+      const input = document.createElement('input')
+      input.type = 'hidden'
+      input.name = name
+      input.value = value
+      form.append(input)
+    }
+    document.body.append(form)
+    form.submit()
+    form.remove()
   }
-  document.body.append(form)
-  form.submit()
-  form.remove()
 }

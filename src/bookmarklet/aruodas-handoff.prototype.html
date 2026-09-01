@@ -85,6 +85,22 @@
 
     <main id="launcher">
       <section>
+        <h2>Test on a real Aruodas listing</h2>
+        <p class="muted">
+          This uses the real scraper from
+          <code>src/bookmarklet/aruodas.ts</code>. Add the link below as a
+          browser bookmark. If your mobile browser does not offer “Bookmark
+          link”, copy the URL and paste it into the URL field of a new bookmark.
+          Then open an individual Aruodas land listing and tap that bookmark.
+        </p>
+        <a id="real-bookmarklet" href="#">Preparing test bookmarklet...</a>
+        <button id="copy-bookmarklet" class="secondary" disabled>
+          Copy test bookmarklet URL
+        </button>
+        <output id="bookmarklet-status"></output>
+      </section>
+
+      <section>
         <h2>Payload</h2>
         <label>
           Payload profile
@@ -189,6 +205,24 @@
         delayedPopup: 'not tested',
       }
 
+      async function prepareRealBookmarklet() {
+        const source = await fetch(
+          './aruodas-handoff.bookmarklet.prototype.js',
+        ).then((response) => response.text())
+        const endpoint = `${receiverUrl()}#import=__FMH_FRAGMENT_RECEIVER__`
+        const bookmarklet = `javascript:${source.replace('"__FMH_ENDPOINT__"', JSON.stringify(endpoint))}`
+        const link = document.querySelector('#real-bookmarklet')
+        const copy = document.querySelector('#copy-bookmarklet')
+        const status = document.querySelector('#bookmarklet-status')
+        link.href = bookmarklet
+        link.textContent = 'Find Me Home: test real Aruodas import'
+        copy.disabled = false
+        copy.onclick = async () => {
+          await navigator.clipboard.writeText(bookmarklet)
+          status.textContent = `Copied ${bookmarklet.length.toLocaleString()} characters. Paste this into the bookmark URL field.`
+        }
+      }
+
       function fingerprint(value) {
         let hash = 2166136261
         for (let index = 0; index < value.length; index++) {
@@ -277,6 +311,10 @@
       profile.onchange = loadProfile
       payload.oninput = render
       loadProfile()
+      prepareRealBookmarklet().catch((error) => {
+        document.querySelector('#bookmarklet-status').textContent =
+          String(error)
+      })
 
       document.querySelector('#fragment').onclick = () => {
         outcomes.fragment = 'navigation started'
