@@ -5,6 +5,13 @@ they may want to buy.
 
 ## Language
 
+**Household**:
+The shared workspace for one land search: its Source Listings, Candidate
+Plots, and Visit Plan. Everyone who has joined a Household sees and may edit
+all of it; there are no roles, permissions, or member identities. A person may
+participate in several Households.
+_Avoid_: Group, account, workspace
+
 **Source Listing**:
 A household record of an advertisement published by a property marketplace.
 One Source Listing may offer one or more Candidate Plots.
