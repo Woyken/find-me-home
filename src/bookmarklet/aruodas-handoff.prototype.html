@@ -369,11 +369,21 @@
           ? location.hash.slice(8)
           : ''
         if (packed) {
-          const value = decode(packed)
-          const expected = sessionStorage.getItem('handoff-probe-expected')
+          const decoded = decode(packed)
+          let value = decoded
+          let expected = sessionStorage.getItem('handoff-probe-expected')
+          const decodedJson = JSON.parse(decoded)
+          if (
+            typeof decodedJson.payload === 'string' &&
+            typeof decodedJson.fingerprint === 'string'
+          ) {
+            value = decodedJson.payload
+            expected = decodedJson.fingerprint
+          }
           const actual = fingerprint(value)
           const passed = actual === expected
-          received.innerHTML = `<span class="${passed ? 'pass' : 'fail'}">Fragment ${passed ? 'PASS' : 'FAIL'}</span>\nReceived ${value.length.toLocaleString()} characters.\nExpected fingerprint: ${expected}\nActual fingerprint: ${actual}`
+          const imported = JSON.parse(value)
+          received.innerHTML = `<span class="${passed ? 'pass' : 'fail'}">Fragment ${passed ? 'PASS' : 'FAIL'}</span>\nReceived ${value.length.toLocaleString()} characters.\nExpected fingerprint: ${expected}\nActual fingerprint: ${actual}\n\nTitle: ${imported.title ?? 'missing'}\nAddress: ${imported.address ?? 'missing'}\nPrice: ${imported.priceEur ?? 'missing'}\nArea: ${imported.areaAres ?? 'missing'}\nPhotos: ${imported.photos?.length ?? 0}\nDescription: ${imported.description?.length ?? 0} characters`
           outcomes.fragment = passed
             ? `PASS: ${actual}`
             : `FAIL: expected ${expected}, received ${actual}`

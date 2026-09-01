@@ -133,7 +133,16 @@ if (
   }
   const payloadText = JSON.stringify(payload)
   if (endpoint.includes('__FMH_FRAGMENT_RECEIVER__')) {
-    const bytes = new TextEncoder().encode(payloadText)
+    let hash = 2166136261
+    for (let index = 0; index < payloadText.length; index++) {
+      hash ^= payloadText.charCodeAt(index)
+      hash = Math.imul(hash, 16777619)
+    }
+    const envelope = JSON.stringify({
+      payload: payloadText,
+      fingerprint: `${payloadText.length}:${(hash >>> 0).toString(16)}`,
+    })
+    const bytes = new TextEncoder().encode(envelope)
     let binary = ''
     for (let offset = 0; offset < bytes.length; offset += 0x8000) {
       binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
