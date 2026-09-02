@@ -1,5 +1,4 @@
-const endpoint = '__FMH_ENDPOINT__'
-const key = '__FMH_KEY__'
+const appUrl = '__FMH_APP_URL__'
 
 const clean = (value: string | null | undefined) =>
   value?.replace(/\s+/g, ' ').trim() || undefined
@@ -48,6 +47,20 @@ const jsonLd = () =>
     .filter((item): item is Record<string, unknown> => Boolean(item))
 
 const fail = (message: string) => window.alert(`Find Me Home: ${message}`)
+const allowedPhoto = (source: string) => {
+  try {
+    const photo = new URL(source)
+    return (
+      photo.protocol === 'https:' &&
+      (photo.hostname === 'aruodas.lt' ||
+        photo.hostname.endsWith('.aruodas.lt') ||
+        photo.hostname === 'dgn.lt' ||
+        photo.hostname.endsWith('.dgn.lt'))
+    )
+  } catch {
+    return false
+  }
+}
 const url = new URL(window.location.href)
 url.search = ''
 url.hash = ''
@@ -118,10 +131,7 @@ if (
     description,
     photos: [...document.images]
       .map((image) => image.currentSrc || image.src)
-      .filter(
-        (source) =>
-          source.startsWith('https://') && /aruodas|dgn\.lt/.test(source),
-      )
+      .filter(allowedPhoto)
       .slice(0, 50),
     features: featureText,
     utilities: {
@@ -131,21 +141,17 @@ if (
       gas: utility(/duj/i),
     },
   }
-  const form = document.createElement('form')
-  form.method = 'POST'
-  form.action = endpoint
-  form.target = '_blank'
-  for (const [name, value] of Object.entries({
-    key,
-    payload: JSON.stringify(payload),
-  })) {
-    const input = document.createElement('input')
-    input.type = 'hidden'
-    input.name = name
-    input.value = value
-    form.append(input)
+  const text = JSON.stringify({ version: 1, payload })
+  if (text.length > 100_000) {
+    fail('This advertisement is too large to import.')
+  } else {
+    const bytes = new TextEncoder().encode(text)
+    let binary = ''
+    for (const byte of bytes) binary += String.fromCharCode(byte)
+    const encoded = btoa(binary)
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+    window.location.href = `${appUrl}#import=${encoded}`
   }
-  document.body.append(form)
-  form.submit()
-  form.remove()
 }

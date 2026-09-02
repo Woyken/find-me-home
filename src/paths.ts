@@ -1,6 +1,8 @@
+const base = import.meta.env.BASE_URL.replace(/\/$/, '')
+
 export const paths = {
-  home: '/',
-  visitPlan: '/visit-plan',
-  sourceListing: (id: number) => `/source-listings/${id}`,
-  importDraft: (token: string) => `/imports/${encodeURIComponent(token)}`,
+  home: `${base}/`,
+  visitPlan: `${base}/visit-plan`,
+  sourceListing: (id: string | number) =>
+    `${base}/source-listings/${encodeURIComponent(id)}`,
 } as const

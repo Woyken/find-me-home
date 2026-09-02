@@ -1,12 +1,12 @@
 import { createRouter, defineRoute } from '@solidjs/router'
 import Home, { preloadHome } from './routes/index'
-import ImportReview, { preloadImportReview } from './routes/imports.$token'
 import SourceListingPage, {
   preloadSourceListing,
 } from './routes/source-listings.$sourceListingId'
 import VisitPlanPage, { preloadVisitPlan } from './routes/visit-plan'
 
 export const Router = createRouter({
+  base: import.meta.env.BASE_URL,
   routes: [
     { path: '/', component: Home, preload: preloadHome },
     {
@@ -18,11 +18,6 @@ export const Router = createRouter({
       path: '/source-listings/:sourceListingId',
       component: SourceListingPage,
       preload: preloadSourceListing,
-    }),
-    defineRoute({
-      path: '/imports/:token',
-      component: ImportReview,
-      preload: preloadImportReview,
     }),
     { path: '*404', component: NotFound },
   ],

@@ -1,6 +1,8 @@
 import type { HouseholdCredentialSource } from './credentials'
 import type { HouseholdAccessStore, HouseholdRepository } from './indexeddb'
 import type { HouseholdRuntimeState } from './model'
+import type { SourceListingRepository } from '../source-listings/indexeddb'
+import type { ReviewedImport } from '../source-listings/model'
 
 export type HouseholdRuntime = {
   state: () => HouseholdRuntimeState
@@ -8,12 +10,18 @@ export type HouseholdRuntime = {
   start: () => Promise<void>
   createHousehold: () => Promise<void>
   renameActiveHousehold: (name: string) => Promise<void>
+  listSourceListings: SourceListingRepository['list']
+  getSourceListing: SourceListingRepository['get']
+  saveReviewedImport: (
+    review: ReviewedImport,
+  ) => ReturnType<SourceListingRepository['saveReviewedImport']>
   dispose: () => void
 }
 
 export const createHouseholdRuntime = (dependencies: {
   accessStore: HouseholdAccessStore
   households: HouseholdRepository
+  sourceListings: SourceListingRepository
   credentials: HouseholdCredentialSource
   now: () => number
   uuid: () => string
@@ -25,6 +33,11 @@ export const createHouseholdRuntime = (dependencies: {
     state = next
     for (const listener of listeners) listener()
   }
+  const unsubscribeSourceListings = dependencies.sourceListings.subscribe(
+    () => {
+      for (const listener of listeners) listener()
+    },
+  )
   const mutationTime = () => {
     lastMutationAt = Math.max(dependencies.now(), lastMutationAt + 1)
     return lastMutationAt
@@ -57,6 +70,7 @@ export const createHouseholdRuntime = (dependencies: {
         const openedAccess = { ...access, lastOpenedAt: mutationTime() }
         await dependencies.accessStore.put(openedAccess)
         await dependencies.households.open(access.householdId)
+        await dependencies.sourceListings.open(access.householdId)
         const household = dependencies.households.get()
         if (!household && !access.initialized) {
           setState({
@@ -95,6 +109,7 @@ export const createHouseholdRuntime = (dependencies: {
         lastOpenedAt: timestamp,
       }
       await dependencies.households.open(credentials.householdId)
+      await dependencies.sourceListings.open(credentials.householdId)
       await dependencies.households.create(household)
       try {
         await dependencies.accessStore.put(access)
@@ -124,10 +139,16 @@ export const createHouseholdRuntime = (dependencies: {
         household: { ...state.household, name: normalizedName, updatedAt },
       })
     },
+    listSourceListings: () => dependencies.sourceListings.list(),
+    getSourceListing: (id) => dependencies.sourceListings.get(id),
+    saveReviewedImport: (review) =>
+      dependencies.sourceListings.saveReviewedImport(review),
     dispose() {
+      unsubscribeSourceListings()
       listeners.clear()
       dependencies.accessStore.close()
       dependencies.households.close()
+      dependencies.sourceListings.close()
     },
   }
 }

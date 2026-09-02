@@ -6,12 +6,15 @@ import App from './App'
 import { HouseholdHeader } from './components/HouseholdHeader'
 import type { HouseholdRuntime } from './households/runtime'
 import type { HouseholdRuntimeState } from './households/model'
+import { encodeImportFragment } from './imports/aruodas'
 
 let dispose: (() => void) | undefined
 
 afterEach(() => {
   dispose?.()
   document.body.replaceChildren()
+  sessionStorage.clear()
+  history.replaceState(null, '', '/')
 })
 
 const mount = (runtime: HouseholdRuntime) => {
@@ -76,12 +79,43 @@ const createTestRuntime = () => {
     start: async () => publish({ status: 'no-household' }),
     createHousehold: async () => publish(active('Our home search')),
     renameActiveHousehold: async (name) => publish(active(name)),
+    listSourceListings: () => [],
+    getSourceListing: () => undefined,
+    saveReviewedImport: async () => {
+      throw new Error('Not used')
+    },
     dispose: () => listeners.clear(),
   }
   return runtime
 }
 
 describe('App Household boundary', () => {
+  it('removes an import fragment and resumes its review after creating a Household', async () => {
+    const fragment = encodeImportFragment({
+      url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-upes-g-sklypas-11-1472707/',
+      title: 'Žemųjų Rusokų sklypas',
+      address: 'Upės g. 7',
+      photos: [],
+      features: [],
+    })
+    history.replaceState(null, '', `/#import=${fragment}`)
+    mount(createTestRuntime())
+
+    expect(location.hash).toBe('')
+    await waitFor(() => expect(findButton('Create Household')).toBeTruthy())
+    expect(document.body.textContent).not.toContain('Review before saving')
+
+    findButton('Create Household')?.click()
+
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('Review before saving'),
+    )
+    expect(document.body.textContent).toContain('Žemųjų Rusokų sklypas')
+    expect(sessionStorage.getItem('find-me-home-import-draft')).toContain(
+      'Žemųjų Rusokų sklypas',
+    )
+  })
+
   it('offers create or join before mounting Household content', async () => {
     mount(createTestRuntime())
 

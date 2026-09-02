@@ -131,6 +131,16 @@ describe('Household runtime', () => {
         remove: async () => undefined,
         close: () => undefined,
       },
+      sourceListings: {
+        open: async () => undefined,
+        list: () => [],
+        get: () => undefined,
+        saveReviewedImport: async () => {
+          throw new Error('Not used')
+        },
+        subscribe: () => () => undefined,
+        close: () => undefined,
+      },
       credentials: {
         create: async () => {
           throw new Error('Not used')

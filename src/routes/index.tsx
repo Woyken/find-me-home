@@ -1,20 +1,15 @@
-import { revalidate } from '@solidjs/router'
 import { For, Show, createMemo, createSignal } from 'solid-js'
-import {
-  getAruodasBookmarklet,
-  updateVisitPlan,
-} from '../server-functions/source-listings'
-import type { SourceListingSummary } from '../server/source-listings'
 import { paths } from '../paths'
-import { sourceListingsQuery } from '../queries'
 import { HouseholdHeader } from '../components/HouseholdHeader'
+import { useHousehold } from '../households/context'
+import type { SourceListingDetail } from '../source-listings/model'
+import { createAruodasBookmarklet } from '../imports/bookmarklet'
 
-export const preloadHome = () => void sourceListingsQuery()
+export const preloadHome = () => undefined
 
 export default function Home() {
-  const listings = createMemo(() => sourceListingsQuery())
-  const visitCount = () =>
-    listings().filter((listing) => listing.visitPlanPosition !== null).length
+  const household = useHousehold()
+  const listings = createMemo(() => household.listSourceListings())
   const [showImport, setShowImport] = createSignal(false)
 
   return (
@@ -27,7 +22,7 @@ export default function Home() {
               class="border-b border-[#204d3a] font-mono text-xs font-bold text-[#204d3a]"
               href={paths.visitPlan}
             >
-              {visitCount()} in Visit Plan
+              Visit Plan
             </a>
             <button
               class="bg-[#204d3a] px-4 py-2 text-sm font-bold text-white"
@@ -69,29 +64,16 @@ export default function Home() {
   )
 }
 
-function ListingRow(props: { listing: SourceListingSummary }) {
-  const [busy, setBusy] = createSignal(false)
-  const toggleVisit = async () => {
-    setBusy(true)
-    try {
-      await updateVisitPlan({
-        data: {
-          id: props.listing.id,
-          included: props.listing.visitPlanPosition === null,
-        },
-      })
-      await revalidate()
-    } finally {
-      setBusy(false)
-    }
-  }
+function ListingRow(props: { listing: SourceListingDetail }) {
+  const plot = () => props.listing.candidatePlots[0]
 
   return (
     <article class="grid gap-3 border-b border-[#18241e]/20 px-4 py-5 last:border-0 sm:grid-cols-[2.1fr_1fr_0.7fr_0.8fr_auto] sm:items-center sm:px-7">
       <div class="min-w-0">
         <p class="font-mono text-[9px] uppercase text-[#68756d]">
-          Aruodas {props.listing.sourceId} · {props.listing.candidatePlotCount}{' '}
-          {props.listing.candidatePlotCount === 1 ? 'plot' : 'plots'}
+          Aruodas {props.listing.sourceId} ·{' '}
+          {props.listing.candidatePlots.length}{' '}
+          {props.listing.candidatePlots.length === 1 ? 'plot' : 'plots'}
         </p>
         <a
           class="mt-1 block font-serif text-xl leading-tight hover:underline"
@@ -100,32 +82,15 @@ function ListingRow(props: { listing: SourceListingSummary }) {
           {props.listing.title ?? `Aruodas advert ${props.listing.sourceId}`}
         </a>
         <p class="mt-2 text-sm text-[#647169] sm:hidden">
-          {props.listing.locationLabel ?? 'Location unknown'}
+          {props.listing.address ?? 'Location unknown'}
         </p>
       </div>
       <p class="hidden text-sm sm:block">
-        {props.listing.locationLabel ?? 'Unknown'}
+        {props.listing.address ?? 'Unknown'}
       </p>
-      <b>{formatPrice(props.listing.priceEur)}</b>
-      <b>{formatArea(props.listing.areaAres)}</b>
-      <button
-        class={`min-w-20 border px-3 py-2 text-xs font-bold disabled:opacity-50 ${
-          props.listing.visitPlanPosition === null
-            ? 'border-[#849087] hover:border-[#204d3a]'
-            : 'border-[#204d3a] bg-[#d9e6d8] text-[#204d3a]'
-        }`}
-        disabled={busy()}
-        onClick={toggleVisit}
-      >
-        {props.listing.visitPlanPosition === null
-          ? 'Add'
-          : `Visit #${props.listing.visitPlanPosition}`}
-      </button>
-      <Show when={props.listing.visitedAt}>
-        <span class="text-xs text-[#647169] sm:col-start-2 sm:col-end-5">
-          Visited {formatDate(props.listing.visitedAt)}
-        </span>
-      </Show>
+      <b>{formatPrice(plot().priceEur)}</b>
+      <b>{formatArea(plot().areaAres)}</b>
+      <span class="text-xs text-[#647169]">Local</span>
     </article>
   )
 }
@@ -133,18 +98,12 @@ function ListingRow(props: { listing: SourceListingSummary }) {
 function ImportSetup() {
   const [bookmarklet, setBookmarklet] = createSignal('')
   const [message, setMessage] = createSignal('')
-  const [busy, setBusy] = createSignal(false)
-  const prepare = async () => {
-    setBusy(true)
-    try {
-      const result = await getAruodasBookmarklet({
-        data: { origin: window.location.origin },
-      })
-      setBookmarklet(result.bookmarklet)
-    } finally {
-      setBusy(false)
-    }
-  }
+  const prepare = () =>
+    setBookmarklet(
+      createAruodasBookmarklet(
+        new URL(import.meta.env.BASE_URL, window.location.origin).toString(),
+      ),
+    )
 
   return (
     <section class="border-b border-[#18241e] bg-[#e5ece8] px-4 py-5 sm:px-7">
@@ -160,10 +119,9 @@ function ImportSetup() {
           fallback={
             <button
               class="border border-[#204d3a] px-4 py-2 text-sm font-bold text-[#204d3a] disabled:opacity-50"
-              disabled={busy()}
               onClick={prepare}
             >
-              {busy() ? 'Preparing…' : 'Prepare bookmarklet'}
+              Prepare bookmarklet
             </button>
           }
         >

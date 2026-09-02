@@ -19,11 +19,33 @@ export type HouseholdRepository = {
 
 const openDatabase = (name: string, storeName: string) =>
   new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(name, 1)
+    const request = indexedDB.open(name, 2)
     request.onupgradeneeded = () => {
-      request.result.createObjectStore(storeName, {
-        keyPath: storeName === 'household-access' ? 'householdId' : 'id',
-      })
+      if (!request.result.objectStoreNames.contains(storeName)) {
+        request.result.createObjectStore(storeName, {
+          keyPath: storeName === 'household-access' ? 'householdId' : 'id',
+        })
+      }
+      if (storeName === 'households') {
+        if (!request.result.objectStoreNames.contains('source-listings')) {
+          const sourceListings = request.result.createObjectStore(
+            'source-listings',
+            { keyPath: 'id' },
+          )
+          sourceListings.createIndex(
+            'source-identity',
+            ['householdId', 'source', 'sourceId'],
+            { unique: true },
+          )
+        }
+        if (!request.result.objectStoreNames.contains('candidate-plots')) {
+          const candidatePlots = request.result.createObjectStore(
+            'candidate-plots',
+            { keyPath: 'id' },
+          )
+          candidatePlots.createIndex('source-listing-id', 'sourceListingId')
+        }
+      }
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)

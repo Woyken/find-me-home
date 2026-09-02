@@ -4,6 +4,7 @@ import {
   createIndexedDbHouseholdRepository,
 } from './indexeddb'
 import { createHouseholdRuntime } from './runtime'
+import { createIndexedDbSourceListingRepository } from '../source-listings/indexeddb'
 
 export const createBrowserHouseholdRuntime = (options?: {
   accessDatabaseName?: string
@@ -19,6 +20,13 @@ export const createBrowserHouseholdRuntime = (options?: {
     ),
     households: createIndexedDbHouseholdRepository(
       options?.sharedDatabasePrefix,
+    ),
+    sourceListings: createIndexedDbSourceListingRepository(
+      options?.sharedDatabasePrefix,
+      {
+        now: options?.now ?? Date.now,
+        uuid: options?.uuid ?? (() => cryptoApi.randomUUID()),
+      },
     ),
     credentials: createHouseholdCredentialSource({ crypto: cryptoApi }),
     now: options?.now ?? Date.now,

@@ -5,6 +5,8 @@ import { HouseholdStart } from './components/HouseholdStart'
 import { createBrowserHouseholdRuntime } from './households/browser-runtime'
 import { HouseholdProvider, useHousehold } from './households/context'
 import type { HouseholdRuntime } from './households/runtime'
+import { ImportProvider, useImport } from './imports/context'
+import ImportReview from './routes/import-review'
 import './styles.css'
 
 export default function App(
@@ -12,14 +14,17 @@ export default function App(
 ) {
   const runtime = props.runtime ?? createBrowserHouseholdRuntime()
   return (
-    <HouseholdProvider runtime={runtime}>
-      <HouseholdBoundary>{props.children}</HouseholdBoundary>
-    </HouseholdProvider>
+    <ImportProvider>
+      <HouseholdProvider runtime={runtime}>
+        <HouseholdBoundary>{props.children}</HouseholdBoundary>
+      </HouseholdProvider>
+    </ImportProvider>
   )
 }
 
 function HouseholdBoundary(props: ParentProps) {
   const household = useHousehold()
+  const imported = useImport()
   return (
     <Switch>
       <Match when={household.state().status === 'starting'}>
@@ -39,14 +44,18 @@ function HouseholdBoundary(props: ParentProps) {
         </main>
       </Match>
       <Match when={household.state().status === 'active'}>
-        {props.children ?? (
-          <Router>
-            {(routerProps) => (
-              <Loading fallback={<main class="min-h-screen bg-[#f6f4ec]" />}>
-                {routerProps.children}
-              </Loading>
-            )}
-          </Router>
+        {imported.draft() || imported.error() ? (
+          <ImportReview />
+        ) : (
+          (props.children ?? (
+            <Router>
+              {(routerProps) => (
+                <Loading fallback={<main class="min-h-screen bg-[#f6f4ec]" />}>
+                  {routerProps.children}
+                </Loading>
+              )}
+            </Router>
+          ))
         )}
       </Match>
     </Switch>
