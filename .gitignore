@@ -12,5 +12,6 @@ dist-ssr
 __unconfig*
 
 data/
+prototype-data/
 dev-out.log
 dev-err.log
