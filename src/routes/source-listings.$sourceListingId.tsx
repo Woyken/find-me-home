@@ -1,7 +1,10 @@
-import { For, Show, createMemo } from 'solid-js'
+import { For, Show, createMemo, createSignal } from 'solid-js'
+import { useNavigate } from '@solidjs/router'
+import { CandidatePlotsMap } from '../components/CandidatePlotsMap'
 import { useHousehold } from '../households/context'
 import { paths } from '../paths'
-import { formatArea, formatPrice } from './index'
+import type { CandidatePlotRecord } from '../source-listings/model'
+import { candidatePlotMapItem } from '../source-listings/map'
 
 export const preloadSourceListing = () => undefined
 
@@ -9,9 +12,70 @@ export default function SourceListingPage(props: {
   params: Record<string, string | undefined>
 }) {
   const household = useHousehold()
+  const navigate = useNavigate()
   const listing = createMemo(() =>
     household.getSourceListing(props.params.sourceListingId ?? ''),
   )
+  const [selectedPlotId, setSelectedPlotId] = createSignal<string>()
+  const [error, setError] = createSignal('')
+  const [busy, setBusy] = createSignal(false)
+  const positionedPlots = createMemo(() =>
+    (listing()?.candidatePlots ?? []).flatMap((candidatePlot, index) => {
+      const item = candidatePlotMapItem(
+        candidatePlot,
+        candidatePlot.name ?? `Candidate Plot ${index + 1}`,
+      )
+      return item ? [item] : []
+    }),
+  )
+  const planned = createMemo(() => {
+    const id = listing()?.id
+    return id ? household.getVisitPlan().sourceListingIds.includes(id) : false
+  })
+
+  const addPlot = async () => {
+    const current = listing()
+    if (!current) return
+    setBusy(true)
+    setError('')
+    try {
+      setSelectedPlotId(await household.addCandidatePlot(current.id))
+    } catch (caught) {
+      setError(errorMessage(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const togglePlan = async () => {
+    const current = listing()
+    if (!current) return
+    const ids = household.getVisitPlan().sourceListingIds
+    await household.setVisitPlan(
+      planned() ? ids.filter((id) => id !== current.id) : [...ids, current.id],
+    )
+  }
+
+  const remove = async () => {
+    const current = listing()
+    if (!current) return
+    if (
+      !window.confirm(
+        `Remove "${current.title ?? 'Untitled Source Listing'}" and all its Candidate Plots from this Household and its Visit Plan? Importing the same marketplace advertisement later can restore it.`,
+      )
+    )
+      return
+    setBusy(true)
+    setError('')
+    try {
+      await household.removeSourceListing(current.id)
+      navigate(paths.home)
+    } catch (caught) {
+      setError(errorMessage(caught))
+      setBusy(false)
+    }
+  }
+
   return (
     <main class="min-h-screen bg-[#f6f4ec] px-5 py-8 text-[#17231d] sm:px-10">
       <Show when={listing()} fallback={<p>Source Listing not found.</p>}>
@@ -23,57 +87,69 @@ export default function SourceListingPage(props: {
             >
               Saved Source Listings
             </a>
-            <header class="mt-8 border-b border-[#17231d]/20 pb-8">
-              <p class="font-mono text-xs font-bold uppercase text-[#315f73]">
-                Aruodas · {item().sourceId}
-              </p>
-              <h1 class="mt-3 font-serif text-4xl sm:text-6xl">
-                {item().title ?? 'Untitled Source Listing'}
-              </h1>
-              <p class="mt-4 text-lg text-[#607067]">
-                {item().address ?? 'Location not recorded'}
-              </p>
+            <header class="mt-8 border-b border-[#17231d]/20 pb-8 sm:flex sm:items-end sm:justify-between sm:gap-6">
+              <div>
+                <p class="font-mono text-xs font-bold uppercase text-[#315f73]">
+                  Aruodas · {item().sourceId}
+                </p>
+                <h1 class="mt-3 font-serif text-4xl sm:text-6xl">
+                  {item().title ?? 'Untitled Source Listing'}
+                </h1>
+                <p class="mt-4 text-lg text-[#607067]">
+                  {item().address ?? 'Location not recorded'}
+                </p>
+              </div>
+              <button
+                class="mt-5 border border-[#24483a] px-5 py-3 font-bold text-[#24483a] sm:mt-0"
+                onClick={() => void togglePlan()}
+              >
+                {planned() ? 'Remove from Visit Plan' : 'Add to Visit Plan'}
+              </button>
             </header>
             <div class="mt-8 grid gap-8 lg:grid-cols-[1fr_18rem]">
-              <section>
-                <h2 class="font-serif text-3xl">Candidate Plots</h2>
+              <section class="min-w-0">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <h2 class="font-serif text-3xl">Candidate Plots</h2>
+                  <button
+                    class="bg-[#d96a45] px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+                    disabled={busy()}
+                    onClick={() => void addPlot()}
+                  >
+                    + Add Candidate Plot
+                  </button>
+                </div>
+                <Show when={positionedPlots().length > 0}>
+                  <div class="mt-5">
+                    <CandidatePlotsMap
+                      plots={positionedPlots()}
+                      selectedPlotId={selectedPlotId()}
+                      onSelect={setSelectedPlotId}
+                    />
+                  </div>
+                </Show>
+                <Show when={error()}>
+                  <p class="mt-4 font-bold text-[#a13d22]" role="alert">
+                    {error()}
+                  </p>
+                </Show>
                 <For each={item().candidatePlots}>
                   {(plot, index) => (
-                    <article class="mt-5 border border-[#17231d]/20 bg-white p-6">
-                      <p class="font-mono text-xs font-bold uppercase text-[#607067]">
-                        Candidate Plot {index() + 1}
-                      </p>
-                      <dl class="mt-5 grid gap-5 sm:grid-cols-2">
-                        <Detail
-                          label="Price"
-                          value={formatPrice(plot.priceEur)}
-                        />
-                        <Detail
-                          label="Area"
-                          value={formatArea(plot.areaAres)}
-                        />
-                        <Detail
-                          label="Purpose"
-                          value={plot.purposeText ?? 'Unknown'}
-                        />
-                        <Detail label="Notes" value={plot.notes ?? 'None'} />
-                        <Detail
-                          label="Recorded Location Clue"
-                          value={
-                            plot.parcelNumberClue ??
-                            (plot.latitudeClue !== null &&
-                            plot.longitudeClue !== null
-                              ? `${plot.latitudeClue}, ${plot.longitudeClue}`
-                              : plot.addressClue) ??
-                            'None'
-                          }
-                        />
-                      </dl>
-                    </article>
+                    <CandidatePlotEditor
+                      plot={plot}
+                      number={index() + 1}
+                      selected={selectedPlotId() === plot.id}
+                      onSave={(update) =>
+                        household.updateCandidatePlot(
+                          item().id,
+                          plot.id,
+                          update,
+                        )
+                      }
+                    />
                   )}
                 </For>
               </section>
-              <aside>
+              <aside class="space-y-5">
                 <Show when={item().photos[0]}>
                   {(photo) => (
                     <img
@@ -83,7 +159,7 @@ export default function SourceListingPage(props: {
                     />
                   )}
                 </Show>
-                <div class="mt-5 bg-[#e7edf0] p-5">
+                <div class="bg-[#e7edf0] p-5">
                   <p>{item().description ?? 'No description imported.'}</p>
                   <a
                     class="mt-5 inline-block font-bold text-[#315f73] underline"
@@ -94,6 +170,24 @@ export default function SourceListingPage(props: {
                     Open original advert
                   </a>
                 </div>
+                <div class="border border-[#a13d22]/30 bg-[#fff1eb] p-5">
+                  <p class="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#a13d22]">
+                    Remove from Household
+                  </p>
+                  <p class="mt-2 text-sm text-[#6f3525]">
+                    Removes this Source Listing and its Candidate Plots from the
+                    Household and Visit Plan. Re-importing the same
+                    advertisement can restore it without losing Household
+                    observations.
+                  </p>
+                  <button
+                    class="mt-4 w-full border border-[#a13d22] px-4 py-3 text-sm font-bold text-[#a13d22] disabled:opacity-50"
+                    disabled={busy()}
+                    onClick={() => void remove()}
+                  >
+                    Remove Source Listing
+                  </button>
+                </div>
               </aside>
             </div>
           </div>
@@ -103,11 +197,221 @@ export default function SourceListingPage(props: {
   )
 }
 
-function Detail(props: { label: string; value: string }) {
+function CandidatePlotEditor(props: {
+  plot: CandidatePlotRecord
+  number: number
+  selected: boolean
+  onSave: (
+    update: Parameters<
+      ReturnType<typeof useHousehold>['updateCandidatePlot']
+    >[2],
+  ) => Promise<void>
+}) {
+  const [name, setName] = createSignal(props.plot.name ?? '')
+  const [price, setPrice] = createSignal(textNumber(props.plot.priceEur))
+  const [area, setArea] = createSignal(textNumber(props.plot.areaAres))
+  const [purpose, setPurpose] = createSignal(props.plot.purposeText ?? '')
+  const [notes, setNotes] = createSignal(props.plot.notes ?? '')
+  const [clueKind, setClueKind] = createSignal<
+    'parcel' | 'coordinates' | 'address'
+  >(
+    props.plot.parcelNumberClue
+      ? 'parcel'
+      : props.plot.latitudeClue !== null
+        ? 'coordinates'
+        : 'address',
+  )
+  const [parcel, setParcel] = createSignal(props.plot.parcelNumberClue ?? '')
+  const [latitude, setLatitude] = createSignal(
+    textNumber(props.plot.latitudeClue),
+  )
+  const [longitude, setLongitude] = createSignal(
+    textNumber(props.plot.longitudeClue),
+  )
+  const [address, setAddress] = createSignal(props.plot.addressClue ?? '')
+  const [precision, setPrecision] = createSignal<'exact' | 'approx'>(
+    props.plot.coordinateCluePrecision ?? 'approx',
+  )
+  const [road, setRoad] = createSignal(textNumber(props.plot.roadAccessRating))
+  const [feeling, setFeeling] = createSignal(
+    textNumber(props.plot.areaFeelingRating),
+  )
+  const [view, setView] = createSignal(textNumber(props.plot.viewRating))
+  const [status, setStatus] = createSignal('')
+
+  const save = async () => {
+    setStatus('Saving...')
+    try {
+      await props.onSave({
+        name: optionalText(name()),
+        priceEur: optionalNumber(price()),
+        areaAres: optionalNumber(area()),
+        purposeText: optionalText(purpose()),
+        notes: optionalText(notes()),
+        parcelNumberClue:
+          clueKind() === 'parcel' ? optionalText(parcel()) : null,
+        latitudeClue:
+          clueKind() === 'coordinates' ? optionalNumber(latitude()) : null,
+        longitudeClue:
+          clueKind() === 'coordinates' ? optionalNumber(longitude()) : null,
+        coordinateCluePrecision:
+          clueKind() === 'coordinates' ? precision() : null,
+        addressClue: clueKind() === 'address' ? optionalText(address()) : null,
+        roadAccessRating: optionalNumber(road()),
+        areaFeelingRating: optionalNumber(feeling()),
+        viewRating: optionalNumber(view()),
+      })
+      setStatus('Saved')
+    } catch (caught) {
+      setStatus(errorMessage(caught))
+    }
+  }
+
   return (
-    <div>
-      <dt class="font-mono text-xs uppercase text-[#607067]">{props.label}</dt>
-      <dd class="mt-1 font-bold">{props.value}</dd>
-    </div>
+    <article
+      class={`mt-5 border bg-white p-5 ${props.selected ? 'border-[#d96a45]' : 'border-[#17231d]/20'}`}
+    >
+      <p class="font-mono text-xs font-bold uppercase text-[#607067]">
+        Candidate Plot {props.number}
+      </p>
+      <div class="mt-4 grid gap-4 sm:grid-cols-2">
+        <Field label="Name" value={name()} onInput={setName} />
+        <Field label="Price (€)" value={price()} onInput={setPrice} />
+        <Field label="Area (a)" value={area()} onInput={setArea} />
+        <Field label="Purpose" value={purpose()} onInput={setPurpose} />
+      </div>
+      <label class="mt-4 block text-sm font-bold">
+        Notes
+        <textarea
+          class="mt-2 min-h-24 w-full border border-[#17231d]/25 p-3 font-normal"
+          value={notes()}
+          onInput={(event) => setNotes(event.currentTarget.value)}
+        />
+      </label>
+      <fieldset class="mt-5 border-t border-[#17231d]/10 pt-4">
+        <legend class="font-serif text-xl">Recorded Location Clue</legend>
+        <select
+          class="mt-3 border border-[#17231d]/25 p-3"
+          value={clueKind()}
+          onChange={(event) =>
+            setClueKind(
+              event.currentTarget.value as typeof clueKind extends () => infer T
+                ? T
+                : never,
+            )
+          }
+        >
+          <option value="parcel">Unique parcel number</option>
+          <option value="coordinates">Coordinates</option>
+          <option value="address">Address</option>
+        </select>
+        <Show when={clueKind() === 'parcel'}>
+          <div class="mt-3">
+            <Field
+              label="Unique parcel number"
+              value={parcel()}
+              onInput={setParcel}
+            />
+          </div>
+        </Show>
+        <Show when={clueKind() === 'coordinates'}>
+          <div class="mt-3 grid gap-4 sm:grid-cols-3">
+            <Field label="Latitude" value={latitude()} onInput={setLatitude} />
+            <Field
+              label="Longitude"
+              value={longitude()}
+              onInput={setLongitude}
+            />
+            <label class="text-sm font-bold">
+              Precision
+              <select
+                class="mt-2 w-full border border-[#17231d]/25 p-3 font-normal"
+                value={precision()}
+                onChange={(event) =>
+                  setPrecision(event.currentTarget.value as 'exact' | 'approx')
+                }
+              >
+                <option value="exact">Exact</option>
+                <option value="approx">Approximate</option>
+              </select>
+            </label>
+          </div>
+        </Show>
+        <Show when={clueKind() === 'address'}>
+          <div class="mt-3">
+            <Field label="Address" value={address()} onInput={setAddress} />
+          </div>
+        </Show>
+      </fieldset>
+      <fieldset class="mt-5 border-t border-[#17231d]/10 pt-4">
+        <legend class="font-serif text-xl">Manual Ratings</legend>
+        <div class="mt-3 grid gap-4 sm:grid-cols-3">
+          <Rating label="Road/access" value={road()} onInput={setRoad} />
+          <Rating label="Area feeling" value={feeling()} onInput={setFeeling} />
+          <Rating label="View" value={view()} onInput={setView} />
+        </div>
+      </fieldset>
+      <div class="mt-5 flex items-center gap-3">
+        <button
+          class="bg-[#24483a] px-5 py-3 text-sm font-bold text-white"
+          onClick={() => void save()}
+        >
+          Save Candidate Plot
+        </button>
+        <span role="status" class="text-sm">
+          {status()}
+        </span>
+      </div>
+    </article>
   )
 }
+
+function Field(props: {
+  label: string
+  value: string
+  onInput: (value: string) => void
+}) {
+  return (
+    <label class="text-sm font-bold">
+      {props.label}
+      <input
+        class="mt-2 w-full border border-[#17231d]/25 p-3 font-normal"
+        value={props.value}
+        onInput={(event) => props.onInput(event.currentTarget.value)}
+      />
+    </label>
+  )
+}
+
+function Rating(props: {
+  label: string
+  value: string
+  onInput: (value: string) => void
+}) {
+  return (
+    <label class="text-sm font-bold">
+      {props.label}
+      <select
+        class="mt-2 w-full border border-[#17231d]/25 p-3 font-normal"
+        value={props.value}
+        onChange={(event) => props.onInput(event.currentTarget.value)}
+      >
+        <option value="">Not rated</option>
+        <For each={[1, 2, 3, 4, 5]}>
+          {(rating) => <option value={rating}>{rating} / 5</option>}
+        </For>
+      </select>
+    </label>
+  )
+}
+
+const optionalText = (value: string) => value.trim() || null
+const optionalNumber = (value: string) => {
+  if (!value.trim()) return null
+  const parsed = Number(value.replace(',', '.'))
+  if (!Number.isFinite(parsed)) throw new Error('Enter a valid number')
+  return parsed
+}
+const textNumber = (value: number | null) => value?.toString() ?? ''
+const errorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error)

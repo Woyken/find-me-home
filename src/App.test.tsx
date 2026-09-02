@@ -84,6 +84,19 @@ const createTestRuntime = () => {
     saveReviewedImport: async () => {
       throw new Error('Not used')
     },
+    addCandidatePlot: async () => {
+      throw new Error('Not used')
+    },
+    updateCandidatePlot: async () => undefined,
+    getVisitPlan: () => ({
+      id: 'visit-plan',
+      householdId: 'household-id',
+      sourceListingIds: [],
+      updatedAt: 0,
+    }),
+    setVisitPlan: async () => undefined,
+    removeSourceListing: async () => undefined,
+    getSourceListingRecords: () => [],
     dispose: () => listeners.clear(),
   }
   return runtime

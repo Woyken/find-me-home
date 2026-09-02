@@ -19,7 +19,7 @@ export type HouseholdRepository = {
 
 const openDatabase = (name: string, storeName: string) =>
   new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(name, 2)
+    const request = indexedDB.open(name, 3)
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains(storeName)) {
         request.result.createObjectStore(storeName, {
@@ -44,6 +44,9 @@ const openDatabase = (name: string, storeName: string) =>
             { keyPath: 'id' },
           )
           candidatePlots.createIndex('source-listing-id', 'sourceListingId')
+        }
+        if (!request.result.objectStoreNames.contains('visit-plans')) {
+          request.result.createObjectStore('visit-plans', { keyPath: 'id' })
         }
       }
     }

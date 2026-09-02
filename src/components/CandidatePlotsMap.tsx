@@ -4,7 +4,7 @@ import type * as Leaflet from 'leaflet'
 import type { Feature, Polygon } from 'geojson'
 
 interface MapPlot {
-  id: number
+  id: string
   label: string
   latitude: number
   longitude: number
@@ -14,8 +14,8 @@ interface MapPlot {
 
 export function CandidatePlotsMap(props: {
   plots: Array<MapPlot>
-  selectedPlotId: number | undefined
-  onSelect: (plotId: number) => void
+  selectedPlotId: string | undefined
+  onSelect: (plotId: string) => void
 }) {
   let map: Leaflet.Map | undefined
   let plotLayer: Leaflet.LayerGroup | undefined
@@ -61,7 +61,7 @@ export function CandidatePlotsMap(props: {
   const draw = (
     fitBounds: boolean,
     plots: Array<MapPlot>,
-    selectedPlotId: number | undefined,
+    selectedPlotId: string | undefined,
   ) => {
     if (!map || !leaflet || !plotLayer) return
 

@@ -1,19 +1,42 @@
 import type {
   CandidatePlotRecord,
+  CandidatePlotUpdate,
   ReviewedImport,
+  SourceListingSharedRecord,
   SourceListingDetail,
   SourceListingRecord,
+  VisitPlanRecord,
 } from './model'
 
 export type SourceListingRepository = {
   open: (householdId: string) => Promise<void>
   list: () => SourceListingDetail[]
   get: (id: string) => SourceListingDetail | undefined
-  saveReviewedImport: (review: ReviewedImport) => Promise<{
+  saveReviewedImport: (
+    review: ReviewedImport,
+    updatedAt?: number,
+  ) => Promise<{
     sourceListingId: string
     candidatePlotId: string
     created: boolean
   }>
+  addCandidatePlot: (
+    sourceListingId: string,
+    updatedAt: number,
+  ) => Promise<string>
+  updateCandidatePlot: (
+    sourceListingId: string,
+    candidatePlotId: string,
+    update: CandidatePlotUpdate,
+    updatedAt: number,
+  ) => Promise<void>
+  getVisitPlan: () => VisitPlanRecord
+  setVisitPlan: (sourceListingIds: string[], updatedAt: number) => Promise<void>
+  removeSourceListing: (
+    sourceListingId: string,
+    updatedAt: number,
+  ) => Promise<void>
+  allRecords: () => SourceListingSharedRecord[]
   subscribe: (listener: () => void) => () => void
   close: () => void
 }
@@ -27,13 +50,15 @@ const requestResult = <T>(request: IDBRequest<T>) =>
 const transactionComplete = (transaction: IDBTransaction) =>
   new Promise<void>((resolve, reject) => {
     transaction.oncomplete = () => resolve()
-    transaction.onerror = () => reject(transaction.error)
-    transaction.onabort = () => reject(transaction.error)
+    transaction.onerror = () =>
+      reject(transaction.error ?? new Error('IndexedDB transaction failed'))
+    transaction.onabort = () =>
+      reject(transaction.error ?? new Error('IndexedDB transaction aborted'))
   })
 
 const openDatabase = (name: string) =>
   new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(name, 2)
+    const request = indexedDB.open(name, 3)
     request.onupgradeneeded = () => {
       const database = request.result
       if (!database.objectStoreNames.contains('households')) {
@@ -57,6 +82,9 @@ const openDatabase = (name: string) =>
         })
         store.createIndex('source-listing-id', 'sourceListingId')
       }
+      if (!database.objectStoreNames.contains('visit-plans')) {
+        database.createObjectStore('visit-plans', { keyPath: 'id' })
+      }
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
@@ -64,7 +92,11 @@ const openDatabase = (name: string) =>
 
 export const createIndexedDbSourceListingRepository = (
   databasePrefix = 'find-me-home-shared',
-  dependencies: { now: () => number; uuid: () => string } = {
+  dependencies: {
+    now: () => number
+    uuid: () => string
+    beforeRemoveCommit?: (transaction: IDBTransaction) => void
+  } = {
     now: Date.now,
     uuid: () => crypto.randomUUID(),
   },
@@ -74,6 +106,7 @@ export const createIndexedDbSourceListingRepository = (
   let lastMutationAt = 0
   let sourceListings: SourceListingRecord[] = []
   let candidatePlots: CandidatePlotRecord[] = []
+  let visitPlan: VisitPlanRecord | undefined
   const listeners = new Set<() => void>()
   const requireOpen = () => {
     if (!database || !householdId)
@@ -83,11 +116,48 @@ export const createIndexedDbSourceListingRepository = (
   const detail = (record: SourceListingRecord): SourceListingDetail => ({
     ...structuredClone(record),
     candidatePlots: candidatePlots
-      .filter((plot) => plot.sourceListingId === record.id)
+      .filter((plot) => plot.sourceListingId === record.id && !plot.deletedAt)
       .map((plot) => structuredClone(plot)),
   })
   const publish = () => {
     for (const listener of listeners) listener()
+  }
+  const normalizeCandidatePlots = (records: CandidatePlotRecord[]) => {
+    const hasPersistedField = (record: CandidatePlotRecord, field: string) =>
+      Object.prototype.hasOwnProperty.call(record, field)
+    const sourceListingCounts = new Map<string, number>()
+    for (const record of records) {
+      sourceListingCounts.set(
+        record.sourceListingId,
+        (sourceListingCounts.get(record.sourceListingId) ?? 0) + 1,
+      )
+    }
+    return records.map((record) => {
+      return {
+        ...record,
+        importKey: hasPersistedField(record, 'importKey')
+          ? record.importKey
+          : sourceListingCounts.get(record.sourceListingId) === 1
+            ? 'primary'
+            : null,
+        name: record.name ?? null,
+        roadAccessRating: record.roadAccessRating ?? null,
+        areaFeelingRating: record.areaFeelingRating ?? null,
+        viewRating: record.viewRating ?? null,
+        resolvedLatitude: hasPersistedField(record, 'resolvedLatitude')
+          ? record.resolvedLatitude
+          : (record.latitudeClue ?? null),
+        resolvedLongitude: hasPersistedField(record, 'resolvedLongitude')
+          ? record.resolvedLongitude
+          : (record.longitudeClue ?? null),
+        resolvedBoundary: hasPersistedField(record, 'resolvedBoundary')
+          ? record.resolvedBoundary
+          : null,
+        resolvedPrecision: hasPersistedField(record, 'resolvedPrecision')
+          ? record.resolvedPrecision
+          : (record.coordinateCluePrecision ?? null),
+      }
+    })
   }
 
   return {
@@ -101,29 +171,48 @@ export const createIndexedDbSourceListingRepository = (
           .objectStore('source-listings')
           .getAll(),
       )
-      candidatePlots = await requestResult<CandidatePlotRecord[]>(
+      candidatePlots = normalizeCandidatePlots(
+        await requestResult<CandidatePlotRecord[]>(
+          database
+            .transaction('candidate-plots')
+            .objectStore('candidate-plots')
+            .getAll(),
+        ),
+      )
+      visitPlan = await requestResult<VisitPlanRecord | undefined>(
         database
-          .transaction('candidate-plots')
-          .objectStore('candidate-plots')
-          .getAll(),
+          .transaction('visit-plans')
+          .objectStore('visit-plans')
+          .get('visit-plan'),
+      )
+      lastMutationAt = Math.max(
+        lastMutationAt,
+        ...sourceListings.map((record) => record.updatedAt),
+        ...candidatePlots.map((record) => record.updatedAt),
+        visitPlan?.updatedAt ?? 0,
       )
       publish()
     },
     list() {
       requireOpen()
       return sourceListings
-        .filter((record) => record.householdId === householdId)
+        .filter(
+          (record) => record.householdId === householdId && !record.deletedAt,
+        )
         .sort((left, right) => right.updatedAt - left.updatedAt)
         .map(detail)
     },
     get(id) {
       requireOpen()
       const record = sourceListings.find(
-        (value) => value.id === id && value.householdId === householdId,
+        (value) =>
+          value.id === id &&
+          value.householdId === householdId &&
+          !value.deletedAt,
       )
       return record ? detail(record) : undefined
     },
-    async saveReviewedImport(review) {
+    async saveReviewedImport(review, suppliedUpdatedAt) {
       const active = requireOpen()
       const existing = sourceListings.find(
         (record) =>
@@ -131,7 +220,8 @@ export const createIndexedDbSourceListingRepository = (
           record.source === review.imported.source &&
           record.sourceId === review.imported.sourceId,
       )
-      lastMutationAt = Math.max(dependencies.now(), lastMutationAt + 1)
+      lastMutationAt =
+        suppliedUpdatedAt ?? Math.max(dependencies.now(), lastMutationAt + 1)
       const timestamp = lastMutationAt
       const sourceListing: SourceListingRecord = {
         id: existing?.id ?? dependencies.uuid(),
@@ -148,43 +238,255 @@ export const createIndexedDbSourceListingRepository = (
         updatedAt: timestamp,
       }
       const existingPlot = existing
-        ? candidatePlots.find((plot) => plot.sourceListingId === existing.id)
+        ? candidatePlots.find(
+            (plot) =>
+              plot.sourceListingId === existing.id &&
+              plot.importKey === 'primary',
+          )
         : undefined
-      const candidatePlot: CandidatePlotRecord = existingPlot ?? {
-        id: dependencies.uuid(),
-        householdId: active.householdId,
-        sourceListingId: sourceListing.id,
-        priceEur: review.priceEur,
-        areaAres: review.areaAres,
-        purposeText: review.purposeText,
-        notes: review.notes,
-        parcelNumberClue: review.parcelNumberClue,
-        latitudeClue: review.latitudeClue,
-        longitudeClue: review.longitudeClue,
-        coordinateCluePrecision: review.coordinateCluePrecision,
-        addressClue: review.addressClue,
-        updatedAt: timestamp,
-      }
+      const candidatePlot: CandidatePlotRecord = existingPlot
+        ? { ...existingPlot, updatedAt: timestamp, deletedAt: undefined }
+        : {
+            id: dependencies.uuid(),
+            householdId: active.householdId,
+            sourceListingId: sourceListing.id,
+            importKey: 'primary',
+            name: null,
+            priceEur: review.priceEur,
+            areaAres: review.areaAres,
+            purposeText: review.purposeText,
+            notes: review.notes,
+            parcelNumberClue: review.parcelNumberClue,
+            latitudeClue: review.latitudeClue,
+            longitudeClue: review.longitudeClue,
+            coordinateCluePrecision: review.coordinateCluePrecision,
+            addressClue: review.addressClue,
+            roadAccessRating: null,
+            areaFeelingRating: null,
+            viewRating: null,
+            resolvedLatitude: review.latitudeClue,
+            resolvedLongitude: review.longitudeClue,
+            resolvedBoundary: null,
+            resolvedPrecision: review.coordinateCluePrecision,
+            updatedAt: timestamp,
+          }
       const transaction = active.database.transaction(
         ['source-listings', 'candidate-plots'],
         'readwrite',
       )
       transaction.objectStore('source-listings').put(sourceListing)
-      if (!existingPlot)
-        transaction.objectStore('candidate-plots').put(candidatePlot)
+      transaction.objectStore('candidate-plots').put(candidatePlot)
       await transactionComplete(transaction)
       sourceListings = existing
         ? sourceListings.map((record) =>
             record.id === sourceListing.id ? sourceListing : record,
           )
         : [...sourceListings, sourceListing]
-      if (!existingPlot) candidatePlots = [...candidatePlots, candidatePlot]
+      candidatePlots = existingPlot
+        ? candidatePlots.map((plot) =>
+            plot.id === candidatePlot.id ? candidatePlot : plot,
+          )
+        : [...candidatePlots, candidatePlot]
       publish()
       return {
         sourceListingId: sourceListing.id,
         candidatePlotId: candidatePlot.id,
         created: !existing,
       }
+    },
+    async addCandidatePlot(sourceListingId, updatedAt) {
+      const active = requireOpen()
+      const sourceListing = sourceListings.find(
+        (record) =>
+          record.id === sourceListingId &&
+          record.householdId === active.householdId &&
+          !record.deletedAt,
+      )
+      if (!sourceListing) throw new Error('Source Listing not found')
+      const candidatePlot: CandidatePlotRecord = {
+        id: dependencies.uuid(),
+        householdId: active.householdId,
+        sourceListingId,
+        importKey: null,
+        name: null,
+        priceEur: null,
+        areaAres: null,
+        purposeText: null,
+        notes: null,
+        parcelNumberClue: null,
+        latitudeClue: null,
+        longitudeClue: null,
+        coordinateCluePrecision: null,
+        addressClue: null,
+        roadAccessRating: null,
+        areaFeelingRating: null,
+        viewRating: null,
+        resolvedLatitude: null,
+        resolvedLongitude: null,
+        resolvedBoundary: null,
+        resolvedPrecision: null,
+        updatedAt,
+      }
+      const transaction = active.database.transaction(
+        'candidate-plots',
+        'readwrite',
+      )
+      transaction.objectStore('candidate-plots').put(candidatePlot)
+      await transactionComplete(transaction)
+      candidatePlots = [...candidatePlots, candidatePlot]
+      publish()
+      return candidatePlot.id
+    },
+    async updateCandidatePlot(
+      sourceListingId,
+      candidatePlotId,
+      update,
+      updatedAt,
+    ) {
+      const active = requireOpen()
+      const existing = candidatePlots.find(
+        (plot) =>
+          plot.id === candidatePlotId &&
+          plot.sourceListingId === sourceListingId &&
+          plot.householdId === active.householdId &&
+          !plot.deletedAt,
+      )
+      if (!existing) throw new Error('Candidate Plot not found')
+      const locationClueChanged =
+        existing.parcelNumberClue !== update.parcelNumberClue ||
+        existing.latitudeClue !== update.latitudeClue ||
+        existing.longitudeClue !== update.longitudeClue ||
+        existing.coordinateCluePrecision !== update.coordinateCluePrecision ||
+        existing.addressClue !== update.addressClue
+      const candidatePlot = {
+        ...existing,
+        ...structuredClone(update),
+        ...(locationClueChanged
+          ? {
+              resolvedLatitude: update.latitudeClue,
+              resolvedLongitude: update.longitudeClue,
+              resolvedBoundary: null,
+              resolvedPrecision: update.coordinateCluePrecision,
+            }
+          : {}),
+        updatedAt,
+      }
+      const transaction = active.database.transaction(
+        'candidate-plots',
+        'readwrite',
+      )
+      transaction.objectStore('candidate-plots').put(candidatePlot)
+      await transactionComplete(transaction)
+      candidatePlots = candidatePlots.map((plot) =>
+        plot.id === candidatePlotId ? candidatePlot : plot,
+      )
+      publish()
+    },
+    getVisitPlan() {
+      const active = requireOpen()
+      return structuredClone(
+        visitPlan ?? {
+          id: 'visit-plan',
+          householdId: active.householdId,
+          sourceListingIds: [],
+          updatedAt: 0,
+        },
+      )
+    },
+    async setVisitPlan(sourceListingIds, updatedAt) {
+      const active = requireOpen()
+      const distinctIds = [...new Set(sourceListingIds)]
+      if (
+        distinctIds.some(
+          (id) =>
+            !sourceListings.some(
+              (record) =>
+                record.id === id &&
+                record.householdId === active.householdId &&
+                !record.deletedAt,
+            ),
+        )
+      ) {
+        throw new Error('Visit Plan contains an unavailable Source Listing')
+      }
+      const next: VisitPlanRecord = {
+        id: 'visit-plan',
+        householdId: active.householdId,
+        sourceListingIds: distinctIds,
+        updatedAt,
+      }
+      const transaction = active.database.transaction(
+        'visit-plans',
+        'readwrite',
+      )
+      transaction.objectStore('visit-plans').put(next)
+      await transactionComplete(transaction)
+      visitPlan = next
+      publish()
+    },
+    async removeSourceListing(sourceListingId, updatedAt) {
+      const active = requireOpen()
+      const sourceListing = sourceListings.find(
+        (record) =>
+          record.id === sourceListingId &&
+          record.householdId === active.householdId &&
+          !record.deletedAt,
+      )
+      if (!sourceListing) throw new Error('Source Listing not found')
+      const removedSourceListing = {
+        ...sourceListing,
+        updatedAt,
+        deletedAt: updatedAt,
+      }
+      const removedCandidatePlots = candidatePlots
+        .filter(
+          (plot) =>
+            plot.householdId === active.householdId &&
+            plot.sourceListingId === sourceListingId,
+        )
+        .map((plot) => ({ ...plot, updatedAt, deletedAt: updatedAt }))
+      const nextVisitPlan = visitPlan?.sourceListingIds.includes(
+        sourceListingId,
+      )
+        ? {
+            ...visitPlan,
+            sourceListingIds: visitPlan.sourceListingIds.filter(
+              (id) => id !== sourceListingId,
+            ),
+            updatedAt,
+          }
+        : visitPlan
+      const transaction = active.database.transaction(
+        ['source-listings', 'candidate-plots', 'visit-plans'],
+        'readwrite',
+      )
+      transaction.objectStore('source-listings').put(removedSourceListing)
+      for (const plot of removedCandidatePlots) {
+        transaction.objectStore('candidate-plots').put(plot)
+      }
+      if (nextVisitPlan)
+        transaction.objectStore('visit-plans').put(nextVisitPlan)
+      dependencies.beforeRemoveCommit?.(transaction)
+      await transactionComplete(transaction)
+      sourceListings = sourceListings.map((record) =>
+        record.id === sourceListingId ? removedSourceListing : record,
+      )
+      const removedById = new Map(
+        removedCandidatePlots.map((plot) => [plot.id, plot]),
+      )
+      candidatePlots = candidatePlots.map(
+        (plot) => removedById.get(plot.id) ?? plot,
+      )
+      visitPlan = nextVisitPlan
+      publish()
+    },
+    allRecords() {
+      requireOpen()
+      return structuredClone([
+        ...sourceListings,
+        ...candidatePlots,
+        ...(visitPlan ? [visitPlan] : []),
+      ])
     },
     subscribe(listener) {
       listeners.add(listener)
@@ -196,6 +498,7 @@ export const createIndexedDbSourceListingRepository = (
       householdId = undefined
       sourceListings = []
       candidatePlots = []
+      visitPlan = undefined
       listeners.clear()
     },
   }

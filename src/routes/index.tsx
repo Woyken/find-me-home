@@ -65,7 +65,11 @@ export default function Home() {
 }
 
 function ListingRow(props: { listing: SourceListingDetail }) {
-  const plot = () => props.listing.candidatePlots[0]
+  const household = useHousehold()
+  const plot = (): SourceListingDetail['candidatePlots'][number] | undefined =>
+    props.listing.candidatePlots[0]
+  const planned = () =>
+    household.getVisitPlan().sourceListingIds.includes(props.listing.id)
 
   return (
     <article class="grid gap-3 border-b border-[#18241e]/20 px-4 py-5 last:border-0 sm:grid-cols-[2.1fr_1fr_0.7fr_0.8fr_auto] sm:items-center sm:px-7">
@@ -88,9 +92,11 @@ function ListingRow(props: { listing: SourceListingDetail }) {
       <p class="hidden text-sm sm:block">
         {props.listing.address ?? 'Unknown'}
       </p>
-      <b>{formatPrice(plot().priceEur)}</b>
-      <b>{formatArea(plot().areaAres)}</b>
-      <span class="text-xs text-[#647169]">Local</span>
+      <b>{formatPrice(plot()?.priceEur ?? null)}</b>
+      <b>{formatArea(plot()?.areaAres ?? null)}</b>
+      <span class="text-xs text-[#647169]">
+        {planned() ? 'Planned' : 'Not planned'}
+      </span>
     </article>
   )
 }

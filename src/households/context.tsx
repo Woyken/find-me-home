@@ -13,6 +13,11 @@ type HouseholdContextValue = {
   saveReviewedImport: (
     review: ReviewedImport,
   ) => ReturnType<HouseholdRuntime['saveReviewedImport']>
+  addCandidatePlot: HouseholdRuntime['addCandidatePlot']
+  updateCandidatePlot: HouseholdRuntime['updateCandidatePlot']
+  getVisitPlan: HouseholdRuntime['getVisitPlan']
+  setVisitPlan: HouseholdRuntime['setVisitPlan']
+  removeSourceListing: HouseholdRuntime['removeSourceListing']
 }
 
 const HouseholdContext = createContext<HouseholdContextValue>()
@@ -48,6 +53,22 @@ export function HouseholdProvider(
         },
         saveReviewedImport: (review) =>
           props.runtime.saveReviewedImport(review),
+        addCandidatePlot: (sourceListingId) =>
+          props.runtime.addCandidatePlot(sourceListingId),
+        updateCandidatePlot: (sourceListingId, candidatePlotId, update) =>
+          props.runtime.updateCandidatePlot(
+            sourceListingId,
+            candidatePlotId,
+            update,
+          ),
+        getVisitPlan: () => {
+          state()
+          return props.runtime.getVisitPlan()
+        },
+        setVisitPlan: (sourceListingIds) =>
+          props.runtime.setVisitPlan(sourceListingIds),
+        removeSourceListing: (sourceListingId) =>
+          props.runtime.removeSourceListing(sourceListingId),
       }}
     >
       {props.children}

@@ -2,7 +2,10 @@ import type { HouseholdCredentialSource } from './credentials'
 import type { HouseholdAccessStore, HouseholdRepository } from './indexeddb'
 import type { HouseholdRuntimeState } from './model'
 import type { SourceListingRepository } from '../source-listings/indexeddb'
-import type { ReviewedImport } from '../source-listings/model'
+import type {
+  CandidatePlotUpdate,
+  ReviewedImport,
+} from '../source-listings/model'
 
 export type HouseholdRuntime = {
   state: () => HouseholdRuntimeState
@@ -15,6 +18,16 @@ export type HouseholdRuntime = {
   saveReviewedImport: (
     review: ReviewedImport,
   ) => ReturnType<SourceListingRepository['saveReviewedImport']>
+  addCandidatePlot: (sourceListingId: string) => Promise<string>
+  updateCandidatePlot: (
+    sourceListingId: string,
+    candidatePlotId: string,
+    update: CandidatePlotUpdate,
+  ) => Promise<void>
+  getVisitPlan: SourceListingRepository['getVisitPlan']
+  setVisitPlan: (sourceListingIds: string[]) => Promise<void>
+  removeSourceListing: (sourceListingId: string) => Promise<void>
+  getSourceListingRecords: SourceListingRepository['allRecords']
   dispose: () => void
 }
 
@@ -67,11 +80,21 @@ export const createHouseholdRuntime = (dependencies: {
         if (credentials.householdId !== access.householdId) {
           throw new Error('Household access state is inconsistent')
         }
-        const openedAccess = { ...access, lastOpenedAt: mutationTime() }
+        const openedAccess = {
+          ...access,
+          lastOpenedAt: Math.max(dependencies.now(), access.lastOpenedAt + 1),
+        }
         await dependencies.accessStore.put(openedAccess)
         await dependencies.households.open(access.householdId)
         await dependencies.sourceListings.open(access.householdId)
         const household = dependencies.households.get()
+        lastMutationAt = Math.max(
+          lastMutationAt,
+          household?.updatedAt ?? 0,
+          ...dependencies.sourceListings
+            .allRecords()
+            .map((record) => record.updatedAt),
+        )
         if (!household && !access.initialized) {
           setState({
             status: 'waiting',
@@ -142,7 +165,33 @@ export const createHouseholdRuntime = (dependencies: {
     listSourceListings: () => dependencies.sourceListings.list(),
     getSourceListing: (id) => dependencies.sourceListings.get(id),
     saveReviewedImport: (review) =>
-      dependencies.sourceListings.saveReviewedImport(review),
+      dependencies.sourceListings.saveReviewedImport(review, mutationTime()),
+    addCandidatePlot: (sourceListingId) =>
+      dependencies.sourceListings.addCandidatePlot(
+        sourceListingId,
+        mutationTime(),
+      ),
+    updateCandidatePlot: (sourceListingId, candidatePlotId, update) => {
+      validateCandidatePlotUpdate(update)
+      return dependencies.sourceListings.updateCandidatePlot(
+        sourceListingId,
+        candidatePlotId,
+        update,
+        mutationTime(),
+      )
+    },
+    getVisitPlan: () => dependencies.sourceListings.getVisitPlan(),
+    setVisitPlan: (sourceListingIds) =>
+      dependencies.sourceListings.setVisitPlan(
+        sourceListingIds,
+        mutationTime(),
+      ),
+    removeSourceListing: (sourceListingId) =>
+      dependencies.sourceListings.removeSourceListing(
+        sourceListingId,
+        mutationTime(),
+      ),
+    getSourceListingRecords: () => dependencies.sourceListings.allRecords(),
     dispose() {
       unsubscribeSourceListings()
       listeners.clear()
@@ -150,5 +199,47 @@ export const createHouseholdRuntime = (dependencies: {
       dependencies.households.close()
       dependencies.sourceListings.close()
     },
+  }
+}
+
+const validateCandidatePlotUpdate = (update: CandidatePlotUpdate) => {
+  if (update.priceEur !== null && update.priceEur < 0)
+    throw new Error('Price must be a positive number')
+  if (update.areaAres !== null && update.areaAres < 0)
+    throw new Error('Area must be a positive number')
+  if ((update.latitudeClue === null) !== (update.longitudeClue === null))
+    throw new Error('Latitude and longitude must be provided together')
+  if (
+    (update.latitudeClue === null) !==
+    (update.coordinateCluePrecision === null)
+  )
+    throw new Error('Coordinate precision must accompany coordinates')
+  const clueCount = [
+    update.parcelNumberClue,
+    update.latitudeClue,
+    update.addressClue,
+  ].filter((value) => value !== null).length
+  if (clueCount > 1)
+    throw new Error('A Candidate Plot can have one Recorded Location Clue')
+  if (
+    update.latitudeClue !== null &&
+    (update.latitudeClue < -90 || update.latitudeClue > 90)
+  )
+    throw new Error('Latitude must be between -90 and 90')
+  if (
+    update.longitudeClue !== null &&
+    (update.longitudeClue < -180 || update.longitudeClue > 180)
+  )
+    throw new Error('Longitude must be between -180 and 180')
+  for (const rating of [
+    update.roadAccessRating,
+    update.areaFeelingRating,
+    update.viewRating,
+  ]) {
+    if (
+      rating !== null &&
+      (!Number.isInteger(rating) || rating < 1 || rating > 5)
+    )
+      throw new Error('Manual Ratings must be whole numbers from 1 to 5')
   }
 }
