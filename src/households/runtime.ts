@@ -73,9 +73,7 @@ export const createHouseholdRuntime = (dependencies: {
     const household = dependencies.households.get()
     lastMutationAt = Math.max(
       lastMutationAt,
-      ...dependencies.households
-        .allRecords()
-        .map((record) => record.updatedAt),
+      ...dependencies.households.allRecords().map((record) => record.updatedAt),
     )
     if (state.status === 'active' && household)
       setState({ ...state, household })
@@ -84,7 +82,27 @@ export const createHouseholdRuntime = (dependencies: {
     lastMutationAt = Math.max(dependencies.now(), lastMutationAt + 1)
     return lastMutationAt
   }
-  const sharedRepository = createSharedRepository(dependencies)
+  let writes = Promise.resolve()
+  const serializeWrite = <T>(write: () => Promise<T>) => {
+    const result = writes.then(write)
+    writes = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
+  }
+  const sharedRepository = createSharedRepository({
+    households: {
+      ...dependencies.households,
+      applyRemote: (records) =>
+        serializeWrite(() => dependencies.households.applyRemote(records)),
+    },
+    sourceListings: {
+      ...dependencies.sourceListings,
+      applyRemote: (records) =>
+        serializeWrite(() => dependencies.sourceListings.applyRemote(records)),
+    },
+  })
   const connect = (
     access: Extract<
       HouseholdRuntimeState,
@@ -110,7 +128,7 @@ export const createHouseholdRuntime = (dependencies: {
             syncStatus: syncStatus === 'syncing' ? 'syncing' : 'waiting',
           })
       },
-      async onInitialSync() {
+      async onInitialSync(syncStatus) {
         if (state.status !== 'waiting') return
         const household = dependencies.households.get()
         if (!household) return
@@ -121,7 +139,13 @@ export const createHouseholdRuntime = (dependencies: {
           access: initializedAccess,
           household,
           roomPassword: state.roomPassword,
-          syncStatus: 'connected',
+          syncStatus,
+        })
+      },
+      onError(error) {
+        setState({
+          status: 'error',
+          error: error instanceof Error ? error : new Error(String(error)),
         })
       },
     })
@@ -270,55 +294,76 @@ export const createHouseholdRuntime = (dependencies: {
         throw error
       }
     },
-    async renameActiveHousehold(name) {
+    renameActiveHousehold(name) {
       if (state.status !== 'active') throw new Error('No Household is active')
       const normalizedName = name.trim()
       if (!normalizedName) throw new Error('Household name is required')
       const updatedAt = mutationTime()
-      await dependencies.households.rename(
-        state.household.id,
-        normalizedName,
-        updatedAt,
-      )
-      setState({
-        ...state,
-        household: { ...state.household, name: normalizedName, updatedAt },
+      return serializeWrite(async () => {
+        if (state.status !== 'active') throw new Error('No Household is active')
+        await dependencies.households.rename(
+          state.household.id,
+          normalizedName,
+          updatedAt,
+        )
+        setState({
+          ...state,
+          household: { ...state.household, name: normalizedName, updatedAt },
+        })
       })
     },
     listSourceListings: () => dependencies.sourceListings.list(),
     getSourceListing: (id) => dependencies.sourceListings.get(id),
-    saveReviewedImport: (review) =>
-      dependencies.sourceListings.saveReviewedImport(review, mutationTime()),
+    saveReviewedImport: (review) => {
+      const updatedAt = mutationTime()
+      return serializeWrite(() =>
+        dependencies.sourceListings.saveReviewedImport(review, updatedAt),
+      )
+    },
     addCandidatePlot: (sourceListingId) =>
-      dependencies.sourceListings.addCandidatePlot(
-        sourceListingId,
-        mutationTime(),
+      serializeWrite(() =>
+        dependencies.sourceListings.addCandidatePlot(
+          sourceListingId,
+          mutationTime(),
+        ),
       ),
     updateCandidatePlot: (sourceListingId, candidatePlotId, update) => {
       validateCandidatePlotUpdate(update)
-      return dependencies.sourceListings.updateCandidatePlot(
-        sourceListingId,
-        candidatePlotId,
-        update,
-        mutationTime(),
+      const updatedAt = mutationTime()
+      return serializeWrite(() =>
+        dependencies.sourceListings.updateCandidatePlot(
+          sourceListingId,
+          candidatePlotId,
+          update,
+          updatedAt,
+        ),
       )
     },
     getVisitPlan: () => dependencies.sourceListings.getVisitPlan(),
-    setVisitPlan: (sourceListingIds) =>
-      dependencies.sourceListings.setVisitPlan(
-        sourceListingIds,
-        mutationTime(),
-      ),
-    markSourceListingVisited: (sourceListingId) =>
-      dependencies.sourceListings.markSourceListingVisited(
-        sourceListingId,
-        mutationTime(),
-      ),
-    removeSourceListing: (sourceListingId) =>
-      dependencies.sourceListings.removeSourceListing(
-        sourceListingId,
-        mutationTime(),
-      ),
+    setVisitPlan: (sourceListingIds) => {
+      const updatedAt = mutationTime()
+      return serializeWrite(() =>
+        dependencies.sourceListings.setVisitPlan(sourceListingIds, updatedAt),
+      )
+    },
+    markSourceListingVisited: (sourceListingId) => {
+      const updatedAt = mutationTime()
+      return serializeWrite(() =>
+        dependencies.sourceListings.markSourceListingVisited(
+          sourceListingId,
+          updatedAt,
+        ),
+      )
+    },
+    removeSourceListing: (sourceListingId) => {
+      const updatedAt = mutationTime()
+      return serializeWrite(() =>
+        dependencies.sourceListings.removeSourceListing(
+          sourceListingId,
+          updatedAt,
+        ),
+      )
+    },
     getSourceListingRecords: () => dependencies.sourceListings.allRecords(),
     getInvitationUrl() {
       if (state.status !== 'active') throw new Error('No Household is active')

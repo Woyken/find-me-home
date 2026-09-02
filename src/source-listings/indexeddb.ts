@@ -578,31 +578,32 @@ export const createIndexedDbSourceListingRepository = (
         )
       )
         throw new Error('Invalid Household payload')
-      const local = [
-        ...sourceListings,
-        ...candidatePlots,
-        ...(visitPlan ? [visitPlan] : []),
-      ]
-      const winners = incoming.filter(
-        (record) =>
-          record.updatedAt >
-          (local.find((value) => value.id === record.id)?.updatedAt ?? -1),
-      )
-      if (!winners.length) return []
       const transaction = active.database.transaction(
         ['source-listings', 'candidate-plots', 'visit-plans'],
         'readwrite',
       )
-      for (const record of winners) {
-        const store =
+      const storeFor = (record: SourceListingSharedRecord) =>
+        transaction.objectStore(
           'sourceListingIds' in record
             ? 'visit-plans'
             : 'sourceListingId' in record
               ? 'candidate-plots'
-              : 'source-listings'
-        transaction.objectStore(store).put(record)
-      }
+              : 'source-listings',
+        )
+      const persisted = await Promise.all(
+        incoming.map((record) =>
+          requestResult<SourceListingSharedRecord | undefined>(
+            storeFor(record).get(record.id),
+          ),
+        ),
+      )
+      const winners = incoming.filter(
+        (record, index) =>
+          record.updatedAt > (persisted[index]?.updatedAt ?? -1),
+      )
+      for (const record of winners) storeFor(record).put(record)
       await transactionComplete(transaction)
+      if (!winners.length) return []
       const sourceWinners = winners.filter(
         (record): record is SourceListingRecord =>
           !('sourceListingId' in record) && !('sourceListingIds' in record),

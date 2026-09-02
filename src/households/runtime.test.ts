@@ -7,6 +7,14 @@ import { createInMemoryRoomNetwork } from './in-memory-room'
 
 const databasePrefixes: string[] = []
 
+const waitFor = async (condition: () => boolean) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (condition()) return
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+  throw new Error('Timed out waiting for Household synchronization')
+}
+
 afterEach(async () => {
   const names = (await indexedDB.databases())
     .map((database) => database.name)
@@ -92,6 +100,168 @@ describe('Household runtime', () => {
     } finally {
       existing.dispose()
       invited.dispose()
+    }
+  })
+
+  it('converges three independently edited runtimes to the newest complete record', async () => {
+    const prefix = `multi-peer-${crypto.randomUUID()}`
+    databasePrefixes.push(prefix)
+    let uuid = 0
+    const clocks = { first: 10_000, second: 10_000, third: 10_000 }
+    const initialNetwork = createInMemoryRoomNetwork()
+    const createRuntime = (
+      device: keyof typeof clocks,
+      roomFactory?: typeof initialNetwork,
+    ) =>
+      createBrowserHouseholdRuntime({
+        accessDatabaseName: `${prefix}-${device}-access`,
+        sharedDatabasePrefix: `${prefix}-${device}`,
+        crypto,
+        now: () => clocks[device],
+        uuid: () => `${device}-${++uuid}`,
+        roomFactory,
+      })
+    const first = createRuntime('first', initialNetwork)
+    const second = createRuntime('second', initialNetwork)
+    const third = createRuntime('third', initialNetwork)
+    let reopened: ReturnType<typeof createRuntime>[] = []
+    try {
+      await first.start()
+      await first.createHousehold()
+      const state = first.state()
+      if (state.status !== 'active') throw new Error('Household was not active')
+      await Promise.all([
+        second.joinHousehold(state.access.invitationSecret),
+        third.joinHousehold(state.access.invitationSecret),
+      ])
+      await waitFor(
+        () =>
+          second.state().status === 'active' &&
+          third.state().status === 'active',
+      )
+      first.dispose()
+      second.dispose()
+      third.dispose()
+
+      const offline = (
+        ['first', 'second', 'third'] as (keyof typeof clocks)[]
+      ).map((device) => createRuntime(device))
+      clocks.first = 20_000
+      clocks.second = 30_000
+      clocks.third = 40_000
+      await Promise.all(offline.map((runtime) => runtime.start()))
+      await Promise.all([
+        offline[0].renameActiveHousehold('First device'),
+        offline[1].renameActiveHousehold('Second device'),
+        offline[2].renameActiveHousehold('Newest device'),
+      ])
+      offline.forEach((runtime) => runtime.dispose())
+
+      const convergenceNetwork = createInMemoryRoomNetwork()
+      reopened = (['first', 'second', 'third'] as (keyof typeof clocks)[]).map(
+        (device) => createRuntime(device, convergenceNetwork),
+      )
+      await Promise.all(reopened.map((runtime) => runtime.start()))
+      await waitFor(() =>
+        reopened.every((runtime) => {
+          const current = runtime.state()
+          return (
+            current.status === 'active' &&
+            current.household.name === 'Newest device' &&
+            current.household.updatedAt === 40_000
+          )
+        }),
+      )
+
+      expect(
+        reopened.map((runtime) => {
+          const current = runtime.state()
+          return current.status === 'active'
+            ? current.household.name
+            : undefined
+        }),
+      ).toEqual(['Newest device', 'Newest device', 'Newest device'])
+    } finally {
+      first.dispose()
+      second.dispose()
+      third.dispose()
+      reopened.forEach((runtime) => runtime.dispose())
+    }
+  })
+
+  it('propagates deletion tombstones to a device with an older live record', async () => {
+    const prefix = `deletion-sync-${crypto.randomUUID()}`
+    databasePrefixes.push(prefix)
+    const network = createInMemoryRoomNetwork()
+    let uuid = 0
+    let now = 10_000
+    const createRuntime = (device: string) =>
+      createBrowserHouseholdRuntime({
+        accessDatabaseName: `${prefix}-${device}-access`,
+        sharedDatabasePrefix: `${prefix}-${device}`,
+        crypto,
+        now: () => now,
+        uuid: () => `${device}-${++uuid}`,
+        roomFactory: network,
+      })
+    const existing = createRuntime('existing')
+    const invited = createRuntime('invited')
+    let reopened: ReturnType<typeof createRuntime> | undefined
+    try {
+      await existing.start()
+      await existing.createHousehold()
+      const saved = await existing.saveReviewedImport({
+        imported: parseAruodasImport({
+          url: 'https://www.aruodas.lt/sklypai-vilniuje-deleted-1-1/',
+          title: 'Soon deleted',
+          photos: [],
+          features: [],
+        }),
+        priceEur: 75_000,
+        areaAres: 12,
+        purposeText: null,
+        notes: null,
+        parcelNumberClue: null,
+        latitudeClue: null,
+        longitudeClue: null,
+        coordinateCluePrecision: null,
+        addressClue: null,
+      })
+      await existing.setVisitPlan([saved.sourceListingId])
+      const state = existing.state()
+      if (state.status !== 'active') throw new Error('Household was not active')
+      await invited.joinHousehold(state.access.invitationSecret)
+      await waitFor(
+        () => invited.getSourceListing(saved.sourceListingId) !== undefined,
+      )
+      invited.dispose()
+
+      now = 20_000
+      await existing.removeSourceListing(saved.sourceListingId)
+      reopened = createRuntime('invited')
+      await reopened.start()
+      await waitFor(
+        () =>
+          reopened!.getSourceListing(saved.sourceListingId) === undefined &&
+          reopened!.getLastChangeAt() === 20_000,
+      )
+
+      expect(reopened.getVisitPlan().sourceListingIds).toEqual([])
+      const retained = reopened
+        .getSourceListingRecords()
+        .filter(
+          (record) =>
+            record.id === saved.sourceListingId ||
+            ('sourceListingId' in record &&
+              record.sourceListingId === saved.sourceListingId),
+        )
+      expect(retained).toHaveLength(2)
+      expect(retained.every((record) => record.deletedAt === 20_000)).toBe(true)
+      expect(reopened.getLastChangeAt()).toBe(20_000)
+    } finally {
+      existing.dispose()
+      invited.dispose()
+      reopened?.dispose()
     }
   })
 

@@ -179,16 +179,20 @@ export const createIndexedDbHouseholdRepository = (
       const active = requireOpen()
       if (incoming.some((record) => record.householdId !== active.householdId))
         throw new Error('Invalid Household payload')
-      const winners = incoming.filter(
-        (record) =>
-          record.updatedAt >
-          (records.find((local) => local.id === record.id)?.updatedAt ?? -1),
-      )
-      if (!winners.length) return []
       const transaction = active.database.transaction('households', 'readwrite')
-      for (const winner of winners)
-        transaction.objectStore('households').put(winner)
+      const store = transaction.objectStore('households')
+      const persisted = await Promise.all(
+        incoming.map((record) =>
+          requestResult<HouseholdRecord | undefined>(store.get(record.id)),
+        ),
+      )
+      const winners = incoming.filter(
+        (record, index) =>
+          record.updatedAt > (persisted[index]?.updatedAt ?? -1),
+      )
+      for (const winner of winners) store.put(winner)
       await transactionComplete(transaction)
+      if (!winners.length) return []
       const byId = new Map(winners.map((record) => [record.id, record]))
       records = [
         ...records.filter((record) => !byId.has(record.id)),

@@ -171,19 +171,18 @@ export const synchronizeHousehold = (options: {
   room: HouseholdRoom
   repository: SharedRepository
   onStatus: (status: 'syncing' | 'connected' | 'alone') => void
-  onInitialSync: () => Promise<void>
+  onInitialSync: (status: 'syncing' | 'connected') => Promise<void>
+  onError: (error: unknown) => void
 }) => {
-  const peers = new Map<string, Set<string> | null>()
-  const updateStatus = () =>
-    options.onStatus(
-      peers.size === 0
-        ? 'alone'
-        : [...peers.values()].some(
-              (pending) => pending === null || pending.size,
-            )
-          ? 'syncing'
-          : 'connected',
-    )
+  const peers = new Map<string, Map<string, number> | null>()
+  let remoteApplications = Promise.resolve()
+  const status = () =>
+    peers.size === 0
+      ? ('alone' as const)
+      : [...peers.values()].some((pending) => pending === null || pending.size)
+        ? ('syncing' as const)
+        : ('connected' as const)
+  const updateStatus = () => options.onStatus(status())
   const unsubs = [
     options.room.onPeerJoin((peerId) => {
       peers.set(peerId, null)
@@ -198,7 +197,7 @@ export const synchronizeHousehold = (options: {
       updateStatus()
     }),
     options.room.onManifest((value, peerId) => {
-      if (!validManifest(value)) return
+      if (!peers.has(peerId) || !validManifest(value)) return
       const local = makeManifest(options.repository.allRecords())
       const request: RecordKey[] = []
       const send: SharedRecord[] = []
@@ -211,11 +210,22 @@ export const synchronizeHousehold = (options: {
           if (record.record.updatedAt > (value[type][record.record.id] ?? -1))
             send.push(record)
       }
-      peers.set(peerId, new Set(request.map((key) => `${key.type}:${key.id}`)))
+      peers.set(
+        peerId,
+        new Map(
+          request.map((key) => [
+            `${key.type}:${key.id}`,
+            value[key.type][key.id],
+          ]),
+        ),
+      )
       if (request.length) options.room.sendRequest(request, peerId)
       if (send.length) options.room.sendRecords(send, peerId)
       updateStatus()
-      if (!request.length) void options.onInitialSync()
+      if (!request.length)
+        void options
+          .onInitialSync(status() as 'syncing' | 'connected')
+          .catch(options.onError)
     }),
     options.room.onRequest((value, peerId) => {
       if (!Array.isArray(value)) return
@@ -229,16 +239,32 @@ export const synchronizeHousehold = (options: {
         peerId,
       )
     }),
-    options.room.onRecords((value, peerId) => {
+    options.room.onRecords((value) => {
       if (!validRecords(value, options.householdId)) return
-      void options.repository.applyRemote(value).then(async () => {
-        const pending = peers.get(peerId)
-        if (pending)
-          for (const record of value)
-            pending.delete(`${record.type}:${record.record.id}`)
-        updateStatus()
-        if (pending?.size === 0) await options.onInitialSync()
-      })
+      remoteApplications = remoteApplications
+        .then(async () => {
+          await options.repository.applyRemote(value)
+          const local = makeManifest(options.repository.allRecords())
+          let completed = false
+          for (const pending of peers.values()) {
+            if (!pending) continue
+            const hadPending = pending.size > 0
+            for (const [key, requestedAt] of pending) {
+              const [type, id] = key.split(':') as [
+                SharedRecord['type'],
+                string,
+              ]
+              if ((local[type][id] ?? -1) >= requestedAt) pending.delete(key)
+            }
+            completed ||= hadPending && pending.size === 0
+          }
+          updateStatus()
+          if (completed)
+            void options
+              .onInitialSync(status() as 'syncing' | 'connected')
+              .catch(options.onError)
+        })
+        .catch(options.onError)
     }),
     options.repository.subscribeLocalMutations((records) =>
       options.room.sendRecords(records),
