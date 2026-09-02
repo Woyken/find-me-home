@@ -1,4 +1,4 @@
-import { Show, createSignal } from 'solid-js'
+import { For, Show, createSignal } from 'solid-js'
 import QRCode from 'qrcode'
 import { useHousehold } from '../households/context'
 
@@ -9,6 +9,7 @@ export function HouseholdHeader() {
   const [busy, setBusy] = createSignal(false)
   const [error, setError] = createSignal('')
   const [sharing, setSharing] = createSignal(false)
+  const [managing, setManaging] = createSignal(false)
   const [qrCode, setQrCode] = createSignal('')
   const activeName = () => {
     const state = household.state()
@@ -34,6 +35,41 @@ export function HouseholdHeader() {
   const share = async () => {
     setSharing(true)
     setQrCode(await QRCode.toDataURL(household.getInvitationUrl()))
+  }
+  const activeId = () => {
+    const state = household.state()
+    return state.status === 'active' ? state.access.householdId : ''
+  }
+  const switchTo = async (householdId: string) => {
+    if (householdId === activeId()) return
+    setBusy(true)
+    setError('')
+    try {
+      await household.switchHousehold(householdId)
+      setManaging(false)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const remove = async () => {
+    if (
+      !window.confirm(
+        'Remove this Household from this device? It will remain available on other devices.',
+      )
+    )
+      return
+    setBusy(true)
+    setError('')
+    try {
+      await household.removeHousehold(activeId())
+      setManaging(false)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setBusy(false)
+    }
   }
   return (
     <div>
@@ -62,6 +98,12 @@ export function HouseholdHeader() {
               onClick={() => void share()}
             >
               Share Household
+            </button>
+            <button
+              class="border-b border-[#204d3a] font-mono text-[10px] font-bold uppercase text-[#204d3a]"
+              onClick={() => setManaging((value) => !value)}
+            >
+              Households
             </button>
           </div>
         }
@@ -120,6 +162,40 @@ export function HouseholdHeader() {
           <p class="mt-3 text-sm text-[#7a2d1d]">
             Anyone with this link can edit the Household. The invitation cannot
             be revoked.
+          </p>
+        </section>
+      </Show>
+      <Show when={managing()}>
+        <section
+          class="mt-4 max-w-lg border border-[#849087] bg-white p-4"
+          aria-label="Households"
+        >
+          <h2 class="font-serif text-xl">Households on this device</h2>
+          <div class="mt-3 grid gap-2">
+            <For each={household.listHouseholds()}>
+              {(local) => (
+                <button
+                  class="flex items-center justify-between border border-[#849087] px-3 py-2 text-left disabled:opacity-50"
+                  disabled={busy() || local.householdId === activeId()}
+                  onClick={() => void switchTo(local.householdId)}
+                >
+                  <span>{local.name}</span>
+                  <Show when={local.householdId === activeId()}>
+                    <span class="font-mono text-[10px] uppercase">Active</span>
+                  </Show>
+                </button>
+              )}
+            </For>
+          </div>
+          <button
+            class="mt-4 border-b border-[#7a2d1d] text-sm font-bold text-[#7a2d1d] disabled:opacity-50"
+            disabled={busy()}
+            onClick={() => void remove()}
+          >
+            Remove from this device
+          </button>
+          <p class="mt-2 text-xs text-[#647169]">
+            This does not remove the Household or its data from peers.
           </p>
         </section>
       </Show>

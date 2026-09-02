@@ -176,13 +176,25 @@ export const synchronizeHousehold = (options: {
 }) => {
   const peers = new Map<string, Map<string, number> | null>()
   let remoteApplications = Promise.resolve()
+  let initialSyncs = Promise.resolve()
+  let stopped = false
+  const isStopped = () => stopped
   const status = () =>
     peers.size === 0
       ? ('alone' as const)
       : [...peers.values()].some((pending) => pending === null || pending.size)
         ? ('syncing' as const)
         : ('connected' as const)
-  const updateStatus = () => options.onStatus(status())
+  const updateStatus = () => {
+    if (!isStopped()) options.onStatus(status())
+  }
+  const completeInitialSync = (nextStatus: 'syncing' | 'connected') => {
+    initialSyncs = initialSyncs
+      .then(() => (isStopped() ? undefined : options.onInitialSync(nextStatus)))
+      .catch((error) => {
+        if (!isStopped()) options.onError(error)
+      })
+  }
   const unsubs = [
     options.room.onPeerJoin((peerId) => {
       peers.set(peerId, null)
@@ -223,9 +235,7 @@ export const synchronizeHousehold = (options: {
       if (send.length) options.room.sendRecords(send, peerId)
       updateStatus()
       if (!request.length)
-        void options
-          .onInitialSync(status() as 'syncing' | 'connected')
-          .catch(options.onError)
+        completeInitialSync(status() as 'syncing' | 'connected')
     }),
     options.room.onRequest((value, peerId) => {
       if (!Array.isArray(value)) return
@@ -243,7 +253,9 @@ export const synchronizeHousehold = (options: {
       if (!validRecords(value, options.householdId)) return
       remoteApplications = remoteApplications
         .then(async () => {
+          if (isStopped()) return
           await options.repository.applyRemote(value)
+          if (isStopped()) return
           const local = makeManifest(options.repository.allRecords())
           let completed = false
           for (const pending of peers.values()) {
@@ -260,19 +272,23 @@ export const synchronizeHousehold = (options: {
           }
           updateStatus()
           if (completed)
-            void options
-              .onInitialSync(status() as 'syncing' | 'connected')
-              .catch(options.onError)
+            completeInitialSync(status() as 'syncing' | 'connected')
         })
-        .catch(options.onError)
+        .catch((error) => {
+          if (!isStopped()) options.onError(error)
+        })
     }),
-    options.repository.subscribeLocalMutations((records) =>
-      options.room.sendRecords(records),
-    ),
+    options.repository.subscribeLocalMutations((records) => {
+      if (!isStopped()) options.room.sendRecords(records)
+    }),
   ]
   updateStatus()
-  return () => {
+  return async () => {
+    if (stopped) return
+    stopped = true
     unsubs.forEach((unsubscribe) => unsubscribe())
     options.room.leave()
+    await remoteApplications
+    await initialSyncs
   }
 }

@@ -3,11 +3,13 @@ import type { HouseholdAccessState, HouseholdRecord } from './model'
 export type HouseholdAccessStore = {
   list: () => Promise<HouseholdAccessState[]>
   put: (value: HouseholdAccessState) => Promise<void>
+  remove: (householdId: string) => Promise<void>
   close: () => void
 }
 
 export type HouseholdRepository = {
   open: (householdId: string) => Promise<void>
+  getStored: (householdId: string) => Promise<HouseholdRecord | undefined>
   get: () => HouseholdRecord | undefined
   create: (value: HouseholdRecord) => Promise<void>
   rename: (id: string, name: string, updatedAt: number) => Promise<void>
@@ -18,6 +20,7 @@ export type HouseholdRepository = {
   subscribeLocalMutations: (
     listener: (records: HouseholdRecord[]) => void,
   ) => () => void
+  closeActive: () => void
   close: () => void
 }
 
@@ -54,7 +57,10 @@ const openDatabase = (name: string, storeName: string) =>
         }
       }
     }
-    request.onsuccess = () => resolve(request.result)
+    request.onsuccess = () => {
+      request.result.onversionchange = () => request.result.close()
+      resolve(request.result)
+    }
     request.onerror = () => reject(request.error)
   })
 
@@ -89,6 +95,12 @@ export const createIndexedDbHouseholdAccessStore = (
       const db = await database
       const transaction = db.transaction('household-access', 'readwrite')
       transaction.objectStore('household-access').put(value)
+      await transactionComplete(transaction)
+    },
+    async remove(householdId) {
+      const db = await database
+      const transaction = db.transaction('household-access', 'readwrite')
+      transaction.objectStore('household-access').delete(householdId)
       await transactionComplete(transaction)
     },
     close() {
@@ -132,6 +144,29 @@ export const createIndexedDbHouseholdRepository = (
       )
       householdId = nextHouseholdId
       publish()
+    },
+    async getStored(storedHouseholdId) {
+      if (householdId === storedHouseholdId) return this.get()
+      const storedDatabase = await openDatabase(
+        `${databasePrefix}-${storedHouseholdId}`,
+        'households',
+      )
+      try {
+        const stored = await requestResult<HouseholdRecord[]>(
+          storedDatabase
+            .transaction('households')
+            .objectStore('households')
+            .getAll(),
+        )
+        return structuredClone(
+          stored.find(
+            (value) =>
+              value.householdId === storedHouseholdId && !value.deletedAt,
+          ),
+        )
+      } finally {
+        storedDatabase.close()
+      }
     },
     get() {
       const active = requireOpen()
@@ -209,11 +244,14 @@ export const createIndexedDbHouseholdRepository = (
       localMutationListeners.add(listener)
       return () => localMutationListeners.delete(listener)
     },
-    close() {
+    closeActive() {
       database?.close()
       database = undefined
       householdId = undefined
       records = []
+    },
+    close() {
+      this.closeActive()
       listeners.clear()
       localMutationListeners.clear()
     },

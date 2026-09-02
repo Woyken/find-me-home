@@ -123,6 +123,79 @@ describe('Household synchronization', () => {
     expect(current.record.updatedAt).toBe(30)
   })
 
+  it('stops queued reconciliation and waits for the active application', async () => {
+    const gate = deferred()
+    const applyRemote = vi.fn(async () => gate.promise.then(() => []))
+    const repository: SharedRepository = {
+      allRecords: () => [household(10)],
+      applyRemote,
+      subscribeLocalMutations: () => () => undefined,
+    }
+    const { room, listeners } = createRoom()
+    room.leave = vi.fn()
+    const stop = synchronizeHousehold({
+      householdId: 'household-id',
+      room,
+      repository,
+      onStatus: () => undefined,
+      onInitialSync: async () => undefined,
+      onError: () => undefined,
+    })
+
+    listeners.records([household(20)], 'first-peer')
+    listeners.records([household(30)], 'second-peer')
+    await Promise.resolve()
+    let stopped = false
+    const stopping = stop().then(() => {
+      stopped = true
+    })
+
+    expect(room.leave).toHaveBeenCalledOnce()
+    expect(stopped).toBe(false)
+    gate.resolve()
+    await stopping
+    expect(applyRemote).toHaveBeenCalledOnce()
+  })
+
+  it('waits for an active initial sync callback when stopping', async () => {
+    const gate = deferred()
+    const repository: SharedRepository = {
+      allRecords: () => [household(10)],
+      applyRemote: async () => [],
+      subscribeLocalMutations: () => () => undefined,
+    }
+    const { room, listeners } = createRoom()
+    const stop = synchronizeHousehold({
+      householdId: 'household-id',
+      room,
+      repository,
+      onStatus: () => undefined,
+      onInitialSync: async () => gate.promise,
+      onError: () => undefined,
+    })
+    listeners.join('peer')
+    listeners.manifest(
+      {
+        household: { 'household-record': 10 },
+        'source-listing': {},
+        'candidate-plot': {},
+        'visit-plan': {},
+      },
+      'peer',
+    )
+    await Promise.resolve()
+    let stopped = false
+    const stopping = stop().then(() => {
+      stopped = true
+    })
+
+    await Promise.resolve()
+    expect(stopped).toBe(false)
+    gate.resolve()
+    await stopping
+    expect(stopped).toBe(true)
+  })
+
   it('requests remote-newer records and sends only local-newer records', () => {
     const localOnly = household(20, 'Local only')
     localOnly.record.id = 'local-only'
@@ -283,7 +356,7 @@ describe('Household synchronization', () => {
     expect(current.record.name).toBe('Live local edit')
   })
 
-  it('initializes with the aggregate status while another peer is pending', () => {
+  it('initializes with the aggregate status while another peer is pending', async () => {
     const initialSync = vi.fn(async () => undefined)
     const repository: SharedRepository = {
       allRecords: () => [household(10)],
@@ -319,6 +392,7 @@ describe('Household synchronization', () => {
       },
       'complete-peer',
     )
+    await Promise.resolve()
 
     expect(initialSync).toHaveBeenCalledWith('syncing')
   })

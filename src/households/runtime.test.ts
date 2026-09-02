@@ -905,12 +905,15 @@ describe('Household runtime', () => {
           },
         ],
         put: async () => undefined,
+        remove: async () => undefined,
         close: () => undefined,
       },
       households: {
         open: async (householdId) => {
           openedHouseholdId = householdId
         },
+        getStored: async (householdId) =>
+          householdId === 'first-household' ? firstHousehold : secondHousehold,
         get: () =>
           openedHouseholdId === 'first-household'
             ? firstHousehold
@@ -922,6 +925,7 @@ describe('Household runtime', () => {
         applyRemote: async () => [],
         subscribe: () => () => undefined,
         subscribeLocalMutations: () => () => undefined,
+        closeActive: () => undefined,
         close: () => undefined,
       },
       sourceListings: {
@@ -950,6 +954,7 @@ describe('Household runtime', () => {
         applyRemote: async () => [],
         subscribeLocalMutations: () => () => undefined,
         subscribe: () => () => undefined,
+        closeActive: () => undefined,
         close: () => undefined,
       },
       credentials: {
@@ -966,6 +971,7 @@ describe('Household runtime', () => {
       },
       now: () => 500,
       uuid: () => 'unused',
+      eraseHousehold: async () => undefined,
     })
 
     await runtime.start()
@@ -975,5 +981,250 @@ describe('Household runtime', () => {
       household: { name: 'Second search' },
     })
     runtime.dispose()
+  })
+
+  it('lists and switches isolated local Households', async () => {
+    const prefix = `local-switching-${crypto.randomUUID()}`
+    databasePrefixes.push(prefix)
+    const network = createInMemoryRoomNetwork()
+    const activeRooms = new Set<string>()
+    const roomFactory: typeof network = (options) => {
+      const room = network(options)
+      activeRooms.add(options.householdId)
+      const leave = room.leave
+      room.leave = () => {
+        activeRooms.delete(options.householdId)
+        leave.call(room)
+      }
+      return room
+    }
+    let uuid = 0
+    let now = 1_000
+    const runtime = createBrowserHouseholdRuntime({
+      accessDatabaseName: `${prefix}-access`,
+      sharedDatabasePrefix: prefix,
+      crypto,
+      now: () => now,
+      uuid: () => `switch-id-${++uuid}`,
+      roomFactory,
+    })
+    try {
+      await runtime.start()
+      await runtime.createHousehold()
+      await runtime.renameActiveHousehold('Woodland search')
+      const firstState = runtime.state()
+      if (firstState.status !== 'active')
+        throw new Error('First Household was not active')
+      const firstId = firstState.access.householdId
+      await runtime.saveReviewedImport({
+        imported: parseAruodasImport({
+          url: 'https://www.aruodas.lt/sklypai-vilniuje-first-1-1/',
+          title: 'First Household listing',
+          photos: [],
+          features: [],
+        }),
+        priceEur: null,
+        areaAres: null,
+        purposeText: null,
+        notes: null,
+        parcelNumberClue: null,
+        latitudeClue: null,
+        longitudeClue: null,
+        coordinateCluePrecision: null,
+        addressClue: null,
+      })
+
+      now = 2_000
+      await runtime.createHousehold()
+      await runtime.renameActiveHousehold('Lakeside search')
+      const secondState = runtime.state()
+      if (secondState.status !== 'active')
+        throw new Error('Second Household was not active')
+      const secondId = secondState.access.householdId
+      expect(activeRooms).toEqual(new Set([secondId]))
+
+      expect(runtime.listHouseholds()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            householdId: firstId,
+            name: 'Woodland search',
+          }),
+          expect.objectContaining({
+            householdId: secondId,
+            name: 'Lakeside search',
+          }),
+        ]),
+      )
+      expect(runtime.listSourceListings()).toEqual([])
+
+      now = 3_000
+      await runtime.switchHousehold(firstId)
+
+      expect(activeRooms).toEqual(new Set([firstId]))
+      expect(runtime.state()).toMatchObject({
+        status: 'active',
+        access: { householdId: firstId, lastOpenedAt: 3_000 },
+        household: { name: 'Woodland search' },
+      })
+      expect(runtime.listSourceListings()).toMatchObject([
+        { title: 'First Household listing' },
+      ])
+
+      const pendingWrite = runtime.saveReviewedImport({
+        imported: parseAruodasImport({
+          url: 'https://www.aruodas.lt/sklypai-vilniuje-cancelled-1-1/',
+          title: 'Cancelled listing',
+          photos: [],
+          features: [],
+        }),
+        priceEur: null,
+        areaAres: null,
+        purposeText: null,
+        notes: null,
+        parcelNumberClue: null,
+        latitudeClue: null,
+        longitudeClue: null,
+        coordinateCluePrecision: null,
+        addressClue: null,
+      })
+      const switching = runtime.switchHousehold(secondId)
+      await expect(pendingWrite).rejects.toThrow('cancelled')
+      await switching
+      expect(runtime.listSourceListings()).toEqual([])
+    } finally {
+      runtime.dispose()
+    }
+  })
+
+  it('removes a Household only from this device and rejoins it fresh', async () => {
+    const prefix = `local-removal-${crypto.randomUUID()}`
+    databasePrefixes.push(prefix)
+    const network = createInMemoryRoomNetwork()
+    let uuid = 0
+    let now = 1_000
+    const createRuntime = (device: string) =>
+      createBrowserHouseholdRuntime({
+        accessDatabaseName: `${prefix}-${device}-access`,
+        sharedDatabasePrefix: `${prefix}-${device}`,
+        crypto,
+        now: () => now,
+        uuid: () => `${device}-id-${++uuid}`,
+        roomFactory: network,
+      })
+    const local = createRuntime('local')
+    const peer = createRuntime('peer')
+    try {
+      await local.start()
+      await local.createHousehold()
+      await local.renameActiveHousehold('Shared search')
+      const sharedState = local.state()
+      if (sharedState.status !== 'active')
+        throw new Error('Shared Household was not active')
+      const sharedId = sharedState.access.householdId
+      const invitation = sharedState.access.invitationSecret
+      const saved = await local.saveReviewedImport({
+        imported: parseAruodasImport({
+          url: 'https://www.aruodas.lt/sklypai-vilniuje-removal-1-1/',
+          title: 'Retained by peer',
+          photos: [],
+          features: [],
+        }),
+        priceEur: 50_000,
+        areaAres: 10,
+        purposeText: null,
+        notes: null,
+        parcelNumberClue: null,
+        latitudeClue: null,
+        longitudeClue: null,
+        coordinateCluePrecision: null,
+        addressClue: null,
+      })
+      await local.setVisitPlan([saved.sourceListingId])
+      await peer.joinHousehold(invitation)
+      await waitFor(
+        () =>
+          peer.state().status === 'active' &&
+          peer.getSourceListing(saved.sourceListingId) !== undefined,
+      )
+
+      now = 2_000
+      await local.createHousehold()
+      await local.renameActiveHousehold('Older private search')
+      const privateState = local.state()
+      if (privateState.status !== 'active')
+        throw new Error('Private Household was not active')
+      const privateId = privateState.access.householdId
+      now = 2_500
+      await local.createHousehold()
+      await local.renameActiveHousehold('Newest private search')
+      const newestPrivateState = local.state()
+      if (newestPrivateState.status !== 'active')
+        throw new Error('Newest private Household was not active')
+      const newestPrivateId = newestPrivateState.access.householdId
+      await peer.renameActiveHousehold('Updated shared search')
+      expect(
+        local
+          .listHouseholds()
+          .find((household) => household.householdId === sharedId)?.name,
+      ).toBe('Shared search')
+      now = 3_000
+      await local.switchHousehold(sharedId)
+      await waitFor(
+        () => {
+          const current = local.state()
+          return (
+            current.status === 'active' &&
+            current.household.name === 'Updated shared search'
+          )
+        },
+      )
+
+      await local.removeHousehold(sharedId)
+
+      expect(local.state()).toMatchObject({
+        status: 'active',
+        access: { householdId: newestPrivateId },
+        household: { name: 'Newest private search' },
+      })
+      expect(local.listHouseholds()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ householdId: privateId }),
+          expect.objectContaining({ householdId: newestPrivateId }),
+        ]),
+      )
+      expect(peer.state()).toMatchObject({
+        status: 'active',
+        household: { name: 'Updated shared search' },
+      })
+      expect(peer.getSourceListing(saved.sourceListingId)?.title).toBe(
+        'Retained by peer',
+      )
+      expect(peer.getVisitPlan().sourceListingIds).toEqual([
+        saved.sourceListingId,
+      ])
+      expect(
+        (await indexedDB.databases()).some(
+          (database) => database.name === `${prefix}-local-${sharedId}`,
+        ),
+      ).toBe(false)
+
+      await local.joinHousehold(invitation)
+      expect(local.state()).toMatchObject({
+        status: 'waiting',
+        access: { householdId: sharedId, initialized: false },
+      })
+      await waitFor(() => local.state().status === 'active')
+      expect(local.state()).toMatchObject({
+        status: 'active',
+        household: { name: 'Updated shared search' },
+      })
+      await local.removeHousehold(sharedId)
+      await local.removeHousehold(privateId)
+      await local.removeHousehold(newestPrivateId)
+      expect(local.state()).toEqual({ status: 'no-household' })
+    } finally {
+      local.dispose()
+      peer.dispose()
+    }
   })
 })

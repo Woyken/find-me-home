@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { render } from '@solidjs/web'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { HouseholdHeader } from './components/HouseholdHeader'
 import type { HouseholdRuntime } from './households/runtime'
@@ -55,16 +55,19 @@ const createTestRuntime = () => {
     state = next
     for (const listener of listeners) listener()
   }
-  const active = (name: string): HouseholdRuntimeState => ({
+  const active = (
+    name: string,
+    householdId = 'household-id',
+  ): HouseholdRuntimeState => ({
     status: 'active',
     household: {
       id: 'record-id',
-      householdId: 'household-id',
+      householdId,
       name,
       updatedAt: 100,
     },
     access: {
-      householdId: 'household-id',
+      householdId,
       invitationSecret: 'secret',
       initialized: true,
       lastOpenedAt: 100,
@@ -81,6 +84,26 @@ const createTestRuntime = () => {
     start: async () => publish({ status: 'no-household' }),
     createHousehold: async () => publish(active('Our home search')),
     joinHousehold: async () => undefined,
+    listHouseholds: () =>
+      state.status === 'active'
+        ? [
+            {
+              householdId: state.access.householdId,
+              name: state.household.name,
+              lastOpenedAt: 100,
+              initialized: true,
+            },
+            {
+              householdId: 'second-household',
+              name: 'Lake search',
+              lastOpenedAt: 50,
+              initialized: true,
+            },
+          ]
+        : [],
+    switchHousehold: async (householdId) =>
+      publish(active('Lake search', householdId)),
+    removeHousehold: async () => publish({ status: 'no-household' }),
     renameActiveHousehold: async (name) => publish(active(name)),
     listSourceListings: () => [],
     getSourceListing: () => undefined,
@@ -197,5 +220,48 @@ describe('App Household boundary', () => {
         document.querySelector('img[alt="Household invitation QR code"]'),
       ).toBeTruthy(),
     )
+  })
+
+  it('lists and switches local Households from the Household menu', async () => {
+    mount(createTestRuntime())
+    await waitFor(() => expect(findButton('Create Household')).toBeTruthy())
+    findButton('Create Household')?.click()
+    await waitFor(() => expect(findButton('Households')).toBeTruthy())
+    findButton('Households')?.click()
+
+    expect(document.body.textContent).toContain('Our home search')
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('Lake search'),
+    )
+    findButton('Lake search')?.click()
+
+    await waitFor(() =>
+      expect(document.querySelector('h1')?.textContent).toBe('Lake search'),
+    )
+  })
+
+  it('requires confirmation before removing a Household from this device', async () => {
+    const runtime = createTestRuntime()
+    const remove = vi.spyOn(runtime, 'removeHousehold')
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    mount(runtime)
+    await waitFor(() => expect(findButton('Create Household')).toBeTruthy())
+    findButton('Create Household')?.click()
+    await waitFor(() => expect(findButton('Households')).toBeTruthy())
+    findButton('Households')?.click()
+    await waitFor(() =>
+      expect(findButton('Remove from this device')).toBeTruthy(),
+    )
+    findButton('Remove from this device')?.click()
+
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining('other devices'),
+    )
+    expect(remove).not.toHaveBeenCalled()
+
+    confirm.mockReturnValue(true)
+    findButton('Remove from this device')?.click()
+    await waitFor(() => expect(remove).toHaveBeenCalledOnce())
+    await waitFor(() => expect(findButton('Create Household')).toBeTruthy())
   })
 })

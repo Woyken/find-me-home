@@ -48,6 +48,7 @@ export type SourceListingRepository = {
     listener: (records: SourceListingSharedRecord[]) => void,
   ) => () => void
   subscribe: (listener: () => void) => () => void
+  closeActive: () => void
   close: () => void
 }
 
@@ -96,7 +97,10 @@ const openDatabase = (name: string) =>
         database.createObjectStore('visit-plans', { keyPath: 'id' })
       }
     }
-    request.onsuccess = () => resolve(request.result)
+    request.onsuccess = () => {
+      request.result.onversionchange = () => request.result.close()
+      resolve(request.result)
+    }
     request.onerror = () => reject(request.error)
   })
 
@@ -632,13 +636,16 @@ export const createIndexedDbSourceListingRepository = (
       localMutationListeners.add(listener)
       return () => localMutationListeners.delete(listener)
     },
-    close() {
+    closeActive() {
       database?.close()
       database = undefined
       householdId = undefined
       sourceListings = []
       candidatePlots = []
       visitPlan = undefined
+    },
+    close() {
+      this.closeActive()
       listeners.clear()
       localMutationListeners.clear()
     },
