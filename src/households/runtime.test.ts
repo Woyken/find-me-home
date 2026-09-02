@@ -66,8 +66,12 @@ describe('Household runtime', () => {
       expect(
         runtime
           .getSourceListingRecords()
-          .filter((record) => record.id === 'visit-plan'),
+          .filter((record) => 'sourceListingIds' in record),
       ).toHaveLength(1)
+      const persistedPlan = runtime
+        .getSourceListingRecords()
+        .find((record) => 'sourceListingIds' in record)
+      expect(persistedPlan?.id).toMatch(/^visit-id-/)
 
       const first = await runtime.saveReviewedImport(review('first-1-1'))
       const second = await runtime.saveReviewedImport(review('second-2-2'))
@@ -114,6 +118,58 @@ describe('Household runtime', () => {
       expect(reopened.getSourceListing(first.sourceListingId)?.visitedAt).toBe(
         4_000,
       )
+    } finally {
+      runtime.dispose()
+      reopened?.dispose()
+    }
+  })
+
+  it('backfills a persisted Visit Plan when an existing Household has none', async () => {
+    const databaseName = `visit-plan-backfill-${crypto.randomUUID()}`
+    databasePrefixes.push(databaseName)
+    let uuid = 0
+    const createRuntime = () =>
+      createBrowserHouseholdRuntime({
+        accessDatabaseName: databaseName,
+        sharedDatabasePrefix: databaseName,
+        crypto,
+        now: () => 3_500,
+        uuid: () => `backfill-id-${++uuid}`,
+      })
+    const runtime = createRuntime()
+    let reopened: ReturnType<typeof createBrowserHouseholdRuntime> | undefined
+    try {
+      await runtime.start()
+      await runtime.createHousehold()
+      const state = runtime.state()
+      if (state.status !== 'active') throw new Error('Household was not active')
+      const sharedDatabaseName = `${databaseName}-${state.access.householdId}`
+      runtime.dispose()
+
+      const database = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open(sharedDatabaseName)
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+      })
+      const transaction = database.transaction('visit-plans', 'readwrite')
+      transaction.objectStore('visit-plans').clear()
+      await new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () => reject(transaction.error)
+      })
+      database.close()
+
+      reopened = createRuntime()
+      await reopened.start()
+      const plans = reopened
+        .getSourceListingRecords()
+        .filter((record) => 'sourceListingIds' in record)
+      expect(plans).toHaveLength(1)
+      expect(plans[0]).toMatchObject({
+        householdId: state.access.householdId,
+        sourceListingIds: [],
+      })
+      expect(plans[0]?.id).toMatch(/^backfill-id-/)
     } finally {
       runtime.dispose()
       reopened?.dispose()

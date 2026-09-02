@@ -62,7 +62,7 @@ export type CandidatePlotUpdate = Pick<
 >
 
 export type VisitPlanRecord = {
-  id: 'visit-plan'
+  id: string
   householdId: string
   sourceListingIds: string[]
   updatedAt: number

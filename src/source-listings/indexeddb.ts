@@ -186,17 +186,32 @@ export const createIndexedDbSourceListingRepository = (
             .getAll(),
         ),
       )
-      visitPlan = await requestResult<VisitPlanRecord | undefined>(
-        database
-          .transaction('visit-plans')
-          .objectStore('visit-plans')
-          .get('visit-plan'),
+      const persistedVisitPlans = await requestResult<VisitPlanRecord[]>(
+        database.transaction('visit-plans').objectStore('visit-plans').getAll(),
       )
+      visitPlan = persistedVisitPlans.find(
+        (record) => record.householdId === nextHouseholdId && !record.deletedAt,
+      )
+      if (!visitPlan || visitPlan.id === 'visit-plan') {
+        const legacyId = visitPlan?.id
+        visitPlan = visitPlan
+          ? { ...visitPlan, id: dependencies.uuid() }
+          : {
+              id: dependencies.uuid(),
+              householdId: nextHouseholdId,
+              sourceListingIds: [],
+              updatedAt: 0,
+            }
+        const transaction = database.transaction('visit-plans', 'readwrite')
+        if (legacyId) transaction.objectStore('visit-plans').delete(legacyId)
+        transaction.objectStore('visit-plans').put(visitPlan)
+        await transactionComplete(transaction)
+      }
       lastMutationAt = Math.max(
         lastMutationAt,
         ...sourceListings.map((record) => record.updatedAt),
         ...candidatePlots.map((record) => record.updatedAt),
-        visitPlan?.updatedAt ?? 0,
+        visitPlan.updatedAt,
       )
       publish()
     },
@@ -394,7 +409,7 @@ export const createIndexedDbSourceListingRepository = (
       const active = requireOpen()
       return structuredClone(
         visitPlan ?? {
-          id: 'visit-plan',
+          id: dependencies.uuid(),
           householdId: active.householdId,
           sourceListingIds: [],
           updatedAt: 0,
@@ -418,7 +433,7 @@ export const createIndexedDbSourceListingRepository = (
         throw new Error('Visit Plan contains an unavailable Source Listing')
       }
       const next: VisitPlanRecord = {
-        id: 'visit-plan',
+        id: visitPlan?.id ?? dependencies.uuid(),
         householdId: active.householdId,
         sourceListingIds: distinctIds,
         updatedAt,
@@ -447,7 +462,7 @@ export const createIndexedDbSourceListingRepository = (
         updatedAt,
       }
       const currentVisitPlan = visitPlan ?? {
-        id: 'visit-plan' as const,
+        id: dependencies.uuid(),
         householdId: active.householdId,
         sourceListingIds: [],
         updatedAt: 0,

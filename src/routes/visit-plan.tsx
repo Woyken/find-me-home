@@ -79,7 +79,54 @@ export default function VisitPlanPage() {
         >
           <Show
             when={view() === 'list'}
-            fallback={<VisitPlanMap sourceListings={listings()} />}
+            fallback={
+              <>
+                <VisitPlanMap sourceListings={listings()} />
+                <ol class="grid gap-px bg-[#18241e]/20 sm:grid-cols-2">
+                  <For each={listings()}>
+                    {(listing, index) => (
+                      <li class="flex items-center gap-3 bg-[#faf9f4] px-4 py-3">
+                        <span class="font-serif text-xl">{index() + 1}</span>
+                        <a
+                          class="min-w-0 flex-1 truncate font-bold hover:underline"
+                          href={paths.sourceListing(listing.id)}
+                        >
+                          {listing.title ??
+                            `Aruodas advert ${listing.sourceId}`}
+                        </a>
+                        <button
+                          aria-label={`Move ${listing.title ?? 'Source Listing'} up`}
+                          disabled={busy() || index() === 0}
+                          onClick={() => move(index(), -1)}
+                        >
+                          Up
+                        </button>
+                        <button
+                          aria-label={`Move ${listing.title ?? 'Source Listing'} down`}
+                          disabled={busy() || index() === listings().length - 1}
+                          onClick={() => move(index(), 1)}
+                        >
+                          Down
+                        </button>
+                        <button
+                          class="text-[#a13d22]"
+                          disabled={busy()}
+                          onClick={() =>
+                            void replacePlan(
+                              plan().sourceListingIds.filter(
+                                (id) => id !== listing.id,
+                              ),
+                            )
+                          }
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    )}
+                  </For>
+                </ol>
+              </>
+            }
           >
             <ol class="bg-[#faf9f4]">
               <For each={listings()}>
