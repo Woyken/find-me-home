@@ -19,6 +19,8 @@ type HouseholdContextValue = {
   setVisitPlan: HouseholdRuntime['setVisitPlan']
   markSourceListingVisited: HouseholdRuntime['markSourceListingVisited']
   removeSourceListing: HouseholdRuntime['removeSourceListing']
+  getInvitationUrl: HouseholdRuntime['getInvitationUrl']
+  getLastChangeAt: HouseholdRuntime['getLastChangeAt']
 }
 
 const HouseholdContext = createContext<HouseholdContextValue>()
@@ -32,7 +34,19 @@ export function HouseholdProvider(
   const unsubscribe = props.runtime.subscribe(() =>
     setState(() => ({ ...props.runtime.state() })),
   )
-  void props.runtime.start()
+  const invitation = window.location.hash.match(/^#household=([^&]+)$/)?.[1]
+  void (invitation
+    ? props.runtime
+        .joinHousehold(invitation)
+        .then(() => {
+          history.replaceState(
+            history.state,
+            '',
+            `${location.pathname}${location.search}`,
+          )
+        })
+        .catch(() => undefined)
+    : props.runtime.start())
   onCleanup(() => {
     unsubscribe()
     props.runtime.dispose()
@@ -72,6 +86,11 @@ export function HouseholdProvider(
           props.runtime.markSourceListingVisited(sourceListingId),
         removeSourceListing: (sourceListingId) =>
           props.runtime.removeSourceListing(sourceListingId),
+        getInvitationUrl: () => props.runtime.getInvitationUrl(),
+        getLastChangeAt: () => {
+          state()
+          return props.runtime.getLastChangeAt()
+        },
       }}
     >
       {props.children}

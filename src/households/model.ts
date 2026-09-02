@@ -1,5 +1,6 @@
 export type HouseholdRecord = {
   id: string
+  householdId: string
   name: string
   updatedAt: number
   deletedAt?: number
@@ -26,10 +27,12 @@ export type HouseholdRuntimeState =
       access: HouseholdAccessState
       household: HouseholdRecord
       roomPassword: string
+      syncStatus: 'syncing' | 'connected' | 'alone'
     }
   | {
       status: 'waiting'
       access: HouseholdAccessState
       roomPassword: string
+      syncStatus: 'waiting' | 'syncing'
     }
   | { status: 'error'; error: Error }

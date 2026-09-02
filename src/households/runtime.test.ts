@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createBrowserHouseholdRuntime } from './browser-runtime'
 import { createHouseholdRuntime } from './runtime'
 import { parseAruodasImport } from '../imports/aruodas'
+import { createInMemoryRoomNetwork } from './in-memory-room'
 
 const databasePrefixes: string[] = []
 
@@ -28,6 +29,162 @@ afterEach(async () => {
 })
 
 describe('Household runtime', () => {
+  it('joins an invitation read-only and receives the complete Household', async () => {
+    const prefix = `paired-${crypto.randomUUID()}`
+    databasePrefixes.push(prefix)
+    const roomFactory = createInMemoryRoomNetwork()
+    let uuid = 0
+    const createRuntime = (device: string) =>
+      createBrowserHouseholdRuntime({
+        accessDatabaseName: `${prefix}-${device}`,
+        sharedDatabasePrefix: `${prefix}-${device}`,
+        crypto,
+        now: () => 10_000,
+        uuid: () => `${device}-${++uuid}`,
+        roomFactory,
+      })
+    const existing = createRuntime('existing')
+    const invited = createRuntime('invited')
+    try {
+      await existing.start()
+      await existing.createHousehold()
+      const saved = await existing.saveReviewedImport({
+        imported: parseAruodasImport({
+          url: 'https://www.aruodas.lt/sklypai-vilniuje-synced-1-1/',
+          title: 'Synchronized land',
+          photos: [],
+          features: [],
+        }),
+        priceEur: 90_000,
+        areaAres: 15,
+        purposeText: 'Residential',
+        notes: 'Bring boots',
+        parcelNumberClue: null,
+        latitudeClue: null,
+        longitudeClue: null,
+        coordinateCluePrecision: null,
+        addressClue: 'Forest road',
+      })
+      await existing.setVisitPlan([saved.sourceListingId])
+      const existingState = existing.state()
+      if (existingState.status !== 'active')
+        throw new Error('Household was not active')
+
+      await invited.joinHousehold(existingState.access.invitationSecret)
+      expect(invited.state().status).toBe('waiting')
+      for (
+        let attempt = 0;
+        attempt < 50 && invited.state().status !== 'active';
+        attempt += 1
+      )
+        await new Promise((resolve) => setTimeout(resolve, 5))
+
+      expect(invited.state().status).toBe('active')
+      expect(invited.listSourceListings()).toMatchObject([
+        {
+          title: 'Synchronized land',
+          candidatePlots: [{ notes: 'Bring boots' }],
+        },
+      ])
+      expect(invited.getVisitPlan().sourceListingIds).toEqual([
+        saved.sourceListingId,
+      ])
+    } finally {
+      existing.dispose()
+      invited.dispose()
+    }
+  })
+
+  it('isolates Household rooms and keeps invalid remote records out of storage', async () => {
+    const roomFactory = createInMemoryRoomNetwork()
+    const records: Parameters<
+      ReturnType<typeof roomFactory>['sendRecords']
+    >[0] = []
+    const first = roomFactory({
+      householdId: 'household-a',
+      roomPassword: 'password-a',
+    })
+    const isolated = roomFactory({
+      householdId: 'household-b',
+      roomPassword: 'password-b',
+    })
+    let received = 0
+    isolated.onRecords(() => {
+      received += 1
+    })
+    first.sendRecords(records)
+    await new Promise((resolve) => setTimeout(resolve))
+    expect(received).toBe(0)
+    first.leave()
+    isolated.leave()
+
+    const prefix = `invalid-${crypto.randomUUID()}`
+    databasePrefixes.push(prefix)
+    const runtime = createBrowserHouseholdRuntime({
+      accessDatabaseName: `${prefix}-access`,
+      sharedDatabasePrefix: prefix,
+      crypto,
+      now: () => 1,
+      uuid: () => 'id',
+      roomFactory,
+    })
+    try {
+      await runtime.start()
+      await runtime.createHousehold()
+      const state = runtime.state()
+      if (state.status !== 'active') throw new Error('Household was not active')
+      const before = runtime.listSourceListings()
+      const attacker = roomFactory({
+        householdId: state.access.householdId,
+        roomPassword: state.roomPassword,
+      })
+      attacker.sendRecords([
+        {
+          type: 'household',
+          record: {
+            id: 'foreign',
+            householdId: 'foreign-household',
+            name: 'Injected',
+            updatedAt: 99,
+          },
+        },
+      ])
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      expect(runtime.listSourceListings()).toEqual(before)
+      expect(runtime.state()).toMatchObject({
+        household: { name: 'Our home search' },
+      })
+      attacker.leave()
+    } finally {
+      runtime.dispose()
+    }
+  })
+
+  it('reopens an uninitialized invitation in the waiting state', async () => {
+    const prefix = `waiting-reload-${crypto.randomUUID()}`
+    databasePrefixes.push(prefix)
+    const secret = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    const createRuntime = () =>
+      createBrowserHouseholdRuntime({
+        accessDatabaseName: prefix,
+        sharedDatabasePrefix: prefix,
+        crypto,
+        roomFactory: createInMemoryRoomNetwork(),
+      })
+    const first = createRuntime()
+    let reloaded: ReturnType<typeof createRuntime> | undefined
+    try {
+      await first.joinHousehold(secret)
+      expect(first.state().status).toBe('waiting')
+      first.dispose()
+      reloaded = createRuntime()
+      await reloaded.start()
+      expect(reloaded.state().status).toBe('waiting')
+    } finally {
+      first.dispose()
+      reloaded?.dispose()
+    }
+  })
   it('persists an ordered distinct Visit Plan and its latest Visit', async () => {
     const databaseName = `visit-plan-${crypto.randomUUID()}`
     databasePrefixes.push(databaseName)
@@ -124,7 +281,7 @@ describe('Household runtime', () => {
     }
   })
 
-  it('backfills a persisted Visit Plan when an existing Household has none', async () => {
+  it('does not manufacture a shared Visit Plan when persisted data has none', async () => {
     const databaseName = `visit-plan-backfill-${crypto.randomUUID()}`
     databasePrefixes.push(databaseName)
     let uuid = 0
@@ -164,12 +321,7 @@ describe('Household runtime', () => {
       const plans = reopened
         .getSourceListingRecords()
         .filter((record) => 'sourceListingIds' in record)
-      expect(plans).toHaveLength(1)
-      expect(plans[0]).toMatchObject({
-        householdId: state.access.householdId,
-        sourceListingIds: [],
-      })
-      expect(plans[0]?.id).toMatch(/^backfill-id-/)
+      expect(plans).toHaveLength(0)
     } finally {
       runtime.dispose()
       reopened?.dispose()
@@ -353,6 +505,7 @@ describe('Household runtime', () => {
         throw new Error('Household was not active')
       expect(reopened.household.name).toBe('The oak tree search')
       expect(Object.keys(reopened.household).sort()).toEqual([
+        'householdId',
         'id',
         'name',
         'updatedAt',
@@ -550,11 +703,13 @@ describe('Household runtime', () => {
   it('reopens the Household with the most recent local last-opened time', async () => {
     const firstHousehold = {
       id: 'first-record',
+      householdId: 'first-household',
       name: 'First search',
       updatedAt: 100,
     }
     const secondHousehold = {
       id: 'second-record',
+      householdId: 'second-household',
       name: 'Second search',
       updatedAt: 200,
     }
@@ -593,6 +748,10 @@ describe('Household runtime', () => {
         create: async () => undefined,
         rename: async () => undefined,
         remove: async () => undefined,
+        allRecords: () => [secondHousehold],
+        applyRemote: async () => [],
+        subscribe: () => () => undefined,
+        subscribeLocalMutations: () => () => undefined,
         close: () => undefined,
       },
       sourceListings: {
@@ -618,6 +777,8 @@ describe('Household runtime', () => {
         markSourceListingVisited: async () => undefined,
         removeSourceListing: async () => undefined,
         allRecords: () => [],
+        applyRemote: async () => [],
+        subscribeLocalMutations: () => () => undefined,
         subscribe: () => () => undefined,
         close: () => undefined,
       },

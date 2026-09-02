@@ -41,6 +41,12 @@ export type SourceListingRepository = {
     updatedAt: number,
   ) => Promise<void>
   allRecords: () => SourceListingSharedRecord[]
+  applyRemote: (
+    records: SourceListingSharedRecord[],
+  ) => Promise<SourceListingSharedRecord[]>
+  subscribeLocalMutations: (
+    listener: (records: SourceListingSharedRecord[]) => void,
+  ) => () => void
   subscribe: (listener: () => void) => () => void
   close: () => void
 }
@@ -113,6 +119,9 @@ export const createIndexedDbSourceListingRepository = (
   let candidatePlots: CandidatePlotRecord[] = []
   let visitPlan: VisitPlanRecord | undefined
   const listeners = new Set<() => void>()
+  const localMutationListeners = new Set<
+    (records: SourceListingSharedRecord[]) => void
+  >()
   const requireOpen = () => {
     if (!database || !householdId)
       throw new Error('Source Listings are not open')
@@ -126,6 +135,10 @@ export const createIndexedDbSourceListingRepository = (
   })
   const publish = () => {
     for (const listener of listeners) listener()
+  }
+  const publishLocal = (records: SourceListingSharedRecord[]) => {
+    for (const listener of localMutationListeners)
+      listener(structuredClone(records))
   }
   const normalizeCandidatePlots = (records: CandidatePlotRecord[]) => {
     const hasPersistedField = (record: CandidatePlotRecord, field: string) =>
@@ -192,18 +205,11 @@ export const createIndexedDbSourceListingRepository = (
       visitPlan = persistedVisitPlans.find(
         (record) => record.householdId === nextHouseholdId && !record.deletedAt,
       )
-      if (!visitPlan || visitPlan.id === 'visit-plan') {
-        const legacyId = visitPlan?.id
-        visitPlan = visitPlan
-          ? { ...visitPlan, id: dependencies.uuid() }
-          : {
-              id: dependencies.uuid(),
-              householdId: nextHouseholdId,
-              sourceListingIds: [],
-              updatedAt: 0,
-            }
+      if (visitPlan?.id === 'visit-plan') {
+        const legacyId = visitPlan.id
+        visitPlan = { ...visitPlan, id: dependencies.uuid() }
         const transaction = database.transaction('visit-plans', 'readwrite')
-        if (legacyId) transaction.objectStore('visit-plans').delete(legacyId)
+        transaction.objectStore('visit-plans').delete(legacyId)
         transaction.objectStore('visit-plans').put(visitPlan)
         await transactionComplete(transaction)
       }
@@ -211,7 +217,7 @@ export const createIndexedDbSourceListingRepository = (
         lastMutationAt,
         ...sourceListings.map((record) => record.updatedAt),
         ...candidatePlots.map((record) => record.updatedAt),
-        visitPlan.updatedAt,
+        visitPlan?.updatedAt ?? 0,
       )
       publish()
     },
@@ -311,6 +317,7 @@ export const createIndexedDbSourceListingRepository = (
           )
         : [...candidatePlots, candidatePlot]
       publish()
+      publishLocal([sourceListing, candidatePlot])
       return {
         sourceListingId: sourceListing.id,
         candidatePlotId: candidatePlot.id,
@@ -358,6 +365,7 @@ export const createIndexedDbSourceListingRepository = (
       await transactionComplete(transaction)
       candidatePlots = [...candidatePlots, candidatePlot]
       publish()
+      publishLocal([candidatePlot])
       return candidatePlot.id
     },
     async updateCandidatePlot(
@@ -404,6 +412,7 @@ export const createIndexedDbSourceListingRepository = (
         plot.id === candidatePlotId ? candidatePlot : plot,
       )
       publish()
+      publishLocal([candidatePlot])
     },
     getVisitPlan() {
       const active = requireOpen()
@@ -446,6 +455,7 @@ export const createIndexedDbSourceListingRepository = (
       await transactionComplete(transaction)
       visitPlan = next
       publish()
+      publishLocal([next])
     },
     async markSourceListingVisited(sourceListingId, updatedAt) {
       const active = requireOpen()
@@ -487,6 +497,7 @@ export const createIndexedDbSourceListingRepository = (
       )
       visitPlan = nextVisitPlan
       publish()
+      publishLocal([visitedSourceListing, nextVisitPlan])
     },
     async removeSourceListing(sourceListingId, updatedAt) {
       const active = requireOpen()
@@ -543,6 +554,11 @@ export const createIndexedDbSourceListingRepository = (
       )
       visitPlan = nextVisitPlan
       publish()
+      publishLocal([
+        removedSourceListing,
+        ...removedCandidatePlots,
+        ...(nextVisitPlan ? [nextVisitPlan] : []),
+      ])
     },
     allRecords() {
       requireOpen()
@@ -552,9 +568,68 @@ export const createIndexedDbSourceListingRepository = (
         ...(visitPlan ? [visitPlan] : []),
       ])
     },
+    async applyRemote(incoming) {
+      const active = requireOpen()
+      if (
+        incoming.some(
+          (record) =>
+            record.householdId !== active.householdId ||
+            !Number.isFinite(record.updatedAt),
+        )
+      )
+        throw new Error('Invalid Household payload')
+      const local = [
+        ...sourceListings,
+        ...candidatePlots,
+        ...(visitPlan ? [visitPlan] : []),
+      ]
+      const winners = incoming.filter(
+        (record) =>
+          record.updatedAt >
+          (local.find((value) => value.id === record.id)?.updatedAt ?? -1),
+      )
+      if (!winners.length) return []
+      const transaction = active.database.transaction(
+        ['source-listings', 'candidate-plots', 'visit-plans'],
+        'readwrite',
+      )
+      for (const record of winners) {
+        const store =
+          'sourceListingIds' in record
+            ? 'visit-plans'
+            : 'sourceListingId' in record
+              ? 'candidate-plots'
+              : 'source-listings'
+        transaction.objectStore(store).put(record)
+      }
+      await transactionComplete(transaction)
+      const sourceWinners = winners.filter(
+        (record): record is SourceListingRecord =>
+          !('sourceListingId' in record) && !('sourceListingIds' in record),
+      )
+      const plotWinners = winners.filter(
+        (record): record is CandidatePlotRecord => 'sourceListingId' in record,
+      )
+      const planWinner = winners.find(
+        (record): record is VisitPlanRecord => 'sourceListingIds' in record,
+      )
+      const replace = <T extends { id: string }>(values: T[], changed: T[]) => {
+        const ids = new Set(changed.map((value) => value.id))
+        return [...values.filter((value) => !ids.has(value.id)), ...changed]
+      }
+      sourceListings = replace(sourceListings, sourceWinners)
+      candidatePlots = replace(candidatePlots, plotWinners)
+      if (planWinner) visitPlan = planWinner
+      publish()
+      return structuredClone(winners)
+    },
     subscribe(listener) {
       listeners.add(listener)
       return () => listeners.delete(listener)
+    },
+    subscribeLocalMutations(listener) {
+      localMutationListeners.add(listener)
+      return () => localMutationListeners.delete(listener)
     },
     close() {
       database?.close()
@@ -564,6 +639,7 @@ export const createIndexedDbSourceListingRepository = (
       candidatePlots = []
       visitPlan = undefined
       listeners.clear()
+      localMutationListeners.clear()
     },
   }
 }

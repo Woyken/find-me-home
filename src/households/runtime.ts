@@ -1,6 +1,8 @@
 import type { HouseholdCredentialSource } from './credentials'
 import type { HouseholdAccessStore, HouseholdRepository } from './indexeddb'
 import type { HouseholdRuntimeState } from './model'
+import { createSharedRepository, synchronizeHousehold } from './synchronization'
+import type { HouseholdRoom } from './synchronization'
 import type { SourceListingRepository } from '../source-listings/indexeddb'
 import type {
   CandidatePlotUpdate,
@@ -12,6 +14,7 @@ export type HouseholdRuntime = {
   subscribe: (listener: () => void) => () => void
   start: () => Promise<void>
   createHousehold: () => Promise<void>
+  joinHousehold: (invitationSecret: string) => Promise<void>
   renameActiveHousehold: (name: string) => Promise<void>
   listSourceListings: SourceListingRepository['list']
   getSourceListing: SourceListingRepository['get']
@@ -29,6 +32,8 @@ export type HouseholdRuntime = {
   markSourceListingVisited: (sourceListingId: string) => Promise<void>
   removeSourceListing: (sourceListingId: string) => Promise<void>
   getSourceListingRecords: SourceListingRepository['allRecords']
+  getInvitationUrl: () => string
+  getLastChangeAt: () => number | undefined
   dispose: () => void
 }
 
@@ -39,9 +44,15 @@ export const createHouseholdRuntime = (dependencies: {
   credentials: HouseholdCredentialSource
   now: () => number
   uuid: () => string
+  roomFactory?: (options: {
+    householdId: string
+    roomPassword: string
+  }) => HouseholdRoom
+  invitationBaseUrl?: () => string
 }): HouseholdRuntime => {
   let state: HouseholdRuntimeState = { status: 'starting' }
   let lastMutationAt = 0
+  let stopSynchronization: (() => void) | undefined
   const listeners = new Set<() => void>()
   const setState = (next: HouseholdRuntimeState) => {
     state = next
@@ -49,12 +60,71 @@ export const createHouseholdRuntime = (dependencies: {
   }
   const unsubscribeSourceListings = dependencies.sourceListings.subscribe(
     () => {
+      lastMutationAt = Math.max(
+        lastMutationAt,
+        ...dependencies.sourceListings
+          .allRecords()
+          .map((record) => record.updatedAt),
+      )
       for (const listener of listeners) listener()
     },
   )
+  const unsubscribeHouseholds = dependencies.households.subscribe(() => {
+    const household = dependencies.households.get()
+    lastMutationAt = Math.max(
+      lastMutationAt,
+      ...dependencies.households
+        .allRecords()
+        .map((record) => record.updatedAt),
+    )
+    if (state.status === 'active' && household)
+      setState({ ...state, household })
+  })
   const mutationTime = () => {
     lastMutationAt = Math.max(dependencies.now(), lastMutationAt + 1)
     return lastMutationAt
+  }
+  const sharedRepository = createSharedRepository(dependencies)
+  const connect = (
+    access: Extract<
+      HouseholdRuntimeState,
+      { status: 'active' | 'waiting' }
+    >['access'],
+    roomPassword: string,
+  ) => {
+    stopSynchronization?.()
+    if (!dependencies.roomFactory) return
+    const room = dependencies.roomFactory({
+      householdId: access.householdId,
+      roomPassword,
+    })
+    stopSynchronization = synchronizeHousehold({
+      householdId: access.householdId,
+      room,
+      repository: sharedRepository,
+      onStatus(syncStatus) {
+        if (state.status === 'active') setState({ ...state, syncStatus })
+        else if (state.status === 'waiting')
+          setState({
+            ...state,
+            syncStatus: syncStatus === 'syncing' ? 'syncing' : 'waiting',
+          })
+      },
+      async onInitialSync() {
+        if (state.status !== 'waiting') return
+        const household = dependencies.households.get()
+        if (!household) return
+        const initializedAccess = { ...state.access, initialized: true }
+        await dependencies.accessStore.put(initializedAccess)
+        setState({
+          status: 'active',
+          access: initializedAccess,
+          household,
+          roomPassword: state.roomPassword,
+          syncStatus: 'connected',
+        })
+      },
+    })
   }
 
   return {
@@ -101,7 +171,9 @@ export const createHouseholdRuntime = (dependencies: {
             status: 'waiting',
             access: openedAccess,
             roomPassword: credentials.roomPassword,
+            syncStatus: 'waiting',
           })
+          connect(openedAccess, credentials.roomPassword)
           return
         }
         if (!household) throw new Error('Household metadata is unavailable')
@@ -110,7 +182,9 @@ export const createHouseholdRuntime = (dependencies: {
           access: openedAccess,
           household,
           roomPassword: credentials.roomPassword,
+          syncStatus: 'alone',
         })
+        connect(openedAccess, credentials.roomPassword)
       } catch (error) {
         setState({
           status: 'error',
@@ -123,6 +197,7 @@ export const createHouseholdRuntime = (dependencies: {
       const timestamp = mutationTime()
       const household = {
         id: dependencies.uuid(),
+        householdId: credentials.householdId,
         name: 'Our home search',
         updatedAt: timestamp,
       }
@@ -147,7 +222,53 @@ export const createHouseholdRuntime = (dependencies: {
         access,
         household,
         roomPassword: credentials.roomPassword,
+        syncStatus: 'alone',
       })
+      connect(access, credentials.roomPassword)
+    },
+    async joinHousehold(invitationSecret) {
+      try {
+        const credentials =
+          await dependencies.credentials.derive(invitationSecret)
+        const existing = (await dependencies.accessStore.list()).find(
+          (value) => value.householdId === credentials.householdId,
+        )
+        const access = {
+          ...(existing ?? {
+            householdId: credentials.householdId,
+            invitationSecret,
+            initialized: false,
+          }),
+          lastOpenedAt: mutationTime(),
+        }
+        await dependencies.accessStore.put(access)
+        await dependencies.households.open(access.householdId)
+        await dependencies.sourceListings.open(access.householdId)
+        const household = dependencies.households.get()
+        if (access.initialized && household) {
+          setState({
+            status: 'active',
+            access,
+            household,
+            roomPassword: credentials.roomPassword,
+            syncStatus: 'alone',
+          })
+        } else {
+          setState({
+            status: 'waiting',
+            access: { ...access, initialized: false },
+            roomPassword: credentials.roomPassword,
+            syncStatus: 'waiting',
+          })
+        }
+        connect(access, credentials.roomPassword)
+      } catch (error) {
+        setState({
+          status: 'error',
+          error: error instanceof Error ? error : new Error(String(error)),
+        })
+        throw error
+      }
     },
     async renameActiveHousehold(name) {
       if (state.status !== 'active') throw new Error('No Household is active')
@@ -199,8 +320,24 @@ export const createHouseholdRuntime = (dependencies: {
         mutationTime(),
       ),
     getSourceListingRecords: () => dependencies.sourceListings.allRecords(),
+    getInvitationUrl() {
+      if (state.status !== 'active') throw new Error('No Household is active')
+      const url = new URL(dependencies.invitationBaseUrl?.() ?? location.href)
+      url.hash = `household=${state.access.invitationSecret}`
+      return url.toString()
+    },
+    getLastChangeAt() {
+      if (state.status !== 'active') return undefined
+      return Math.max(
+        ...sharedRepository
+          .allRecords()
+          .flatMap(({ record }) => [record.updatedAt, record.deletedAt ?? 0]),
+      )
+    },
     dispose() {
+      stopSynchronization?.()
       unsubscribeSourceListings()
+      unsubscribeHouseholds()
       listeners.clear()
       dependencies.accessStore.close()
       dependencies.households.close()

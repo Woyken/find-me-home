@@ -25,6 +25,12 @@ export default function App(
 function HouseholdBoundary(props: ParentProps) {
   const household = useHousehold()
   const imported = useImport()
+  const waitingMessage = () => {
+    const state = household.state()
+    return state.status === 'waiting' && state.syncStatus === 'syncing'
+      ? 'Syncing'
+      : 'Waiting for another Household member'
+  }
   return (
     <Switch>
       <Match when={household.state().status === 'starting'}>
@@ -40,7 +46,7 @@ function HouseholdBoundary(props: ParentProps) {
       </Match>
       <Match when={household.state().status === 'waiting'}>
         <main class="flex min-h-screen items-center justify-center bg-[#f6f4ec] p-6">
-          <p>Waiting for another Household member</p>
+          <p>{waitingMessage()}</p>
         </main>
       </Match>
       <Match when={household.state().status === 'active'}>

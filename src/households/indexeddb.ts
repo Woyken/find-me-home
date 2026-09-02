@@ -1,5 +1,3 @@
-import { createCollection } from '@tanstack/db'
-import type { Collection } from '@tanstack/db'
 import type { HouseholdAccessState, HouseholdRecord } from './model'
 
 export type HouseholdAccessStore = {
@@ -14,6 +12,12 @@ export type HouseholdRepository = {
   create: (value: HouseholdRecord) => Promise<void>
   rename: (id: string, name: string, updatedAt: number) => Promise<void>
   remove: (id: string) => Promise<void>
+  allRecords: () => HouseholdRecord[]
+  applyRemote: (records: HouseholdRecord[]) => Promise<HouseholdRecord[]>
+  subscribe: (listener: () => void) => () => void
+  subscribeLocalMutations: (
+    listener: (records: HouseholdRecord[]) => void,
+  ) => () => void
   close: () => void
 }
 
@@ -96,105 +100,118 @@ export const createIndexedDbHouseholdAccessStore = (
 export const createIndexedDbHouseholdRepository = (
   databasePrefix = 'find-me-home-shared',
 ): HouseholdRepository => {
-  let database: Promise<IDBDatabase> | undefined
-  let collection: Collection<HouseholdRecord, string> | undefined
-  const requireCollection = () => {
-    if (!collection) throw new Error('Household collection is not open')
-    return collection
+  let database: IDBDatabase | undefined
+  let householdId: string | undefined
+  let records: HouseholdRecord[] = []
+  const listeners = new Set<() => void>()
+  const localMutationListeners = new Set<(records: HouseholdRecord[]) => void>()
+  const requireOpen = () => {
+    if (!database || !householdId)
+      throw new Error('Household collection is not open')
+    return { database, householdId }
   }
+  const publish = () => listeners.forEach((listener) => listener())
+  const publishLocal = (changed: HouseholdRecord[]) =>
+    localMutationListeners.forEach((listener) =>
+      listener(structuredClone(changed)),
+    )
 
   return {
-    async open(householdId) {
-      collection?.cleanup()
-      void database?.then((db) => db.close())
-      const openedDatabase = openDatabase(
-        `${databasePrefix}-${householdId}`,
+    async open(nextHouseholdId) {
+      database?.close()
+      const openedDatabase = await openDatabase(
+        `${databasePrefix}-${nextHouseholdId}`,
         'households',
       )
       database = openedDatabase
-      const persist = async (records: HouseholdRecord[]) => {
-        const db = await openedDatabase
-        const transaction = db.transaction('households', 'readwrite')
-        const store = transaction.objectStore('households')
-        for (const record of records) store.put(record)
-        await transactionComplete(transaction)
-      }
-      collection = createCollection<HouseholdRecord, string>({
-        id: `${databasePrefix}-${householdId}-households`,
-        getKey: (record) => record.id,
-        startSync: true,
-        sync: {
-          sync: ({ begin, write, commit, markReady, markError }) => {
-            void (async () => {
-              try {
-                const db = await openedDatabase
-                const records = await requestResult<HouseholdRecord[]>(
-                  db
-                    .transaction('households')
-                    .objectStore('households')
-                    .getAll(),
-                )
-                begin()
-                for (const value of records) write({ type: 'insert', value })
-                await commit()
-                markReady()
-              } catch (error) {
-                markError(error)
-              }
-            })()
-          },
-        },
-        onInsert: async ({ transaction }) => {
-          await persist(
-            transaction.mutations.map((mutation) => mutation.modified),
-          )
-        },
-        onUpdate: async ({ transaction }) => {
-          await persist(
-            transaction.mutations.map((mutation) => mutation.modified),
-          )
-        },
-        onDelete: async ({ transaction }) => {
-          const db = await openedDatabase
-          const idbTransaction = db.transaction('households', 'readwrite')
-          const store = idbTransaction.objectStore('households')
-          for (const mutation of transaction.mutations)
-            store.delete(mutation.key)
-          await transactionComplete(idbTransaction)
-        },
-      })
-      await requireCollection().preload()
+      records = await requestResult<HouseholdRecord[]>(
+        openedDatabase
+          .transaction('households')
+          .objectStore('households')
+          .getAll(),
+      )
+      householdId = nextHouseholdId
+      publish()
     },
     get() {
-      const record = [...requireCollection().values()].find(
-        (value) => !value.deletedAt,
+      const active = requireOpen()
+      return structuredClone(
+        records.find(
+          (value) =>
+            value.householdId === active.householdId && !value.deletedAt,
+        ),
       )
-      return record
-        ? {
-            id: record.id,
-            name: record.name,
-            updatedAt: record.updatedAt,
-            ...(record.deletedAt === undefined
-              ? {}
-              : { deletedAt: record.deletedAt }),
-          }
-        : undefined
     },
     async create(value) {
-      await requireCollection().insert(value).isPersisted.promise
+      const active = requireOpen()
+      const transaction = active.database.transaction('households', 'readwrite')
+      transaction.objectStore('households').put(value)
+      await transactionComplete(transaction)
+      records = [...records.filter((record) => record.id !== value.id), value]
+      publish()
+      publishLocal([value])
     },
     async rename(id, name, updatedAt) {
-      await requireCollection().update(id, (record) => {
-        record.name = name
-        record.updatedAt = updatedAt
-      }).isPersisted.promise
+      const existing = records.find((record) => record.id === id)
+      if (!existing) throw new Error('Household metadata is unavailable')
+      const value = { ...existing, name, updatedAt }
+      const active = requireOpen()
+      const transaction = active.database.transaction('households', 'readwrite')
+      transaction.objectStore('households').put(value)
+      await transactionComplete(transaction)
+      records = records.map((record) => (record.id === id ? value : record))
+      publish()
+      publishLocal([value])
     },
     async remove(id) {
-      await requireCollection().delete(id).isPersisted.promise
+      const active = requireOpen()
+      const transaction = active.database.transaction('households', 'readwrite')
+      transaction.objectStore('households').delete(id)
+      await transactionComplete(transaction)
+      records = records.filter((record) => record.id !== id)
+      publish()
+    },
+    allRecords() {
+      requireOpen()
+      return structuredClone(records)
+    },
+    async applyRemote(incoming) {
+      const active = requireOpen()
+      if (incoming.some((record) => record.householdId !== active.householdId))
+        throw new Error('Invalid Household payload')
+      const winners = incoming.filter(
+        (record) =>
+          record.updatedAt >
+          (records.find((local) => local.id === record.id)?.updatedAt ?? -1),
+      )
+      if (!winners.length) return []
+      const transaction = active.database.transaction('households', 'readwrite')
+      for (const winner of winners)
+        transaction.objectStore('households').put(winner)
+      await transactionComplete(transaction)
+      const byId = new Map(winners.map((record) => [record.id, record]))
+      records = [
+        ...records.filter((record) => !byId.has(record.id)),
+        ...winners,
+      ]
+      publish()
+      return structuredClone(winners)
+    },
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    subscribeLocalMutations(listener) {
+      localMutationListeners.add(listener)
+      return () => localMutationListeners.delete(listener)
     },
     close() {
-      collection?.cleanup()
-      void database?.then((db) => db.close())
+      database?.close()
+      database = undefined
+      householdId = undefined
+      records = []
+      listeners.clear()
+      localMutationListeners.clear()
     },
   }
 }

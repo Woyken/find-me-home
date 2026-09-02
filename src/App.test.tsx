@@ -59,6 +59,7 @@ const createTestRuntime = () => {
     status: 'active',
     household: {
       id: 'record-id',
+      householdId: 'household-id',
       name,
       updatedAt: 100,
     },
@@ -69,6 +70,7 @@ const createTestRuntime = () => {
       lastOpenedAt: 100,
     },
     roomPassword: 'room-password',
+    syncStatus: 'alone',
   })
   const runtime: HouseholdRuntime = {
     state: () => state,
@@ -78,6 +80,7 @@ const createTestRuntime = () => {
     },
     start: async () => publish({ status: 'no-household' }),
     createHousehold: async () => publish(active('Our home search')),
+    joinHousehold: async () => undefined,
     renameActiveHousehold: async (name) => publish(active(name)),
     listSourceListings: () => [],
     getSourceListing: () => undefined,
@@ -98,6 +101,8 @@ const createTestRuntime = () => {
     markSourceListingVisited: async () => undefined,
     removeSourceListing: async () => undefined,
     getSourceListingRecords: () => [],
+    getInvitationUrl: () => 'https://example.test/#household=secret',
+    getLastChangeAt: () => 100,
     dispose: () => listeners.clear(),
   }
   return runtime
@@ -168,6 +173,29 @@ describe('App Household boundary', () => {
 
     await waitFor(() =>
       expect(document.body.textContent).toContain('Forest edge search'),
+    )
+  })
+
+  it('shares the invitation locally with full-access warnings', async () => {
+    mount(createTestRuntime())
+    await waitFor(() => expect(findButton('Create Household')).toBeTruthy())
+    findButton('Create Household')?.click()
+    await waitFor(() => expect(findButton('Share Household')).toBeTruthy())
+    findButton('Share Household')?.click()
+
+    await waitFor(() =>
+      expect(
+        document.querySelector<HTMLInputElement>(
+          'input[aria-label="Household invitation link"]',
+        )?.value,
+      ).toContain('#household='),
+    )
+    expect(document.body.textContent).toContain('can edit the Household')
+    expect(document.body.textContent).toContain('cannot be revoked')
+    await waitFor(() =>
+      expect(
+        document.querySelector('img[alt="Household invitation QR code"]'),
+      ).toBeTruthy(),
     )
   })
 })
