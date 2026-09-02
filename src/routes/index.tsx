@@ -7,6 +7,7 @@ import {
 import type { SourceListingSummary } from '../server/source-listings'
 import { paths } from '../paths'
 import { sourceListingsQuery } from '../queries'
+import { HouseholdHeader } from '../components/HouseholdHeader'
 
 export const preloadHome = () => void sourceListingsQuery()
 
@@ -20,7 +21,7 @@ export default function Home() {
     <main class="min-h-screen bg-[#edf0ea] px-4 pb-16 pt-4 text-[#18241e] sm:px-8 sm:pt-8">
       <div class="mx-auto max-w-6xl overflow-hidden border border-[#18241e] bg-[#faf9f4]">
         <header class="flex flex-wrap items-center justify-between gap-3 border-b border-[#18241e] px-4 py-4 sm:px-7">
-          <h1 class="font-serif text-2xl">Find Me Home</h1>
+          <HouseholdHeader />
           <div class="flex items-center gap-3">
             <a
               class="border-b border-[#204d3a] font-mono text-xs font-bold text-[#204d3a]"
