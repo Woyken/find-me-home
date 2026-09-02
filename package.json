@@ -8,6 +8,8 @@
     "start": "vite preview",
     "preview": "vite preview",
     "test": "vitest run",
+    "generate:parcels": "node --experimental-strip-types scripts/generate-parcels.ts",
+    "validate:parcels": "node --experimental-strip-types scripts/validate-parcels.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint",
     "format": "prettier --write . && eslint --fix",
