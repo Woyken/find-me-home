@@ -17,6 +17,7 @@ type HouseholdContextValue = {
   updateCandidatePlot: HouseholdRuntime['updateCandidatePlot']
   getVisitPlan: HouseholdRuntime['getVisitPlan']
   setVisitPlan: HouseholdRuntime['setVisitPlan']
+  markSourceListingVisited: HouseholdRuntime['markSourceListingVisited']
   removeSourceListing: HouseholdRuntime['removeSourceListing']
 }
 
@@ -67,6 +68,8 @@ export function HouseholdProvider(
         },
         setVisitPlan: (sourceListingIds) =>
           props.runtime.setVisitPlan(sourceListingIds),
+        markSourceListingVisited: (sourceListingId) =>
+          props.runtime.markSourceListingVisited(sourceListingId),
         removeSourceListing: (sourceListingId) =>
           props.runtime.removeSourceListing(sourceListingId),
       }}

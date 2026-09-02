@@ -26,6 +26,7 @@ export type HouseholdRuntime = {
   ) => Promise<void>
   getVisitPlan: SourceListingRepository['getVisitPlan']
   setVisitPlan: (sourceListingIds: string[]) => Promise<void>
+  markSourceListingVisited: (sourceListingId: string) => Promise<void>
   removeSourceListing: (sourceListingId: string) => Promise<void>
   getSourceListingRecords: SourceListingRepository['allRecords']
   dispose: () => void
@@ -134,6 +135,7 @@ export const createHouseholdRuntime = (dependencies: {
       await dependencies.households.open(credentials.householdId)
       await dependencies.sourceListings.open(credentials.householdId)
       await dependencies.households.create(household)
+      await dependencies.sourceListings.setVisitPlan([], timestamp)
       try {
         await dependencies.accessStore.put(access)
       } catch (error) {
@@ -184,6 +186,11 @@ export const createHouseholdRuntime = (dependencies: {
     setVisitPlan: (sourceListingIds) =>
       dependencies.sourceListings.setVisitPlan(
         sourceListingIds,
+        mutationTime(),
+      ),
+    markSourceListingVisited: (sourceListingId) =>
+      dependencies.sourceListings.markSourceListingVisited(
+        sourceListingId,
         mutationTime(),
       ),
     removeSourceListing: (sourceListingId) =>

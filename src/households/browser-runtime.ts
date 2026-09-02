@@ -13,6 +13,7 @@ export const createBrowserHouseholdRuntime = (options?: {
   now?: () => number
   uuid?: () => string
   beforeRemoveCommit?: (transaction: IDBTransaction) => void
+  beforeVisitCommit?: (transaction: IDBTransaction) => void
 }) => {
   const cryptoApi = options?.crypto ?? crypto
   return createHouseholdRuntime({
@@ -28,6 +29,7 @@ export const createBrowserHouseholdRuntime = (options?: {
         now: options?.now ?? Date.now,
         uuid: options?.uuid ?? (() => cryptoApi.randomUUID()),
         beforeRemoveCommit: options?.beforeRemoveCommit,
+        beforeVisitCommit: options?.beforeVisitCommit,
       },
     ),
     credentials: createHouseholdCredentialSource({ crypto: cryptoApi }),

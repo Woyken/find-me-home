@@ -10,6 +10,9 @@ export const preloadHome = () => undefined
 export default function Home() {
   const household = useHousehold()
   const listings = createMemo(() => household.listSourceListings())
+  const plannedCount = createMemo(
+    () => household.getVisitPlan().sourceListingIds.length,
+  )
   const [showImport, setShowImport] = createSignal(false)
 
   return (
@@ -22,7 +25,7 @@ export default function Home() {
               class="border-b border-[#204d3a] font-mono text-xs font-bold text-[#204d3a]"
               href={paths.visitPlan}
             >
-              Visit Plan
+              Visit Plan ({plannedCount()})
             </a>
             <button
               class="bg-[#204d3a] px-4 py-2 text-sm font-bold text-white"
@@ -66,10 +69,28 @@ export default function Home() {
 
 function ListingRow(props: { listing: SourceListingDetail }) {
   const household = useHousehold()
+  const [busy, setBusy] = createSignal(false)
+  const [error, setError] = createSignal('')
   const plot = (): SourceListingDetail['candidatePlots'][number] | undefined =>
     props.listing.candidatePlots[0]
   const planned = () =>
     household.getVisitPlan().sourceListingIds.includes(props.listing.id)
+  const togglePlan = async () => {
+    const ids = household.getVisitPlan().sourceListingIds
+    setBusy(true)
+    setError('')
+    try {
+      await household.setVisitPlan(
+        planned()
+          ? ids.filter((id) => id !== props.listing.id)
+          : [...ids, props.listing.id],
+      )
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <article class="grid gap-3 border-b border-[#18241e]/20 px-4 py-5 last:border-0 sm:grid-cols-[2.1fr_1fr_0.7fr_0.8fr_auto] sm:items-center sm:px-7">
@@ -88,15 +109,31 @@ function ListingRow(props: { listing: SourceListingDetail }) {
         <p class="mt-2 text-sm text-[#647169] sm:hidden">
           {props.listing.address ?? 'Location unknown'}
         </p>
+        <Show when={props.listing.visitedAt !== null}>
+          <p class="mt-1 text-xs text-[#647169]">
+            Last visited {formatDate(props.listing.visitedAt)}
+          </p>
+        </Show>
       </div>
       <p class="hidden text-sm sm:block">
         {props.listing.address ?? 'Unknown'}
       </p>
       <b>{formatPrice(plot()?.priceEur ?? null)}</b>
       <b>{formatArea(plot()?.areaAres ?? null)}</b>
-      <span class="text-xs text-[#647169]">
-        {planned() ? 'Planned' : 'Not planned'}
-      </span>
+      <div>
+        <button
+          class="border border-[#204d3a] px-3 py-2 text-xs font-bold text-[#204d3a] disabled:opacity-50"
+          disabled={busy()}
+          onClick={() => void togglePlan()}
+        >
+          {planned() ? 'Remove' : 'Add'}
+        </button>
+        <Show when={error()}>
+          <p class="mt-1 max-w-32 text-xs text-[#a13d22]" role="alert">
+            {error()}
+          </p>
+        </Show>
+      </div>
     </article>
   )
 }
@@ -172,9 +209,10 @@ export const formatArea = (value: number | null) =>
     ? 'Unknown'
     : `${new Intl.NumberFormat('lt-LT').format(value)} a`
 
-export const formatDate = (value: string | null) =>
+export const formatDate = (value: number | null) =>
   value === null
     ? 'Not yet'
-    : new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(
-        new Date(`${value}Z`),
-      )
+    : new Intl.DateTimeFormat('en-GB', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(new Date(value))

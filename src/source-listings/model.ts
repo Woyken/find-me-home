@@ -13,6 +13,7 @@ export type SourceListingRecord = {
   photos: string[]
   utilities: AruodasImport['utilities']
   raw: AruodasImport['raw']
+  visitedAt: number | null
   updatedAt: number
   deletedAt?: number
 }

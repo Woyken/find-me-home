@@ -5,6 +5,7 @@ import { useHousehold } from '../households/context'
 import { paths } from '../paths'
 import type { CandidatePlotRecord } from '../source-listings/model'
 import { candidatePlotMapItem } from '../source-listings/map'
+import { formatDate } from './index'
 
 export const preloadSourceListing = () => undefined
 
@@ -50,10 +51,34 @@ export default function SourceListingPage(props: {
   const togglePlan = async () => {
     const current = listing()
     if (!current) return
-    const ids = household.getVisitPlan().sourceListingIds
-    await household.setVisitPlan(
-      planned() ? ids.filter((id) => id !== current.id) : [...ids, current.id],
-    )
+    setBusy(true)
+    setError('')
+    try {
+      const ids = household.getVisitPlan().sourceListingIds
+      await household.setVisitPlan(
+        planned()
+          ? ids.filter((id) => id !== current.id)
+          : [...ids, current.id],
+      )
+    } catch (caught) {
+      setError(errorMessage(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const completeVisit = async () => {
+    const current = listing()
+    if (!current) return
+    setBusy(true)
+    setError('')
+    try {
+      await household.markSourceListingVisited(current.id)
+      navigate(paths.visitPlan)
+    } catch (caught) {
+      setError(errorMessage(caught))
+      setBusy(false)
+    }
   }
 
   const remove = async () => {
@@ -81,12 +106,20 @@ export default function SourceListingPage(props: {
       <Show when={listing()} fallback={<p>Source Listing not found.</p>}>
         {(item) => (
           <div class="mx-auto max-w-5xl">
-            <a
-              class="text-sm font-bold text-[#315f73] underline"
-              href={paths.home}
-            >
-              Saved Source Listings
-            </a>
+            <div class="flex flex-wrap gap-x-5 gap-y-2">
+              <a
+                class="text-sm font-bold text-[#315f73] underline"
+                href={paths.visitPlan}
+              >
+                Visit Plan
+              </a>
+              <a
+                class="text-sm font-bold text-[#315f73] underline"
+                href={paths.home}
+              >
+                Saved Source Listings
+              </a>
+            </div>
             <header class="mt-8 border-b border-[#17231d]/20 pb-8 sm:flex sm:items-end sm:justify-between sm:gap-6">
               <div>
                 <p class="font-mono text-xs font-bold uppercase text-[#315f73]">
@@ -101,6 +134,7 @@ export default function SourceListingPage(props: {
               </div>
               <button
                 class="mt-5 border border-[#24483a] px-5 py-3 font-bold text-[#24483a] sm:mt-0"
+                disabled={busy()}
                 onClick={() => void togglePlan()}
               >
                 {planned() ? 'Remove from Visit Plan' : 'Add to Visit Plan'}
@@ -161,6 +195,9 @@ export default function SourceListingPage(props: {
                 </Show>
                 <div class="bg-[#e7edf0] p-5">
                   <p>{item().description ?? 'No description imported.'}</p>
+                  <p class="mt-4 text-sm">
+                    <b>Last visited:</b> {formatDate(item().visitedAt)}
+                  </p>
                   <a
                     class="mt-5 inline-block font-bold text-[#315f73] underline"
                     href={item().url}
@@ -169,6 +206,22 @@ export default function SourceListingPage(props: {
                   >
                     Open original advert
                   </a>
+                </div>
+                <div class="border border-[#24483a] bg-[#e4efe7] p-5">
+                  <p class="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#24483a]">
+                    Visit complete
+                  </p>
+                  <p class="mt-2 text-sm text-[#526058]">
+                    Records the latest Visit and removes this Source Listing
+                    from the Visit Plan. Candidate Plot observations stay saved.
+                  </p>
+                  <button
+                    class="mt-4 w-full bg-[#24483a] px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+                    disabled={busy()}
+                    onClick={() => void completeVisit()}
+                  >
+                    Mark Source Listing visited
+                  </button>
                 </div>
                 <div class="border border-[#a13d22]/30 bg-[#fff1eb] p-5">
                   <p class="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#a13d22]">
@@ -238,6 +291,24 @@ function CandidatePlotEditor(props: {
   )
   const [view, setView] = createSignal(textNumber(props.plot.viewRating))
   const [status, setStatus] = createSignal('')
+  const directionsDestination = () => {
+    if (
+      props.plot.resolvedLatitude !== null &&
+      props.plot.resolvedLongitude !== null
+    ) {
+      return `${props.plot.resolvedLatitude},${props.plot.resolvedLongitude}`
+    }
+    if (props.plot.latitudeClue !== null && props.plot.longitudeClue !== null) {
+      return `${props.plot.latitudeClue},${props.plot.longitudeClue}`
+    }
+    return props.plot.addressClue
+  }
+  const directionsUrl = () => {
+    const destination = directionsDestination()
+    return destination
+      ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`
+      : null
+  }
 
   const save = async () => {
     setStatus('Saving...')
@@ -274,6 +345,18 @@ function CandidatePlotEditor(props: {
       <p class="font-mono text-xs font-bold uppercase text-[#607067]">
         Candidate Plot {props.number}
       </p>
+      <Show when={directionsUrl()}>
+        {(url) => (
+          <a
+            class="mt-2 inline-block text-sm font-bold text-[#315f73] underline"
+            href={url()}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open directions
+          </a>
+        )}
+      </Show>
       <div class="mt-4 grid gap-4 sm:grid-cols-2">
         <Field label="Name" value={name()} onInput={setName} />
         <Field label="Price (€)" value={price()} onInput={setPrice} />

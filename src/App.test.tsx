@@ -95,6 +95,7 @@ const createTestRuntime = () => {
       updatedAt: 0,
     }),
     setVisitPlan: async () => undefined,
+    markSourceListingVisited: async () => undefined,
     removeSourceListing: async () => undefined,
     getSourceListingRecords: () => [],
     dispose: () => listeners.clear(),

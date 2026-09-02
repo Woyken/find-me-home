@@ -32,6 +32,10 @@ export type SourceListingRepository = {
   ) => Promise<void>
   getVisitPlan: () => VisitPlanRecord
   setVisitPlan: (sourceListingIds: string[], updatedAt: number) => Promise<void>
+  markSourceListingVisited: (
+    sourceListingId: string,
+    updatedAt: number,
+  ) => Promise<void>
   removeSourceListing: (
     sourceListingId: string,
     updatedAt: number,
@@ -96,6 +100,7 @@ export const createIndexedDbSourceListingRepository = (
     now: () => number
     uuid: () => string
     beforeRemoveCommit?: (transaction: IDBTransaction) => void
+    beforeVisitCommit?: (transaction: IDBTransaction) => void
   } = {
     now: Date.now,
     uuid: () => crypto.randomUUID(),
@@ -165,12 +170,14 @@ export const createIndexedDbSourceListingRepository = (
       database?.close()
       database = await openDatabase(`${databasePrefix}-${nextHouseholdId}`)
       householdId = nextHouseholdId
-      sourceListings = await requestResult<SourceListingRecord[]>(
-        database
-          .transaction('source-listings')
-          .objectStore('source-listings')
-          .getAll(),
-      )
+      sourceListings = (
+        await requestResult<SourceListingRecord[]>(
+          database
+            .transaction('source-listings')
+            .objectStore('source-listings')
+            .getAll(),
+        )
+      ).map((record) => ({ ...record, visitedAt: record.visitedAt ?? null }))
       candidatePlots = normalizeCandidatePlots(
         await requestResult<CandidatePlotRecord[]>(
           database
@@ -235,6 +242,7 @@ export const createIndexedDbSourceListingRepository = (
         photos: review.imported.photos,
         utilities: review.imported.utilities,
         raw: review.imported.raw,
+        visitedAt: existing?.visitedAt ?? null,
         updatedAt: timestamp,
       }
       const existingPlot = existing
@@ -422,6 +430,47 @@ export const createIndexedDbSourceListingRepository = (
       transaction.objectStore('visit-plans').put(next)
       await transactionComplete(transaction)
       visitPlan = next
+      publish()
+    },
+    async markSourceListingVisited(sourceListingId, updatedAt) {
+      const active = requireOpen()
+      const existing = sourceListings.find(
+        (record) =>
+          record.id === sourceListingId &&
+          record.householdId === active.householdId &&
+          !record.deletedAt,
+      )
+      if (!existing) throw new Error('Source Listing not found')
+      const visitedSourceListing = {
+        ...existing,
+        visitedAt: updatedAt,
+        updatedAt,
+      }
+      const currentVisitPlan = visitPlan ?? {
+        id: 'visit-plan' as const,
+        householdId: active.householdId,
+        sourceListingIds: [],
+        updatedAt: 0,
+      }
+      const nextVisitPlan = {
+        ...currentVisitPlan,
+        sourceListingIds: currentVisitPlan.sourceListingIds.filter(
+          (id) => id !== sourceListingId,
+        ),
+        updatedAt,
+      }
+      const transaction = active.database.transaction(
+        ['source-listings', 'visit-plans'],
+        'readwrite',
+      )
+      transaction.objectStore('source-listings').put(visitedSourceListing)
+      transaction.objectStore('visit-plans').put(nextVisitPlan)
+      dependencies.beforeVisitCommit?.(transaction)
+      await transactionComplete(transaction)
+      sourceListings = sourceListings.map((record) =>
+        record.id === sourceListingId ? visitedSourceListing : record,
+      )
+      visitPlan = nextVisitPlan
       publish()
     },
     async removeSourceListing(sourceListingId, updatedAt) {

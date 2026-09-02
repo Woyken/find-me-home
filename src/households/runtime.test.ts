@@ -28,6 +28,98 @@ afterEach(async () => {
 })
 
 describe('Household runtime', () => {
+  it('persists an ordered distinct Visit Plan and its latest Visit', async () => {
+    const databaseName = `visit-plan-${crypto.randomUUID()}`
+    databasePrefixes.push(databaseName)
+    let uuid = 0
+    let now = 3_000
+    const createRuntime = () =>
+      createBrowserHouseholdRuntime({
+        accessDatabaseName: databaseName,
+        sharedDatabasePrefix: databaseName,
+        crypto,
+        now: () => now,
+        uuid: () => `visit-id-${++uuid}`,
+      })
+    const review = (sourceId: string) => ({
+      imported: parseAruodasImport({
+        url: `https://www.aruodas.lt/sklypai-vilniuje-${sourceId}/`,
+        photos: [],
+        features: [],
+      }),
+      priceEur: null,
+      areaAres: null,
+      purposeText: null,
+      notes: null,
+      parcelNumberClue: null,
+      latitudeClue: null,
+      longitudeClue: null,
+      coordinateCluePrecision: null,
+      addressClue: null,
+    })
+    const runtime = createRuntime()
+    let reopened: ReturnType<typeof createBrowserHouseholdRuntime> | undefined
+
+    try {
+      await runtime.start()
+      await runtime.createHousehold()
+      expect(
+        runtime
+          .getSourceListingRecords()
+          .filter((record) => record.id === 'visit-plan'),
+      ).toHaveLength(1)
+
+      const first = await runtime.saveReviewedImport(review('first-1-1'))
+      const second = await runtime.saveReviewedImport(review('second-2-2'))
+      const third = await runtime.saveReviewedImport(review('third-3-3'))
+      await runtime.setVisitPlan([
+        third.sourceListingId,
+        first.sourceListingId,
+        third.sourceListingId,
+        second.sourceListingId,
+      ])
+      expect(runtime.getVisitPlan().sourceListingIds).toEqual([
+        third.sourceListingId,
+        first.sourceListingId,
+        second.sourceListingId,
+      ])
+
+      now = 4_000
+      await runtime.markSourceListingVisited(first.sourceListingId)
+      expect(runtime.getSourceListing(first.sourceListingId)?.visitedAt).toBe(
+        4_000,
+      )
+      expect(runtime.getVisitPlan().sourceListingIds).toEqual([
+        third.sourceListingId,
+        second.sourceListingId,
+      ])
+
+      await runtime.setVisitPlan([
+        third.sourceListingId,
+        second.sourceListingId,
+        first.sourceListingId,
+      ])
+      expect(runtime.getSourceListing(first.sourceListingId)?.visitedAt).toBe(
+        4_000,
+      )
+
+      runtime.dispose()
+      reopened = createRuntime()
+      await reopened.start()
+      expect(reopened.getVisitPlan().sourceListingIds).toEqual([
+        third.sourceListingId,
+        second.sourceListingId,
+        first.sourceListingId,
+      ])
+      expect(reopened.getSourceListing(first.sourceListingId)?.visitedAt).toBe(
+        4_000,
+      )
+    } finally {
+      runtime.dispose()
+      reopened?.dispose()
+    }
+  })
+
   it('edits Candidate Plots and removes a Source Listing as one retained tombstone transaction', async () => {
     const databaseName = `candidate-plots-${crypto.randomUUID()}`
     databasePrefixes.push(databaseName)
@@ -282,6 +374,123 @@ describe('Household runtime', () => {
     }
   })
 
+  it('does not publish or persist a partial Visit when its transaction aborts', async () => {
+    const databaseName = `visit-abort-${crypto.randomUUID()}`
+    databasePrefixes.push(databaseName)
+    let abortVisit = false
+    let uuid = 0
+    const createRuntime = () =>
+      createBrowserHouseholdRuntime({
+        accessDatabaseName: databaseName,
+        sharedDatabasePrefix: databaseName,
+        crypto,
+        now: () => 5_000,
+        uuid: () => `visit-abort-id-${++uuid}`,
+        beforeVisitCommit: (transaction) => {
+          if (abortVisit) transaction.abort()
+        },
+      })
+    const runtime = createRuntime()
+    let reopened: ReturnType<typeof createBrowserHouseholdRuntime> | undefined
+    try {
+      await runtime.start()
+      await runtime.createHousehold()
+      const saved = await runtime.saveReviewedImport({
+        imported: parseAruodasImport({
+          url: 'https://www.aruodas.lt/sklypai-vilniuje-visit-abort-1-1/',
+          photos: [],
+          features: [],
+        }),
+        priceEur: null,
+        areaAres: null,
+        purposeText: null,
+        notes: null,
+        parcelNumberClue: null,
+        latitudeClue: null,
+        longitudeClue: null,
+        coordinateCluePrecision: null,
+        addressClue: null,
+      })
+      await runtime.setVisitPlan([saved.sourceListingId])
+      abortVisit = true
+
+      await expect(
+        runtime.markSourceListingVisited(saved.sourceListingId),
+      ).rejects.toBeTruthy()
+      expect(
+        runtime.getSourceListing(saved.sourceListingId)?.visitedAt,
+      ).toBeNull()
+      expect(runtime.getVisitPlan().sourceListingIds).toEqual([
+        saved.sourceListingId,
+      ])
+
+      runtime.dispose()
+      abortVisit = false
+      reopened = createRuntime()
+      await reopened.start()
+      expect(
+        reopened.getSourceListing(saved.sourceListingId)?.visitedAt,
+      ).toBeNull()
+      expect(reopened.getVisitPlan().sourceListingIds).toEqual([
+        saved.sourceListingId,
+      ])
+    } finally {
+      runtime.dispose()
+      reopened?.dispose()
+    }
+  })
+
+  it('isolates Visit Plans to their active Household', async () => {
+    const databaseName = `visit-isolation-${crypto.randomUUID()}`
+    databasePrefixes.push(databaseName)
+    let uuid = 0
+    const createRuntime = (accessDatabaseName: string) =>
+      createBrowserHouseholdRuntime({
+        accessDatabaseName,
+        sharedDatabasePrefix: databaseName,
+        crypto,
+        now: () => 6_000,
+        uuid: () => `isolation-id-${++uuid}`,
+      })
+    const first = createRuntime(`${databaseName}-first-access`)
+    const second = createRuntime(`${databaseName}-second-access`)
+    try {
+      await first.start()
+      await first.createHousehold()
+      const saved = await first.saveReviewedImport({
+        imported: parseAruodasImport({
+          url: 'https://www.aruodas.lt/sklypai-vilniuje-isolated-1-1/',
+          photos: [],
+          features: [],
+        }),
+        priceEur: null,
+        areaAres: null,
+        purposeText: null,
+        notes: null,
+        parcelNumberClue: null,
+        latitudeClue: null,
+        longitudeClue: null,
+        coordinateCluePrecision: null,
+        addressClue: null,
+      })
+      await first.setVisitPlan([saved.sourceListingId])
+
+      await second.start()
+      await second.createHousehold()
+      expect(second.getVisitPlan().sourceListingIds).toEqual([])
+      await expect(
+        second.setVisitPlan([saved.sourceListingId]),
+      ).rejects.toThrow('unavailable Source Listing')
+      expect(second.getVisitPlan().sourceListingIds).toEqual([])
+      expect(first.getVisitPlan().sourceListingIds).toEqual([
+        saved.sourceListingId,
+      ])
+    } finally {
+      first.dispose()
+      second.dispose()
+    }
+  })
+
   it('reopens the Household with the most recent local last-opened time', async () => {
     const firstHousehold = {
       id: 'first-record',
@@ -350,6 +559,7 @@ describe('Household runtime', () => {
           updatedAt: 0,
         }),
         setVisitPlan: async () => undefined,
+        markSourceListingVisited: async () => undefined,
         removeSourceListing: async () => undefined,
         allRecords: () => [],
         subscribe: () => () => undefined,
