@@ -38,11 +38,7 @@ export default function ImportReview() {
         parcelNumberClue: clue.parcelNumberClue,
         latitudeClue: clue.latitudeClue,
         longitudeClue: clue.longitudeClue,
-        coordinateCluePrecision:
-          clue.kind === 'coordinates' &&
-          imported.locationConfidence !== 'unknown'
-            ? imported.locationConfidence
-            : null,
+        coordinateCluePrecision: clue.coordinateCluePrecision,
         addressClue: clue.addressClue,
       })
       imports.clear()

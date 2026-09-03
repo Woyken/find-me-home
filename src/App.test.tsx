@@ -171,10 +171,10 @@ describe('App Household boundary', () => {
           purposeText: 'Namų valda',
           notes: null,
           parcelNumberClue: null,
-          latitudeClue: null,
-          longitudeClue: null,
-          coordinateCluePrecision: null,
-          addressClue: 'Vilniaus r.',
+          latitudeClue: 54.8,
+          longitudeClue: 25.2,
+          coordinateCluePrecision: 'exact',
+          addressClue: null,
           roadAccessRating: null,
           areaFeelingRating: null,
           viewRating: null,
@@ -211,6 +211,34 @@ describe('App Household boundary', () => {
       expect(runtime.resolveCandidatePlotLocation).toHaveBeenCalledTimes(1)
       expect(runtime.runCandidatePlotAutomaticChecks).toHaveBeenCalledTimes(1)
     })
+
+    const updateCandidatePlot = vi.spyOn(runtime, 'updateCandidatePlot')
+    const clueKind =
+      document.querySelector<HTMLSelectElement>('fieldset select')
+    if (!clueKind) throw new Error('Recorded Location Clue selector is missing')
+    clueKind.value = 'address'
+    clueKind.dispatchEvent(new Event('change', { bubbles: true }))
+
+    await waitFor(() =>
+      expect(
+        [...document.querySelectorAll<HTMLInputElement>('input')].find(
+          (input) => input.value === 'Vilniaus r.',
+        ),
+      ).toBeTruthy(),
+    )
+    findButton('Save Candidate Plot')?.click()
+    await waitFor(() =>
+      expect(updateCandidatePlot).toHaveBeenCalledWith(
+        'listing-id',
+        'plot-id',
+        expect.objectContaining({
+          latitudeClue: 54.8,
+          longitudeClue: 25.2,
+          coordinateCluePrecision: 'exact',
+          addressClue: 'Vilniaus r.',
+        }),
+      ),
+    )
   })
 
   it('removes an import fragment and resumes its review after creating a Household', async () => {

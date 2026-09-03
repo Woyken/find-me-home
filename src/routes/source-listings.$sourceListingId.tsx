@@ -174,6 +174,7 @@ export default function SourceListingPage(props: {
                   {(plot, index) => (
                     <CandidatePlotEditor
                       plot={plot}
+                      importedAddress={item().address}
                       number={index() + 1}
                       selected={selectedPlotId() === plot.id}
                       onSave={(update) =>
@@ -256,6 +257,7 @@ export default function SourceListingPage(props: {
 
 function CandidatePlotEditor(props: {
   plot: CandidatePlotRecord
+  importedAddress: string | null
   number: number
   selected: boolean
   onSave: (
@@ -286,7 +288,9 @@ function CandidatePlotEditor(props: {
   const [longitude, setLongitude] = createSignal(
     textNumber(props.plot.longitudeClue),
   )
-  const [address, setAddress] = createSignal(props.plot.addressClue ?? '')
+  const [address, setAddress] = createSignal(
+    props.plot.addressClue ?? props.importedAddress ?? '',
+  )
   const [precision, setPrecision] = createSignal<'exact' | 'approx'>(
     props.plot.coordinateCluePrecision ?? 'approx',
   )
@@ -346,15 +350,12 @@ function CandidatePlotEditor(props: {
         areaAres: optionalNumber(area()),
         purposeText: optionalText(purpose()),
         notes: optionalText(notes()),
-        parcelNumberClue:
-          clueKind() === 'parcel' ? optionalText(parcel()) : null,
-        latitudeClue:
-          clueKind() === 'coordinates' ? optionalNumber(latitude()) : null,
-        longitudeClue:
-          clueKind() === 'coordinates' ? optionalNumber(longitude()) : null,
+        parcelNumberClue: optionalText(parcel()),
+        latitudeClue: optionalNumber(latitude()),
+        longitudeClue: optionalNumber(longitude()),
         coordinateCluePrecision:
-          clueKind() === 'coordinates' ? precision() : null,
-        addressClue: clueKind() === 'address' ? optionalText(address()) : null,
+          latitude().trim() || longitude().trim() ? precision() : null,
+        addressClue: optionalText(address()),
         roadAccessRating: optionalNumber(road()),
         areaFeelingRating: optionalNumber(feeling()),
         viewRating: optionalNumber(view()),

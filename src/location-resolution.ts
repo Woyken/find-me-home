@@ -144,7 +144,9 @@ export const createLocationResolver = (dependencies: {
           longitude: plot.longitudeClue,
         }
         const lks94 = toLks94(coordinates.latitude, coordinates.longitude)
-        const parcel = await dependencies.parcels.findAtLks94(lks94.x, lks94.y)
+        const parcel = await dependencies.parcels
+          .findAtLks94(lks94.x, lks94.y)
+          .catch(() => null)
         const address = await dependencies
           .reverseAddress(coordinates.latitude, coordinates.longitude)
           .catch(() => null)

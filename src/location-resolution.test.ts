@@ -96,6 +96,41 @@ describe('Candidate Plot location resolution', () => {
     expect(searchAddress).toHaveBeenCalledOnce()
   })
 
+  it('keeps known coordinates resolved when parcel lookup is unavailable', async () => {
+    const resolver = createLocationResolver({
+      parcels: {
+        findByNumber: async () => [],
+        findAtLks94: async () => {
+          throw new Error('Parcel assets unavailable')
+        },
+        datasetVersion: null,
+      },
+      searchAddress: async () => null,
+      reverseAddress: async () => {
+        throw new Error('Reverse address unavailable')
+      },
+    })
+
+    await expect(
+      resolver.resolve(
+        plot({
+          latitudeClue: 54.80511,
+          longitudeClue: 25.206326,
+          coordinateCluePrecision: 'exact',
+        }),
+      ),
+    ).resolves.toMatchObject({
+      resolvedLatitude: 54.80511,
+      resolvedLongitude: 25.206326,
+      resolvedAddress: null,
+      resolvedParcelNumber: null,
+      resolvedPrecision: 'exact',
+      effectiveLocationSource: 'coordinates',
+      locationResolutionState: 'resolved',
+      parcelDatasetVersion: null,
+    })
+  })
+
   it('returns no result when Regia finds no address', async () => {
     const resolver = createLocationResolver({
       parcels: {

@@ -5,24 +5,31 @@ export function chooseImportedLocationClue(input: {
   address?: string | null
   precision: 'exact' | 'approx' | 'unknown'
 }) {
+  const coordinateCluePrecision: 'exact' | 'approx' | null =
+    input.latitude != null && input.longitude != null
+      ? input.precision === 'exact'
+        ? 'exact'
+        : 'approx'
+      : null
+  const clues = {
+    parcelNumberClue: input.uniqueRegistryNumber ?? null,
+    latitudeClue: input.latitude ?? null,
+    longitudeClue: input.longitude ?? null,
+    coordinateCluePrecision,
+    addressClue: input.address ?? null,
+  }
   if (
     input.uniqueRegistryNumber &&
     /^\d{4}-\d{4}-\d{4}$/.test(input.uniqueRegistryNumber)
   ) {
     return {
       kind: 'registry' as const,
-      parcelNumberClue: input.uniqueRegistryNumber,
-      latitudeClue: null,
-      longitudeClue: null,
-      addressClue: null,
+      ...clues,
     }
   }
   const coordinates = {
     kind: 'coordinates' as const,
-    parcelNumberClue: null,
-    latitudeClue: input.latitude ?? null,
-    longitudeClue: input.longitude ?? null,
-    addressClue: null,
+    ...clues,
   }
   if (
     input.precision === 'exact' &&
@@ -34,18 +41,12 @@ export function chooseImportedLocationClue(input: {
   if (input.address && /\d/.test(input.address)) {
     return {
       kind: 'address' as const,
-      parcelNumberClue: null,
-      latitudeClue: null,
-      longitudeClue: null,
-      addressClue: input.address,
+      ...clues,
     }
   }
   if (input.latitude != null && input.longitude != null) return coordinates
   return {
     kind: 'address' as const,
-    parcelNumberClue: null,
-    latitudeClue: null,
-    longitudeClue: null,
-    addressClue: input.address ?? null,
+    ...clues,
   }
 }

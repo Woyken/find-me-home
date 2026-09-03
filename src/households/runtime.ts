@@ -656,13 +656,6 @@ const validateCandidatePlotUpdate = (update: CandidatePlotUpdate) => {
     (update.coordinateCluePrecision === null)
   )
     throw new Error('Coordinate precision must accompany coordinates')
-  const clueCount = [
-    update.parcelNumberClue,
-    update.latitudeClue,
-    update.addressClue,
-  ].filter((value) => value !== null).length
-  if (clueCount > 1)
-    throw new Error('A Candidate Plot can have one Recorded Location Clue')
   if (
     update.latitudeClue !== null &&
     (update.latitudeClue < -90 || update.latitudeClue > 90)
