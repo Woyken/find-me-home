@@ -60,7 +60,7 @@ jobs:
         env:
           VITE_WORKER_URL: ${{ vars.VITE_WORKER_URL }}
       - name: Verify production Worker configuration
-        run: pnpm verify:worker-build
+        run: pnpm verify:worker-build dist/client
         env:
           VITE_WORKER_URL: ${{ vars.VITE_WORKER_URL }}
       - name: Refresh Registered Parcel assets
@@ -72,7 +72,7 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: dist/client
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4

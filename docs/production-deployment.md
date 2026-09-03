@@ -19,7 +19,7 @@ The `Refresh Registered Parcel assets` workflow uses a least-privilege Cloudflar
 1. Deploy `find-me-home-operations` with Wrangler.
 2. Run `pnpm smoke:worker "$VITE_WORKER_URL"` against the live deployment.
 3. Build Pages with the explicit `VITE_WORKER_URL`.
-4. Reject an artifact that lacks that endpoint or contains a conventional local Worker/dev-server fallback.
+4. Reject the `dist/client` Pages artifact if it lacks that endpoint or contains a conventional local Worker/dev-server fallback.
 5. Publish the verified artifact.
 
 The smoke command verifies allowed-origin preflight, rejected foreign-origin CORS, a valid fixed Trafi operation, invalid-input rejection, an ignored hostile upstream override, and Trafi upstream-failure mapping using impossible route parameters. Browser operations map network and upstream failures to unavailable/unknown states and permit manual retry.
