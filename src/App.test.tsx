@@ -196,7 +196,9 @@ describe('App Household boundary', () => {
     }
     runtime.start = runtime.createHousehold
     runtime.getSourceListing = (id) => (id === listing.id ? listing : undefined)
-    runtime.resolveCandidatePlotLocation = vi.fn(async () => undefined)
+    runtime.resolveCandidatePlotLocation = vi.fn(async () => {
+      await runtime.renameActiveHousehold('Updated search')
+    })
     runtime.runCandidatePlotAutomaticChecks = vi.fn(async () => undefined)
     history.replaceState(null, '', '/source-listings/listing-id')
 

@@ -11,6 +11,8 @@ import type { AutomaticCheckKey } from '../automatic-checks'
 
 export const preloadSourceListing = () => undefined
 
+const automaticallyStartedPlots = new Set<string>()
+
 export default function SourceListingPage(props: {
   params: Record<string, string | undefined>
 }) {
@@ -325,11 +327,15 @@ function CandidatePlotEditor(props: {
       props.plot.id,
     )
 
-  queueMicrotask(async () => {
-    if (props.plot.locationResolutionState === 'missing')
-      await resolveLocation()
-    if (!props.plot.automaticChecks) await runAutomaticChecks()
-  })
+  const automaticStartKey = `${props.plot.householdId}:${props.plot.id}`
+  if (!automaticallyStartedPlots.has(automaticStartKey)) {
+    automaticallyStartedPlots.add(automaticStartKey)
+    queueMicrotask(async () => {
+      if (props.plot.locationResolutionState === 'missing')
+        await resolveLocation()
+      if (!props.plot.automaticChecks) await runAutomaticChecks()
+    })
+  }
 
   const save = async () => {
     setStatus('Saving...')
