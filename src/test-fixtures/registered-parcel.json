@@ -1,0 +1,17 @@
+{
+  "id": "13:fixture-parcel",
+  "municipalityCode": 13,
+  "cadastralNumber": "0101/0001:42",
+  "uniqueNumber": "440012345678",
+  "areaM2": 1000,
+  "purposeText": "Residential",
+  "rings": [
+    [
+      [500000, 6000000],
+      [500010, 6000000],
+      [500010, 6000010],
+      [500000, 6000010],
+      [500000, 6000000]
+    ]
+  ]
+}

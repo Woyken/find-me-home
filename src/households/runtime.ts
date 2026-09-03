@@ -8,6 +8,8 @@ import type {
   CandidatePlotUpdate,
   ReviewedImport,
 } from '../source-listings/model'
+import { recordedLocationClues } from '../location-resolution'
+import type { LocationResolver } from '../location-resolution'
 
 export type HouseholdRuntime = {
   state: () => HouseholdRuntimeState
@@ -30,6 +32,11 @@ export type HouseholdRuntime = {
     candidatePlotId: string,
     update: CandidatePlotUpdate,
   ) => Promise<void>
+  resolveCandidatePlotLocation: (
+    sourceListingId: string,
+    candidatePlotId: string,
+  ) => Promise<void>
+  isCandidatePlotLocationRunning: (candidatePlotId: string) => boolean
   getVisitPlan: SourceListingRepository['getVisitPlan']
   setVisitPlan: (sourceListingIds: string[]) => Promise<void>
   markSourceListingVisited: (sourceListingId: string) => Promise<void>
@@ -60,12 +67,14 @@ export const createHouseholdRuntime = (dependencies: {
     roomPassword: string
   }) => HouseholdRoom
   invitationBaseUrl?: () => string
+  locationResolver?: LocationResolver
 }): HouseholdRuntime => {
   let state: HouseholdRuntimeState = { status: 'starting' }
   let lastMutationAt = 0
   let stopSynchronization: (() => Promise<void>) | undefined
   let localHouseholds: LocalHousehold[] = []
   const listeners = new Set<() => void>()
+  const runningLocationResolutions = new Set<string>()
   const setState = (next: HouseholdRuntimeState) => {
     state = next
     for (const listener of listeners) listener()
@@ -501,6 +510,41 @@ export const createHouseholdRuntime = (dependencies: {
         ),
       )
     },
+    async resolveCandidatePlotLocation(sourceListingId, candidatePlotId) {
+      if (!dependencies.locationResolver) return
+      if (runningLocationResolutions.has(candidatePlotId)) return
+      const plot = dependencies.sourceListings
+        .get(sourceListingId)
+        ?.candidatePlots.find((candidate) => candidate.id === candidatePlotId)
+      if (!plot) throw new Error('Candidate Plot not found')
+      const expectedClues = recordedLocationClues(plot)
+      const hasClue =
+        Boolean(expectedClues.parcelNumberClue?.trim()) ||
+        (expectedClues.latitudeClue !== null &&
+          expectedClues.longitudeClue !== null) ||
+        Boolean(expectedClues.addressClue?.trim())
+      if (!hasClue) return
+      runningLocationResolutions.add(candidatePlotId)
+      for (const listener of listeners) listener()
+      try {
+        const resolution = await dependencies.locationResolver.resolve(plot)
+        const updatedAt = mutationTime()
+        await serializeWrite(() =>
+          dependencies.sourceListings.applyCandidatePlotResolution(
+            sourceListingId,
+            candidatePlotId,
+            expectedClues,
+            resolution,
+            updatedAt,
+          ),
+        )
+      } finally {
+        runningLocationResolutions.delete(candidatePlotId)
+        for (const listener of listeners) listener()
+      }
+    },
+    isCandidatePlotLocationRunning: (candidatePlotId) =>
+      runningLocationResolutions.has(candidatePlotId),
     getVisitPlan: () => dependencies.sourceListings.getVisitPlan(),
     setVisitPlan: (sourceListingIds) => {
       const updatedAt = mutationTime()
@@ -546,6 +590,7 @@ export const createHouseholdRuntime = (dependencies: {
       unsubscribeSourceListings()
       unsubscribeHouseholds()
       listeners.clear()
+      runningLocationResolutions.clear()
       dependencies.accessStore.close()
       dependencies.households.close()
       dependencies.sourceListings.close()

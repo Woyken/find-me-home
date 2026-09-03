@@ -114,6 +114,8 @@ const createTestRuntime = () => {
       throw new Error('Not used')
     },
     updateCandidatePlot: async () => undefined,
+    resolveCandidatePlotLocation: async () => undefined,
+    isCandidatePlotLocationRunning: () => false,
     getVisitPlan: () => ({
       id: 'visit-plan',
       householdId: 'household-id',

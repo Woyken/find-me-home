@@ -38,11 +38,40 @@ export type CandidatePlotRecord = {
   viewRating: number | null
   resolvedLatitude: number | null
   resolvedLongitude: number | null
+  resolvedAddress: string | null
+  resolvedParcelNumber: string | null
+  resolvedCadastralNumber: string | null
   resolvedBoundary: Polygon | null
   resolvedPrecision: 'exact' | 'approx' | null
+  effectiveLocationSource: 'parcel_number' | 'coordinates' | 'address' | null
+  locationResolutionState: 'missing' | 'resolved' | 'no-result' | 'unavailable'
+  parcelDatasetVersion: string | null
   updatedAt: number
   deletedAt?: number
 }
+
+export type RecordedLocationClues = Pick<
+  CandidatePlotRecord,
+  | 'parcelNumberClue'
+  | 'latitudeClue'
+  | 'longitudeClue'
+  | 'coordinateCluePrecision'
+  | 'addressClue'
+>
+
+export type ResolvedLocationData = Pick<
+  CandidatePlotRecord,
+  | 'resolvedLatitude'
+  | 'resolvedLongitude'
+  | 'resolvedAddress'
+  | 'resolvedParcelNumber'
+  | 'resolvedCadastralNumber'
+  | 'resolvedBoundary'
+  | 'resolvedPrecision'
+  | 'effectiveLocationSource'
+  | 'locationResolutionState'
+  | 'parcelDatasetVersion'
+>
 
 export type CandidatePlotUpdate = Pick<
   CandidatePlotRecord,

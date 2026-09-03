@@ -4,6 +4,7 @@ import { createBrowserHouseholdRuntime } from './browser-runtime'
 import { createHouseholdRuntime } from './runtime'
 import { parseAruodasImport } from '../imports/aruodas'
 import { createInMemoryRoomNetwork } from './in-memory-room'
+import type { ResolvedLocationData } from '../source-listings/model'
 
 const databasePrefixes: string[] = []
 
@@ -634,6 +635,98 @@ describe('Household runtime', () => {
     }
   })
 
+  it('does not let an old location response overwrite a newer Recorded Location Clue', async () => {
+    const databaseName = `location-revision-${crypto.randomUUID()}`
+    databasePrefixes.push(databaseName)
+    let completeResolution!: (value: ResolvedLocationData) => void
+    const resolution = new Promise<ResolvedLocationData>((resolve) => {
+      completeResolution = resolve
+    })
+    let uuid = 0
+    const runtime = createBrowserHouseholdRuntime({
+      accessDatabaseName: databaseName,
+      sharedDatabasePrefix: databaseName,
+      crypto,
+      now: () => 7_000,
+      uuid: () => `location-id-${++uuid}`,
+      locationResolver: { resolve: () => resolution },
+    })
+    try {
+      await runtime.start()
+      await runtime.createHousehold()
+      const saved = await runtime.saveReviewedImport({
+        imported: parseAruodasImport({
+          url: 'https://www.aruodas.lt/sklypai-vilniuje-location-1-1/',
+          photos: [],
+          features: [],
+        }),
+        priceEur: null,
+        areaAres: null,
+        purposeText: null,
+        notes: null,
+        parcelNumberClue: null,
+        latitudeClue: null,
+        longitudeClue: null,
+        coordinateCluePrecision: null,
+        addressClue: 'Old address 1',
+      })
+      const running = runtime.resolveCandidatePlotLocation(
+        saved.sourceListingId,
+        saved.candidatePlotId,
+      )
+      expect(
+        runtime.isCandidatePlotLocationRunning(saved.candidatePlotId),
+      ).toBe(true)
+      const current = runtime.getSourceListing(saved.sourceListingId)!
+        .candidatePlots[0]
+      await runtime.updateCandidatePlot(
+        saved.sourceListingId,
+        saved.candidatePlotId,
+        {
+          name: current.name,
+          priceEur: current.priceEur,
+          areaAres: current.areaAres,
+          purposeText: current.purposeText,
+          notes: current.notes,
+          parcelNumberClue: null,
+          latitudeClue: null,
+          longitudeClue: null,
+          coordinateCluePrecision: null,
+          addressClue: 'New address 2',
+          roadAccessRating: current.roadAccessRating,
+          areaFeelingRating: current.areaFeelingRating,
+          viewRating: current.viewRating,
+        },
+      )
+      completeResolution({
+        resolvedLatitude: 54.7,
+        resolvedLongitude: 25.3,
+        resolvedAddress: 'Old canonical address',
+        resolvedParcelNumber: null,
+        resolvedCadastralNumber: null,
+        resolvedBoundary: null,
+        resolvedPrecision: 'exact',
+        effectiveLocationSource: 'address',
+        locationResolutionState: 'resolved',
+        parcelDatasetVersion: 'fixture',
+      })
+      await running
+
+      expect(
+        runtime.getSourceListing(saved.sourceListingId)?.candidatePlots[0],
+      ).toMatchObject({
+        addressClue: 'New address 2',
+        resolvedLatitude: null,
+        locationResolutionState: 'missing',
+      })
+      expect(
+        runtime.isCandidatePlotLocationRunning(saved.candidatePlotId),
+      ).toBe(false)
+    } finally {
+      runtime.dispose()
+    }
+  })
+
   it('creates, renames, and reopens a browser-owned Household', async () => {
     const databaseName = `household-lifecycle-${crypto.randomUUID()}`
     databasePrefixes.push(databaseName)
@@ -941,6 +1034,7 @@ describe('Household runtime', () => {
         updateCandidatePlot: async () => {
           throw new Error('Not used')
         },
+        applyCandidatePlotResolution: async () => false,
         getVisitPlan: () => ({
           id: 'visit-plan',
           householdId: 'second-household',
@@ -1169,15 +1263,13 @@ describe('Household runtime', () => {
       ).toBe('Shared search')
       now = 3_000
       await local.switchHousehold(sharedId)
-      await waitFor(
-        () => {
-          const current = local.state()
-          return (
-            current.status === 'active' &&
-            current.household.name === 'Updated shared search'
-          )
-        },
-      )
+      await waitFor(() => {
+        const current = local.state()
+        return (
+          current.status === 'active' &&
+          current.household.name === 'Updated shared search'
+        )
+      })
 
       await local.removeHousehold(sharedId)
 

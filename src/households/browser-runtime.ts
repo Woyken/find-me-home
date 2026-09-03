@@ -7,6 +7,8 @@ import { createHouseholdRuntime } from './runtime'
 import { createTrysteroHouseholdRoom } from './trystero-room'
 import type { HouseholdRoom } from './synchronization'
 import { createIndexedDbSourceListingRepository } from '../source-listings/indexeddb'
+import type { LocationResolver } from '../location-resolution'
+import { createBrowserLocationResolver } from '../location-services'
 
 export const createBrowserHouseholdRuntime = (options?: {
   accessDatabaseName?: string
@@ -20,6 +22,7 @@ export const createBrowserHouseholdRuntime = (options?: {
     householdId: string
     roomPassword: string
   }) => HouseholdRoom
+  locationResolver?: LocationResolver
 }) => {
   const cryptoApi = options?.crypto ?? crypto
   const sharedDatabasePrefix =
@@ -55,5 +58,10 @@ export const createBrowserHouseholdRuntime = (options?: {
         : (options?.roomFactory ?? createTrysteroHouseholdRoom),
     invitationBaseUrl: () =>
       new URL(import.meta.env.BASE_URL, window.location.origin).toString(),
+    locationResolver:
+      options?.locationResolver ??
+      (typeof window === 'undefined'
+        ? undefined
+        : createBrowserLocationResolver()),
   })
 }

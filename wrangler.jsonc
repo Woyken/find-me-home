@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "find-me-home-operations",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-03",
+  "vars": {
+    "PRODUCTION_ORIGIN": "https://woyken.github.io",
+  },
+}

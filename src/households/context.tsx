@@ -18,6 +18,8 @@ type HouseholdContextValue = {
   ) => ReturnType<HouseholdRuntime['saveReviewedImport']>
   addCandidatePlot: HouseholdRuntime['addCandidatePlot']
   updateCandidatePlot: HouseholdRuntime['updateCandidatePlot']
+  resolveCandidatePlotLocation: HouseholdRuntime['resolveCandidatePlotLocation']
+  isCandidatePlotLocationRunning: HouseholdRuntime['isCandidatePlotLocationRunning']
   getVisitPlan: HouseholdRuntime['getVisitPlan']
   setVisitPlan: HouseholdRuntime['setVisitPlan']
   markSourceListingVisited: HouseholdRuntime['markSourceListingVisited']
@@ -87,6 +89,15 @@ export function HouseholdProvider(
             candidatePlotId,
             update,
           ),
+        resolveCandidatePlotLocation: (sourceListingId, candidatePlotId) =>
+          props.runtime.resolveCandidatePlotLocation(
+            sourceListingId,
+            candidatePlotId,
+          ),
+        isCandidatePlotLocationRunning: (candidatePlotId) => {
+          state()
+          return props.runtime.isCandidatePlotLocationRunning(candidatePlotId)
+        },
         getVisitPlan: () => {
           state()
           return props.runtime.getVisitPlan()

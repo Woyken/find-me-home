@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal } from 'solid-js'
+import { For, Show, createEffect, createMemo, createSignal } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { CandidatePlotsMap } from '../components/CandidatePlotsMap'
 import { useHousehold } from '../households/context'
@@ -260,6 +260,7 @@ function CandidatePlotEditor(props: {
     >[2],
   ) => Promise<void>
 }) {
+  const household = useHousehold()
   const [name, setName] = createSignal(props.plot.name ?? '')
   const [price, setPrice] = createSignal(textNumber(props.plot.priceEur))
   const [area, setArea] = createSignal(textNumber(props.plot.areaAres))
@@ -309,6 +310,21 @@ function CandidatePlotEditor(props: {
       ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`
       : null
   }
+  const resolveLocation = () =>
+    props.plot.locationResolutionState === 'resolved'
+      ? undefined
+      : household.resolveCandidatePlotLocation(
+          props.plot.sourceListingId,
+          props.plot.id,
+        )
+
+  createEffect(() => {
+    if (
+      props.plot.locationResolutionState === 'missing' &&
+      !household.isCandidatePlotLocationRunning(props.plot.id)
+    )
+      void resolveLocation()
+  })
 
   const save = async () => {
     setStatus('Saving...')
@@ -357,6 +373,63 @@ function CandidatePlotEditor(props: {
           </a>
         )}
       </Show>
+      <section class="mt-4 border border-[#315f73]/20 bg-[#e7edf0] p-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h3 class="font-serif text-xl">Resolved Location Data</h3>
+          <Show when={props.plot.locationResolutionState !== 'resolved'}>
+            <button
+              class="border border-[#315f73] px-3 py-2 text-xs font-bold text-[#315f73] disabled:opacity-50"
+              disabled={household.isCandidatePlotLocationRunning(props.plot.id)}
+              onClick={() => void resolveLocation()}
+            >
+              {household.isCandidatePlotLocationRunning(props.plot.id)
+                ? 'Resolving...'
+                : 'Retry location'}
+            </button>
+          </Show>
+        </div>
+        <Show
+          when={props.plot.locationResolutionState === 'resolved'}
+          fallback={
+            <p class="mt-2 text-sm">
+              {props.plot.locationResolutionState === 'unavailable'
+                ? 'Location service unavailable. Retry when online.'
+                : props.plot.locationResolutionState === 'no-result'
+                  ? 'No location found. Check the Recorded Location Clue and retry.'
+                  : 'Waiting to resolve the Recorded Location Clue.'}
+            </p>
+          }
+        >
+          <dl class="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+            <div>
+              <dt class="font-bold">Coordinates</dt>
+              <dd>
+                {props.plot.resolvedLatitude}, {props.plot.resolvedLongitude}
+              </dd>
+            </div>
+            <div>
+              <dt class="font-bold">Precision</dt>
+              <dd>{props.plot.resolvedPrecision}</dd>
+            </div>
+            <div>
+              <dt class="font-bold">Address</dt>
+              <dd>{props.plot.resolvedAddress ?? 'Unavailable'}</dd>
+            </div>
+            <div>
+              <dt class="font-bold">Unique parcel number</dt>
+              <dd>{props.plot.resolvedParcelNumber ?? 'Not found'}</dd>
+            </div>
+            <div>
+              <dt class="font-bold">Cadastral number</dt>
+              <dd>{props.plot.resolvedCadastralNumber ?? 'Not found'}</dd>
+            </div>
+            <div>
+              <dt class="font-bold">Parcel dataset</dt>
+              <dd>{props.plot.parcelDatasetVersion ?? 'Not loaded'}</dd>
+            </div>
+          </dl>
+        </Show>
+      </section>
       <div class="mt-4 grid gap-4 sm:grid-cols-2">
         <Field label="Name" value={name()} onInput={setName} />
         <Field label="Price (€)" value={price()} onInput={setPrice} />

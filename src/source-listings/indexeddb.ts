@@ -2,6 +2,8 @@ import type {
   CandidatePlotRecord,
   CandidatePlotUpdate,
   ReviewedImport,
+  RecordedLocationClues,
+  ResolvedLocationData,
   SourceListingSharedRecord,
   SourceListingDetail,
   SourceListingRecord,
@@ -30,6 +32,13 @@ export type SourceListingRepository = {
     update: CandidatePlotUpdate,
     updatedAt: number,
   ) => Promise<void>
+  applyCandidatePlotResolution: (
+    sourceListingId: string,
+    candidatePlotId: string,
+    expectedClues: RecordedLocationClues,
+    resolution: ResolvedLocationData,
+    updatedAt: number,
+  ) => Promise<boolean>
   getVisitPlan: () => VisitPlanRecord
   setVisitPlan: (sourceListingIds: string[], updatedAt: number) => Promise<void>
   markSourceListingVisited: (
@@ -172,12 +181,23 @@ export const createIndexedDbSourceListingRepository = (
         resolvedLongitude: hasPersistedField(record, 'resolvedLongitude')
           ? record.resolvedLongitude
           : (record.longitudeClue ?? null),
+        resolvedAddress: record.resolvedAddress ?? null,
+        resolvedParcelNumber: record.resolvedParcelNumber ?? null,
+        resolvedCadastralNumber: record.resolvedCadastralNumber ?? null,
         resolvedBoundary: hasPersistedField(record, 'resolvedBoundary')
           ? record.resolvedBoundary
           : null,
         resolvedPrecision: hasPersistedField(record, 'resolvedPrecision')
           ? record.resolvedPrecision
           : (record.coordinateCluePrecision ?? null),
+        effectiveLocationSource: record.effectiveLocationSource ?? null,
+        locationResolutionState: hasPersistedField(
+          record,
+          'locationResolutionState',
+        )
+          ? record.locationResolutionState
+          : 'missing',
+        parcelDatasetVersion: record.parcelDatasetVersion ?? null,
       }
     })
   }
@@ -299,8 +319,15 @@ export const createIndexedDbSourceListingRepository = (
             viewRating: null,
             resolvedLatitude: review.latitudeClue,
             resolvedLongitude: review.longitudeClue,
+            resolvedAddress: null,
+            resolvedParcelNumber: null,
+            resolvedCadastralNumber: null,
             resolvedBoundary: null,
             resolvedPrecision: review.coordinateCluePrecision,
+            effectiveLocationSource:
+              review.latitudeClue === null ? null : 'coordinates',
+            locationResolutionState: 'missing',
+            parcelDatasetVersion: null,
             updatedAt: timestamp,
           }
       const transaction = active.database.transaction(
@@ -357,8 +384,14 @@ export const createIndexedDbSourceListingRepository = (
         viewRating: null,
         resolvedLatitude: null,
         resolvedLongitude: null,
+        resolvedAddress: null,
+        resolvedParcelNumber: null,
+        resolvedCadastralNumber: null,
         resolvedBoundary: null,
         resolvedPrecision: null,
+        effectiveLocationSource: null,
+        locationResolutionState: 'missing',
+        parcelDatasetVersion: null,
         updatedAt,
       }
       const transaction = active.database.transaction(
@@ -393,15 +426,22 @@ export const createIndexedDbSourceListingRepository = (
         existing.longitudeClue !== update.longitudeClue ||
         existing.coordinateCluePrecision !== update.coordinateCluePrecision ||
         existing.addressClue !== update.addressClue
-      const candidatePlot = {
+      const candidatePlot: CandidatePlotRecord = {
         ...existing,
         ...structuredClone(update),
         ...(locationClueChanged
           ? {
               resolvedLatitude: update.latitudeClue,
               resolvedLongitude: update.longitudeClue,
+              resolvedAddress: null,
+              resolvedParcelNumber: null,
+              resolvedCadastralNumber: null,
               resolvedBoundary: null,
               resolvedPrecision: update.coordinateCluePrecision,
+              effectiveLocationSource:
+                update.latitudeClue === null ? null : 'coordinates',
+              locationResolutionState: 'missing',
+              parcelDatasetVersion: null,
             }
           : {}),
         updatedAt,
@@ -417,6 +457,49 @@ export const createIndexedDbSourceListingRepository = (
       )
       publish()
       publishLocal([candidatePlot])
+    },
+    async applyCandidatePlotResolution(
+      sourceListingId,
+      candidatePlotId,
+      expectedClues,
+      resolution,
+      updatedAt,
+    ) {
+      const active = requireOpen()
+      const existing = candidatePlots.find(
+        (plot) =>
+          plot.id === candidatePlotId &&
+          plot.sourceListingId === sourceListingId &&
+          plot.householdId === active.householdId &&
+          !plot.deletedAt,
+      )
+      if (!existing) return false
+      const currentClues: RecordedLocationClues = {
+        parcelNumberClue: existing.parcelNumberClue,
+        latitudeClue: existing.latitudeClue,
+        longitudeClue: existing.longitudeClue,
+        coordinateCluePrecision: existing.coordinateCluePrecision,
+        addressClue: existing.addressClue,
+      }
+      if (JSON.stringify(currentClues) !== JSON.stringify(expectedClues))
+        return false
+      const candidatePlot = {
+        ...existing,
+        ...structuredClone(resolution),
+        updatedAt,
+      }
+      const transaction = active.database.transaction(
+        'candidate-plots',
+        'readwrite',
+      )
+      transaction.objectStore('candidate-plots').put(candidatePlot)
+      await transactionComplete(transaction)
+      candidatePlots = candidatePlots.map((plot) =>
+        plot.id === candidatePlotId ? candidatePlot : plot,
+      )
+      publish()
+      publishLocal([candidatePlot])
+      return true
     },
     getVisitPlan() {
       const active = requireOpen()
