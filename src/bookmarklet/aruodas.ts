@@ -31,6 +31,12 @@ const mapCoordinates = () => {
   return source.match(/(5[3-6](?:\.\d+)?)\s*,\s*(2[3-7](?:\.\d+)?)/)
 }
 
+const hasExactMapPoint = () =>
+  Boolean(document.querySelector('.map_accurate-point')) ||
+  [...document.querySelectorAll('.status-bar')].some(
+    (node) => clean(node.textContent) === 'Taškas žemėlapyje tikslus',
+  )
+
 const jsonLd = () =>
   [
     ...document.querySelectorAll<HTMLScriptElement>(
@@ -100,10 +106,10 @@ if (
     pattern.test(`${description} ${featureText.join(' ')}`)
       ? 'mentioned by Aruodas'
       : undefined
-  const coordinates =
-    clean(definition('Koordinatės'))?.match(
-      /(5[3-6](?:\.\d+)?)\D+(2[3-7](?:\.\d+)?)/,
-    ) ?? mapCoordinates()
+  const listedCoordinates = clean(definition('Koordinatės'))?.match(
+    /(5[3-6](?:\.\d+)?)\D+(2[3-7](?:\.\d+)?)/,
+  )
+  const coordinates = listedCoordinates ?? mapCoordinates()
   const listedAddress =
     definition('Adresas') ??
     definition('Gyvenvietė') ??
@@ -127,7 +133,11 @@ if (
     uniqueRegistryNumber: definition('Unikalus numeris'),
     lat: coordinates ? Number(coordinates[1]) : undefined,
     lng: coordinates ? Number(coordinates[2]) : undefined,
-    locationConfidence: coordinates ? 'approx' : 'unknown',
+    locationConfidence: coordinates
+      ? hasExactMapPoint()
+        ? 'exact'
+        : 'approx'
+      : 'unknown',
     description,
     photos: [...document.images]
       .map((image) => image.currentSrc || image.src)

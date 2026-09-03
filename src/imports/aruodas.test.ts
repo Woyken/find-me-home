@@ -5,6 +5,7 @@ import {
   parseAruodasImport,
 } from './aruodas'
 import { createAruodasBookmarklet } from './bookmarklet'
+import { bookmarkletSource } from 'virtual:aruodas-bookmarklet'
 
 const payload = {
   url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-zemuju-rusoku-k-upes-g-sklypas-11-1472707/?search_pos=1',
@@ -50,6 +51,28 @@ describe('Aruodas import fragment', () => {
     })
   })
 
+  it('imports Aruodas coordinates with the precision of their source', () => {
+    const exact = runBookmarklet(`
+      <span class="map_accurate-point" title="Taškas žemėlapyje tikslus"></span>
+      <script>const coordinates = '54.80511,25.206326'</script>
+    `)
+    const approximate = runBookmarklet(`
+      <span class="map_inaccurate-point" title="Taškas žemėlapyje netikslus"></span>
+      <script>const coordinates = '54.649337,25.461040'</script>
+    `)
+
+    expect(exact).toMatchObject({
+      lat: 54.80511,
+      lng: 25.206326,
+      locationConfidence: 'exact',
+    })
+    expect(approximate).toMatchObject({
+      lat: 54.649337,
+      lng: 25.46104,
+      locationConfidence: 'approx',
+    })
+  })
+
   it('rejects invalid envelopes and payload text over 100,000 characters', () => {
     expect(() => decodeImportFragment('not-base64url!')).toThrow(
       'Invalid import',
@@ -79,3 +102,21 @@ describe('Aruodas import fragment', () => {
     ).toThrow('photos')
   })
 })
+
+const runBookmarklet = (body: string) => {
+  document.title = 'Aruodas advert'
+  document.body.innerHTML = body
+  const location = {
+    href: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-zemuju-rusoku-k-bendoriu-kel-sklypas-11-1440520/',
+  }
+  const bookmarklet = new Function(
+    'window',
+    'document',
+    bookmarkletSource.replace('__FMH_APP_URL__', 'https://example.test/'),
+  )
+
+  bookmarklet({ location, alert: () => undefined }, document)
+
+  const fragment = new URL(location.href).hash.slice('#import='.length)
+  return decodeImportFragment(fragment)
+}
