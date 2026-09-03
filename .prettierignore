@@ -2,6 +2,7 @@
 .cta.json
 AGENTS.md
 dist/
+public/parcels/
 eslint.config.js
 pnpm-lock.yaml
 prettier.config.js

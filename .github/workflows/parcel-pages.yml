@@ -58,8 +58,9 @@ jobs:
       - run: pnpm lint
       - run: pnpm check
       - name: Refresh Registered Parcel assets
+        if: github.event_name != 'push'
         run: pnpm generate:parcels public/parcels
-      - name: Validate refreshed Registered Parcel assets
+      - name: Validate Registered Parcel assets
         run: pnpm validate:parcels public/parcels
       - name: Build production Pages artifact
         run: pnpm build

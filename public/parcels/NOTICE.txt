@@ -1,0 +1,3 @@
+Registered Parcel data: Registru centras public GIS exports.
+Transformed by Find Me Home generator v1.
+Dataset version: 733a1ee7402818f6.

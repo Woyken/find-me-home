@@ -14,11 +14,11 @@ The Worker exposes only fixed Regia, Trafi, INSPIRE, and IRD operations. CORS al
 
 ## Release and verification
 
-The `Refresh Registered Parcel assets` workflow reads `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `VITE_WORKER_URL` from GitHub Actions secrets. The account ID and Worker URL are not credentials and the URL is necessarily included in the browser bundle, but storing all three in one Actions mechanism keeps production configuration consistent. Push, scheduled, and manually dispatched releases refresh parcel assets before publication so each upload is one complete, validated artifact. A failed external refresh does not replace the last good Pages deployment. The workflow jobs enforce this order:
+The `Refresh Registered Parcel assets` workflow reads `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `VITE_WORKER_URL` from GitHub Actions secrets. The account ID and Worker URL are not credentials and the URL is necessarily included in the browser bundle, but storing all three in one Actions mechanism keeps production configuration consistent. Push releases use the validated parcel snapshot committed in `public/parcels`; scheduled and manually dispatched releases refresh it from the upstream source for that deployment. Both paths validate the complete dataset before publication. A failed external refresh does not replace the last good Pages deployment. The workflow jobs enforce this order:
 
 1. Deploy `find-me-home-operations` with Wrangler.
 2. Run `pnpm smoke:worker "$VITE_WORKER_URL"` against the live deployment.
-3. Generate and validate Registered Parcel assets into `public/parcels`.
+3. Use the committed Registered Parcel snapshot on a push, or generate fresh assets on a scheduled/manual refresh, then validate them in `public/parcels`.
 4. Build Pages with the explicit `VITE_WORKER_URL`.
 5. Reject the `dist/client` Pages artifact if it lacks that endpoint or contains a conventional local Worker/dev-server fallback.
 6. Publish the verified artifact and smoke-test direct routing, PWA metadata, the parcel manifest, and Worker CORS from the production origin.

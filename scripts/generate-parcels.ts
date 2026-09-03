@@ -219,7 +219,12 @@ async function spoolMunicipality(
       feature.properties.unikalus_nr === undefined
         ? null
         : String(feature.properties.unikalus_nr)
-    const parcelBbox = bbox(feature.geometry.coordinates)
+    let parcelBbox: [number, number, number, number]
+    try {
+      parcelBbox = bbox(feature.geometry.coordinates)
+    } catch {
+      continue
+    }
     extent = [
       Math.min(extent[0], parcelBbox[0]),
       Math.min(extent[1], parcelBbox[1]),
