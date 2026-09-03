@@ -25,6 +25,11 @@ export type HouseholdRuntime = {
   renameActiveHousehold: (name: string) => Promise<void>
   listSourceListings: SourceListingRepository['list']
   getSourceListing: SourceListingRepository['get']
+  listImportInbox: SourceListingRepository['listImportInbox']
+  captureImportInbox: (
+    imports: Parameters<SourceListingRepository['captureImportInbox']>[0],
+  ) => ReturnType<SourceListingRepository['captureImportInbox']>
+  removeImportInbox: (id: string) => Promise<void>
   saveReviewedImport: (
     review: ReviewedImport,
   ) => ReturnType<SourceListingRepository['saveReviewedImport']>
@@ -494,6 +499,19 @@ export const createHouseholdRuntime = (dependencies: {
     },
     listSourceListings: () => dependencies.sourceListings.list(),
     getSourceListing: (id) => dependencies.sourceListings.get(id),
+    listImportInbox: () => dependencies.sourceListings.listImportInbox(),
+    captureImportInbox: (imports) => {
+      const updatedAt = mutationTime()
+      return serializeWrite(() =>
+        dependencies.sourceListings.captureImportInbox(imports, updatedAt),
+      )
+    },
+    removeImportInbox: (id) => {
+      const updatedAt = mutationTime()
+      return serializeWrite(() =>
+        dependencies.sourceListings.removeImportInbox(id, updatedAt),
+      )
+    },
     saveReviewedImport: (review) => {
       const updatedAt = mutationTime()
       return serializeWrite(() =>

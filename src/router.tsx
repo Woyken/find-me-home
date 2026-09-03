@@ -4,6 +4,7 @@ import SourceListingPage, {
   preloadSourceListing,
 } from './routes/source-listings.$sourceListingId'
 import VisitPlanPage, { preloadVisitPlan } from './routes/visit-plan'
+import ImportInboxPage, { preloadImportInbox } from './routes/import-inbox'
 
 export const Router = createRouter({
   base: import.meta.env.BASE_URL,
@@ -13,6 +14,11 @@ export const Router = createRouter({
       path: '/visit-plan',
       component: VisitPlanPage,
       preload: preloadVisitPlan,
+    },
+    {
+      path: '/import-inbox',
+      component: ImportInboxPage,
+      preload: preloadImportInbox,
     },
     defineRoute({
       path: '/source-listings/:sourceListingId',

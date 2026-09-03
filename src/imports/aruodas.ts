@@ -60,6 +60,40 @@ const envelopeSchema = v.strictObject({
   payload: payloadSchema,
 })
 
+const favoriteSchema = v.strictObject({
+  sourceId: v.pipe(v.string(), v.regex(/^11-\d+$/)),
+  title: optionalText,
+  description: optionalText,
+  priceEur: v.optional(
+    v.pipe(v.number(), v.minValue(0), v.maxValue(100_000_000)),
+  ),
+  areaAres: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(100_000))),
+  thumbnail: v.optional(photo),
+})
+
+const transportEnvelopeSchema = v.variant('kind', [
+  v.strictObject({
+    version: v.literal(2),
+    kind: v.literal('listing'),
+    payload: payloadSchema,
+    returnTo: v.optional(v.literal('import-inbox')),
+  }),
+  v.strictObject({
+    version: v.literal(2),
+    kind: v.literal('favorites'),
+    payload: v.strictObject({
+      items: v.array(favoriteSchema),
+      skippedNonLand: v.optional(
+        v.pipe(v.number(), v.integer(), v.minValue(0)),
+      ),
+      skippedInactive: v.optional(
+        v.pipe(v.number(), v.integer(), v.minValue(0)),
+      ),
+      unreadable: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
+    }),
+  }),
+])
+
 export type AruodasImport = {
   source: 'aruodas'
   sourceId: string
@@ -84,6 +118,20 @@ export type AruodasImport = {
   raw: { importedBy: 'aruodas-bookmarklet'; features: string[] }
 }
 
+export type ImportTransport =
+  | {
+      kind: 'listing'
+      imported: AruodasImport
+      returnTo?: 'import-inbox'
+    }
+  | {
+      kind: 'favorites'
+      items: AruodasImport[]
+      skippedNonLand: number
+      skippedInactive: number
+      unreadable: number
+    }
+
 export const parseAruodasImport = (input: unknown): AruodasImport => {
   const payload = v.parse(payloadSchema, input)
   const url = new URL(payload.url)
@@ -93,7 +141,7 @@ export const parseAruodasImport = (input: unknown): AruodasImport => {
   ) {
     throw new Error('Import URL must be an HTTPS Aruodas URL')
   }
-  const sourceId = url.pathname.match(/-(\d{1,3}-\d+)\/?$/)?.[1]
+  const sourceId = url.pathname.match(/(?:-|\/)(\d{1,3}-\d+)\/?$/)?.[1]
   if (!sourceId) throw new Error('Import URL must contain a listing ID')
   if ((payload.lat === undefined) !== (payload.lng === undefined)) {
     throw new Error('Import must include both lat and lng')
@@ -163,13 +211,51 @@ export const encodeImportFragment = (input: unknown) => {
 }
 
 export const decodeImportFragment = (fragment: string) => {
+  const transport = decodeImportTransportFragment(fragment)
+  if (transport.kind !== 'listing') throw new Error('Invalid listing import')
+  return transport.imported
+}
+
+export const decodeImportTransportFragment = (
+  fragment: string,
+): ImportTransport => {
   try {
     const text = fromBase64Url(fragment)
     if (text.length > MAX_IMPORT_TEXT_LENGTH) {
       throw new Error('Import payload must not exceed 100,000 characters')
     }
-    const envelope = v.parse(envelopeSchema, JSON.parse(text) as unknown)
-    return parseAruodasImport(envelope.payload)
+    const parsed = JSON.parse(text) as unknown
+    const legacy = v.safeParse(envelopeSchema, parsed)
+    if (legacy.success) {
+      return {
+        kind: 'listing',
+        imported: parseAruodasImport(legacy.output.payload),
+      }
+    }
+    const envelope = v.parse(transportEnvelopeSchema, parsed)
+    if (envelope.kind === 'listing') {
+      return {
+        kind: 'listing',
+        imported: parseAruodasImport(envelope.payload),
+        ...(envelope.returnTo ? { returnTo: envelope.returnTo } : {}),
+      }
+    }
+    return {
+      kind: 'favorites',
+      items: envelope.payload.items.map((item) =>
+        parseAruodasImport({
+          url: `https://www.aruodas.lt/${item.sourceId}/`,
+          title: item.title,
+          description: item.description,
+          priceEur: item.priceEur,
+          areaAres: item.areaAres,
+          photos: item.thumbnail ? [item.thumbnail] : [],
+        }),
+      ),
+      skippedNonLand: envelope.payload.skippedNonLand ?? 0,
+      skippedInactive: envelope.payload.skippedInactive ?? 0,
+      unreadable: envelope.payload.unreadable ?? 0,
+    }
   } catch (error) {
     if (error instanceof Error && error.message.includes('100,000')) throw error
     throw new Error('Invalid import fragment', { cause: error })

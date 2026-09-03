@@ -7,7 +7,9 @@ import { paths } from '../paths'
 export default function ImportReview() {
   const imports = useImport()
   const household = useHousehold()
-  const imported = imports.draft()
+  const transport = imports.draft()
+  const imported =
+    transport?.kind === 'listing' ? transport.imported : undefined
   const clue = imported
     ? chooseImportedLocationClue({
         uniqueRegistryNumber: imported.uniqueRegistryNumber,
@@ -42,7 +44,11 @@ export default function ImportReview() {
         addressClue: clue.addressClue,
       })
       imports.clear()
-      window.location.assign(paths.sourceListing(result.sourceListingId))
+      window.location.assign(
+        transport?.kind === 'listing' && transport.returnTo === 'import-inbox'
+          ? paths.importInbox
+          : paths.sourceListing(result.sourceListingId),
+      )
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
       setBusy(false)

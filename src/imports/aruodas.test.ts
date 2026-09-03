@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   decodeImportFragment,
+  decodeImportTransportFragment,
   encodeImportFragment,
   parseAruodasImport,
 } from './aruodas'
@@ -39,6 +40,52 @@ describe('Aruodas import fragment', () => {
     expect(bookmarklet).not.toContain('__FMH_APP_URL__')
   })
 
+  it('uses the same bookmarklet for adverts and the favorites page', () => {
+    expect(bookmarkletSource).toContain('/isiminti-skelbimai')
+    expect(bookmarkletSource).toContain('kind: "favorites"')
+    expect(bookmarkletSource).not.toContain('fetch(')
+  })
+
+  it('captures only active land adverts from the favorites page', () => {
+    const transport = runBookmarklet(
+      `
+        <div class="list-row-container">
+          <div class="list-img"><a href="https://www.aruodas.lt/sklypai-vilniaus-r-sav-test-11-1476517/"><img src="https://aruodas-img.dgn.lt/plot.jpg"></a></div>
+          <h3><a href="https://www.aruodas.lt/11-1476517/">Piktakoniu k., Misko g.</a></h3>
+          <span class="description">19 a, namu valda</span>
+          <span class="rememb-item-price">21 500 EUR</span>
+        </div>
+        <div class="list-row-container"><a href="https://www.aruodas.lt/2-1/">House</a></div>
+        <div class="list-row-container inactive-saved"><a href="https://www.aruodas.lt/11-2/">Inactive plot</a></div>
+      `,
+      'https://www.aruodas.lt/isiminti-skelbimai/',
+    )
+
+    expect(transport).toMatchObject({
+      kind: 'favorites',
+      skippedNonLand: 1,
+      skippedInactive: 1,
+      items: [
+        {
+          sourceId: '11-1476517',
+          title: 'Piktakoniu k., Misko g.',
+          areaAres: 19,
+          priceEur: 21_500,
+        },
+      ],
+    })
+  })
+
+  it('carries the inbox return marker only from the opened advert', () => {
+    expect(
+      runBookmarklet(
+        '',
+        'https://www.aruodas.lt/sklypai-test-11-1476517/#find-me-home-return=import-inbox',
+      ),
+    ).toMatchObject({ kind: 'listing', returnTo: 'import-inbox' })
+    expect(runBookmarklet('')).not.toHaveProperty('returnTo')
+  })
+
   it('round-trips a UTF-8 payload and normalizes the Source Listing identity', () => {
     const fragment = encodeImportFragment(payload)
 
@@ -62,14 +109,18 @@ describe('Aruodas import fragment', () => {
     `)
 
     expect(exact).toMatchObject({
-      lat: 54.80511,
-      lng: 25.206326,
-      locationConfidence: 'exact',
+      imported: {
+        lat: 54.80511,
+        lng: 25.206326,
+        locationConfidence: 'exact',
+      },
     })
     expect(approximate).toMatchObject({
-      lat: 54.649337,
-      lng: 25.46104,
-      locationConfidence: 'approx',
+      imported: {
+        lat: 54.649337,
+        lng: 25.46104,
+        locationConfidence: 'approx',
+      },
     })
   })
 
@@ -103,11 +154,14 @@ describe('Aruodas import fragment', () => {
   })
 })
 
-const runBookmarklet = (body: string) => {
+const runBookmarklet = (
+  body: string,
+  initialUrl = 'https://www.aruodas.lt/sklypai-vilniaus-rajone-zemuju-rusoku-k-bendoriu-kel-sklypas-11-1440520/',
+) => {
   document.title = 'Aruodas advert'
   document.body.innerHTML = body
   const location = {
-    href: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-zemuju-rusoku-k-bendoriu-kel-sklypas-11-1440520/',
+    href: initialUrl,
   }
   const bookmarklet = new Function(
     'window',
@@ -118,5 +172,5 @@ const runBookmarklet = (body: string) => {
   bookmarklet({ location, alert: () => undefined }, document)
 
   const fragment = new URL(location.href).hash.slice('#import='.length)
-  return decodeImportFragment(fragment)
+  return decodeImportTransportFragment(fragment)
 }

@@ -1,12 +1,12 @@
 import { createContext, createSignal, useContext } from 'solid-js'
 import type { ParentProps } from 'solid-js'
-import type { AruodasImport } from './aruodas'
-import { decodeImportFragment } from './aruodas'
+import type { AruodasImport, ImportTransport } from './aruodas'
+import { decodeImportTransportFragment } from './aruodas'
 
 const STORAGE_KEY = 'find-me-home-import-draft'
 
 type ImportContextValue = {
-  draft: () => AruodasImport | undefined
+  draft: () => ImportTransport | undefined
   error: () => string
   clear: () => void
 }
@@ -14,7 +14,7 @@ type ImportContextValue = {
 const ImportContext = createContext<ImportContextValue>()
 
 export function ImportProvider(props: ParentProps) {
-  let initialDraft: AruodasImport | undefined
+  let initialDraft: ImportTransport | undefined
   let initialError = ''
   {
     const fragment = window.location.hash.match(/^#import=(.+)$/)?.[1]
@@ -25,7 +25,7 @@ export function ImportProvider(props: ParentProps) {
         `${location.pathname}${location.search}`,
       )
       try {
-        const imported = decodeImportFragment(fragment)
+        const imported = decodeImportTransportFragment(fragment)
         sessionStorage.setItem(STORAGE_KEY, JSON.stringify(imported))
         initialDraft = imported
       } catch {
@@ -37,7 +37,15 @@ export function ImportProvider(props: ParentProps) {
       const stored = sessionStorage.getItem(STORAGE_KEY)
       if (stored) {
         try {
-          initialDraft = JSON.parse(stored) as AruodasImport
+          const parsed = JSON.parse(stored) as
+            ImportTransport | Record<string, unknown>
+          initialDraft =
+            'kind' in parsed
+              ? (parsed as ImportTransport)
+              : {
+                  kind: 'listing',
+                  imported: parsed as AruodasImport,
+                }
         } catch {
           sessionStorage.removeItem(STORAGE_KEY)
         }

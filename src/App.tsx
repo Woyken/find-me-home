@@ -56,7 +56,7 @@ function HouseholdBoundary(props: ParentProps) {
         </main>
       </Match>
       <Match when={household.state().status === 'active'}>
-        {imported.draft() || imported.error() ? (
+        {imported.draft()?.kind === 'listing' || imported.error() ? (
           <ImportReview />
         ) : (
           (props.children ?? (

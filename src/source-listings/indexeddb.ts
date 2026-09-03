@@ -11,11 +11,22 @@ import type {
 } from './model'
 import type { AutomaticCheck } from '../automatic-checks'
 import { automaticCheckRevision } from '../automatic-checks'
+import type {
+  ImportInboxCapture,
+  ImportInboxCaptureResult,
+  ImportInboxRecord,
+} from '../imports/inbox-model'
 
 export type SourceListingRepository = {
   open: (householdId: string) => Promise<void>
   list: () => SourceListingDetail[]
   get: (id: string) => SourceListingDetail | undefined
+  listImportInbox: () => ImportInboxRecord[]
+  captureImportInbox: (
+    imports: ImportInboxCapture[],
+    updatedAt: number,
+  ) => Promise<ImportInboxCaptureResult>
+  removeImportInbox: (id: string, updatedAt: number) => Promise<void>
   saveReviewedImport: (
     review: ReviewedImport,
     updatedAt?: number,
@@ -58,12 +69,14 @@ export type SourceListingRepository = {
     sourceListingId: string,
     updatedAt: number,
   ) => Promise<void>
-  allRecords: () => SourceListingSharedRecord[]
+  allRecords: () => (SourceListingSharedRecord | ImportInboxRecord)[]
   applyRemote: (
-    records: SourceListingSharedRecord[],
-  ) => Promise<SourceListingSharedRecord[]>
+    records: (SourceListingSharedRecord | ImportInboxRecord)[],
+  ) => Promise<(SourceListingSharedRecord | ImportInboxRecord)[]>
   subscribeLocalMutations: (
-    listener: (records: SourceListingSharedRecord[]) => void,
+    listener: (
+      records: (SourceListingSharedRecord | ImportInboxRecord)[],
+    ) => void,
   ) => () => void
   subscribe: (listener: () => void) => () => void
   closeActive: () => void
@@ -87,7 +100,7 @@ const transactionComplete = (transaction: IDBTransaction) =>
 
 const openDatabase = (name: string) =>
   new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(name, 3)
+    const request = indexedDB.open(name, 4)
     request.onupgradeneeded = () => {
       const database = request.result
       if (!database.objectStoreNames.contains('households')) {
@@ -113,6 +126,16 @@ const openDatabase = (name: string) =>
       }
       if (!database.objectStoreNames.contains('visit-plans')) {
         database.createObjectStore('visit-plans', { keyPath: 'id' })
+      }
+      if (!database.objectStoreNames.contains('import-inbox')) {
+        const store = database.createObjectStore('import-inbox', {
+          keyPath: 'id',
+        })
+        store.createIndex(
+          'source-identity',
+          ['householdId', 'source', 'sourceId'],
+          { unique: true },
+        )
       }
     }
     request.onsuccess = () => {
@@ -140,9 +163,10 @@ export const createIndexedDbSourceListingRepository = (
   let sourceListings: SourceListingRecord[] = []
   let candidatePlots: CandidatePlotRecord[] = []
   let visitPlan: VisitPlanRecord | undefined
+  let importInbox: ImportInboxRecord[] = []
   const listeners = new Set<() => void>()
   const localMutationListeners = new Set<
-    (records: SourceListingSharedRecord[]) => void
+    (records: (SourceListingSharedRecord | ImportInboxRecord)[]) => void
   >()
   const requireOpen = () => {
     if (!database || !householdId)
@@ -158,7 +182,9 @@ export const createIndexedDbSourceListingRepository = (
   const publish = () => {
     for (const listener of listeners) listener()
   }
-  const publishLocal = (records: SourceListingSharedRecord[]) => {
+  const publishLocal = (
+    records: (SourceListingSharedRecord | ImportInboxRecord)[],
+  ) => {
     for (const listener of localMutationListeners)
       listener(structuredClone(records))
   }
@@ -237,6 +263,12 @@ export const createIndexedDbSourceListingRepository = (
       const persistedVisitPlans = await requestResult<VisitPlanRecord[]>(
         database.transaction('visit-plans').objectStore('visit-plans').getAll(),
       )
+      importInbox = await requestResult<ImportInboxRecord[]>(
+        database
+          .transaction('import-inbox')
+          .objectStore('import-inbox')
+          .getAll(),
+      )
       visitPlan = persistedVisitPlans.find(
         (record) => record.householdId === nextHouseholdId && !record.deletedAt,
       )
@@ -253,6 +285,7 @@ export const createIndexedDbSourceListingRepository = (
         ...sourceListings.map((record) => record.updatedAt),
         ...candidatePlots.map((record) => record.updatedAt),
         visitPlan?.updatedAt ?? 0,
+        ...importInbox.map((record) => record.updatedAt),
       )
       publish()
     },
@@ -274,6 +307,124 @@ export const createIndexedDbSourceListingRepository = (
           !value.deletedAt,
       )
       return record ? detail(record) : undefined
+    },
+    listImportInbox() {
+      const active = requireOpen()
+      return structuredClone(
+        importInbox
+          .filter(
+            (record) =>
+              record.householdId === active.householdId && !record.deletedAt,
+          )
+          .sort((left, right) => right.updatedAt - left.updatedAt),
+      )
+    },
+    async captureImportInbox(imports, updatedAt) {
+      const active = requireOpen()
+      const distinct = [
+        ...new Map(
+          imports.map((imported) => [
+            `${imported.source}:${imported.sourceId}`,
+            imported,
+          ]),
+        ).values(),
+      ]
+      const changed: ImportInboxRecord[] = []
+      let added = 0
+      let refreshed = 0
+      let alreadyImported = 0
+      for (const imported of distinct) {
+        const existing = importInbox.find(
+          (record) =>
+            record.householdId === active.householdId &&
+            record.sourceId === imported.sourceId,
+        )
+        const sourceListing = sourceListings.find(
+          (record) =>
+            record.householdId === active.householdId &&
+            record.source === imported.source &&
+            record.sourceId === imported.sourceId &&
+            !record.deletedAt,
+        )
+        if (sourceListing) {
+          alreadyImported += 1
+          if (existing && !existing.deletedAt) {
+            changed.push({
+              ...existing,
+              updatedAt,
+              deletedAt: updatedAt,
+            })
+          }
+          continue
+        }
+        const record: ImportInboxRecord = {
+          id: existing?.id ?? `aruodas-${imported.sourceId}`,
+          householdId: active.householdId,
+          source: imported.source,
+          sourceId: imported.sourceId,
+          ...(imported.title === undefined ? {} : { title: imported.title }),
+          ...(imported.description === undefined
+            ? {}
+            : { description: imported.description }),
+          ...(imported.priceEur === undefined
+            ? {}
+            : { priceEur: imported.priceEur }),
+          ...(imported.areaAres === undefined
+            ? {}
+            : { areaAres: imported.areaAres }),
+          ...(imported.photos.length ? { thumbnail: imported.photos[0] } : {}),
+          updatedAt,
+        }
+        changed.push(record)
+        if (existing) refreshed += 1
+        else added += 1
+      }
+      const transaction = active.database.transaction(
+        'import-inbox',
+        'readwrite',
+      )
+      const store = transaction.objectStore('import-inbox')
+      for (const record of changed) store.put(record)
+      await transactionComplete(transaction)
+      if (changed.length) {
+        const byId = new Map(changed.map((record) => [record.id, record]))
+        importInbox = [
+          ...importInbox
+            .filter((record) => !byId.has(record.id))
+            .map((record) => structuredClone(record)),
+          ...changed,
+        ]
+        publish()
+        publishLocal(changed)
+      }
+      return {
+        added,
+        refreshed,
+        alreadyImported,
+        records: structuredClone(changed.filter((record) => !record.deletedAt)),
+      }
+    },
+    async removeImportInbox(id, updatedAt) {
+      const active = requireOpen()
+      const existing = importInbox.find(
+        (record) =>
+          record.id === id &&
+          record.householdId === active.householdId &&
+          !record.deletedAt,
+      )
+      if (!existing) throw new Error('Import Inbox item not found')
+      const removed = { ...existing, updatedAt, deletedAt: updatedAt }
+      const transaction = active.database.transaction(
+        'import-inbox',
+        'readwrite',
+      )
+      transaction.objectStore('import-inbox').put(removed)
+      await transactionComplete(transaction)
+      importInbox = importInbox.map((record) =>
+        record.id === id ? removed : record,
+      )
+      publish()
+      publishLocal([removed])
     },
     async saveReviewedImport(review, suppliedUpdatedAt) {
       const active = requireOpen()
@@ -366,12 +517,23 @@ export const createIndexedDbSourceListingRepository = (
             automaticChecksRevision: null,
             updatedAt: timestamp,
           }
+      const matchingInbox = importInbox.find(
+        (record) =>
+          record.householdId === active.householdId &&
+          record.sourceId === review.imported.sourceId &&
+          !record.deletedAt,
+      )
+      const reviewedInbox = matchingInbox
+        ? { ...matchingInbox, updatedAt: timestamp, deletedAt: timestamp }
+        : undefined
       const transaction = active.database.transaction(
-        ['source-listings', 'candidate-plots'],
+        ['source-listings', 'candidate-plots', 'import-inbox'],
         'readwrite',
       )
       transaction.objectStore('source-listings').put(sourceListing)
       transaction.objectStore('candidate-plots').put(candidatePlot)
+      if (reviewedInbox)
+        transaction.objectStore('import-inbox').put(reviewedInbox)
       const secondaryPlots = existing
         ? candidatePlots
             .filter(
@@ -408,8 +570,17 @@ export const createIndexedDbSourceListingRepository = (
           (plot) => secondaryById.get(plot.id) ?? plot,
         )
       }
+      if (reviewedInbox)
+        importInbox = importInbox.map((record) =>
+          record.id === reviewedInbox.id ? reviewedInbox : record,
+        )
       publish()
-      publishLocal([sourceListing, candidatePlot, ...secondaryPlots])
+      publishLocal([
+        sourceListing,
+        candidatePlot,
+        ...secondaryPlots,
+        ...(reviewedInbox ? [reviewedInbox] : []),
+      ])
       return {
         sourceListingId: sourceListing.id,
         candidatePlotId: candidatePlot.id,
@@ -783,6 +954,7 @@ export const createIndexedDbSourceListingRepository = (
         ...sourceListings,
         ...candidatePlots,
         ...(visitPlan ? [visitPlan] : []),
+        ...importInbox,
       ])
     },
     async applyRemote(incoming) {
@@ -795,35 +967,133 @@ export const createIndexedDbSourceListingRepository = (
         )
       )
         throw new Error('Invalid Household payload')
+      const incomingInbox = incoming.filter(
+        (record): record is ImportInboxRecord =>
+          !('url' in record) &&
+          !('sourceListingId' in record) &&
+          !('sourceListingIds' in record),
+      )
+      const inboxWinners: ImportInboxRecord[] = []
+      let comparedInbox = importInbox
+      for (const record of incomingInbox) {
+        const existing = comparedInbox.find(
+          (candidate) =>
+            candidate.householdId === record.householdId &&
+            candidate.sourceId === record.sourceId,
+        )
+        const wins =
+          !existing ||
+          record.updatedAt > existing.updatedAt ||
+          (record.updatedAt === existing.updatedAt && record.id < existing.id)
+        if (!wins) continue
+        const activeSourceListings = [...sourceListings, ...incoming]
+          .filter(
+            (candidate): candidate is SourceListingRecord =>
+              'url' in candidate &&
+              candidate.householdId === record.householdId &&
+              candidate.source === record.source &&
+              candidate.sourceId === record.sourceId &&
+              !candidate.deletedAt,
+          )
+          .sort((left, right) => right.updatedAt - left.updatedAt)
+        const winner = activeSourceListings.length
+          ? {
+              ...record,
+              updatedAt: Math.max(
+                record.updatedAt + 1,
+                activeSourceListings[0].updatedAt,
+              ),
+              deletedAt: Math.max(
+                record.updatedAt + 1,
+                activeSourceListings[0].updatedAt,
+              ),
+            }
+          : record
+        inboxWinners.push(winner)
+        comparedInbox = [
+          ...comparedInbox.filter(
+            (candidate) =>
+              candidate.householdId !== record.householdId ||
+              candidate.sourceId !== record.sourceId,
+          ),
+          winner,
+        ]
+      }
+      const nonInboxIncoming = incoming.filter(
+        (record) =>
+          'url' in record ||
+          'sourceListingId' in record ||
+          'sourceListingIds' in record,
+      ) as SourceListingSharedRecord[]
       const transaction = active.database.transaction(
-        ['source-listings', 'candidate-plots', 'visit-plans'],
+        ['source-listings', 'candidate-plots', 'visit-plans', 'import-inbox'],
         'readwrite',
       )
-      const storeFor = (record: SourceListingSharedRecord) =>
+      const storeFor = (
+        record: SourceListingSharedRecord | ImportInboxRecord,
+      ) =>
         transaction.objectStore(
           'sourceListingIds' in record
             ? 'visit-plans'
             : 'sourceListingId' in record
               ? 'candidate-plots'
-              : 'source-listings',
+              : 'url' in record
+                ? 'source-listings'
+                : 'import-inbox',
         )
       const persisted = await Promise.all(
-        incoming.map((record) =>
-          requestResult<SourceListingSharedRecord | undefined>(
-            storeFor(record).get(record.id),
-          ),
+        nonInboxIncoming.map((record) =>
+          requestResult<
+            SourceListingSharedRecord | ImportInboxRecord | undefined
+          >(storeFor(record).get(record.id)),
         ),
       )
-      const winners = incoming.filter(
+      const sourceWinners = nonInboxIncoming.filter(
         (record, index) =>
           record.updatedAt > (persisted[index]?.updatedAt ?? -1),
       )
+      for (const listing of sourceWinners.filter(
+        (record): record is SourceListingRecord =>
+          'url' in record && !record.deletedAt,
+      )) {
+        const existingInbox = comparedInbox.find(
+          (record) =>
+            record.householdId === listing.householdId &&
+            record.source === listing.source &&
+            record.sourceId === listing.sourceId &&
+            !record.deletedAt,
+        )
+        if (!existingInbox) continue
+        const timestamp = Math.max(
+          existingInbox.updatedAt + 1,
+          listing.updatedAt,
+        )
+        const tombstone = {
+          ...existingInbox,
+          updatedAt: timestamp,
+          deletedAt: timestamp,
+        }
+        inboxWinners.push(tombstone)
+        comparedInbox = comparedInbox.map((record) =>
+          record.id === tombstone.id ? tombstone : record,
+        )
+      }
+      const winners = [...sourceWinners, ...inboxWinners]
+      const inboxStore = transaction.objectStore('import-inbox')
+      for (const record of inboxWinners) {
+        const existing = importInbox.find(
+          (candidate) =>
+            candidate.householdId === record.householdId &&
+            candidate.sourceId === record.sourceId,
+        )
+        if (existing && existing.id !== record.id)
+          inboxStore.delete(existing.id)
+      }
       for (const record of winners) storeFor(record).put(record)
       await transactionComplete(transaction)
       if (!winners.length) return []
-      const sourceWinners = winners.filter(
-        (record): record is SourceListingRecord =>
-          !('sourceListingId' in record) && !('sourceListingIds' in record),
+      const listingWinners = winners.filter(
+        (record): record is SourceListingRecord => 'url' in record,
       )
       const plotWinners = winners.filter(
         (record): record is CandidatePlotRecord => 'sourceListingId' in record,
@@ -835,9 +1105,10 @@ export const createIndexedDbSourceListingRepository = (
         const ids = new Set(changed.map((value) => value.id))
         return [...values.filter((value) => !ids.has(value.id)), ...changed]
       }
-      sourceListings = replace(sourceListings, sourceWinners)
+      sourceListings = replace(sourceListings, listingWinners)
       candidatePlots = replace(candidatePlots, plotWinners)
       if (planWinner) visitPlan = planWinner
+      importInbox = comparedInbox
       publish()
       return structuredClone(winners)
     },
@@ -856,6 +1127,7 @@ export const createIndexedDbSourceListingRepository = (
       sourceListings = []
       candidatePlots = []
       visitPlan = undefined
+      importInbox = []
     },
     close() {
       this.closeActive()

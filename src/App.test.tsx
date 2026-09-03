@@ -114,6 +114,14 @@ const createTestRuntime = () => {
     renameActiveHousehold: async (name) => publish(active(name)),
     listSourceListings: () => [],
     getSourceListing: () => undefined,
+    listImportInbox: () => [],
+    captureImportInbox: async () => ({
+      added: 0,
+      refreshed: 0,
+      alreadyImported: 0,
+      records: [],
+    }),
+    removeImportInbox: async () => undefined,
     saveReviewedImport: async () => {
       throw new Error('Not used')
     },
@@ -143,6 +151,27 @@ const createTestRuntime = () => {
 }
 
 describe('App Household boundary', () => {
+  it('resumes a listing draft stored by the previous app version', async () => {
+    sessionStorage.setItem(
+      'find-me-home-import-draft',
+      JSON.stringify({
+        source: 'aruodas',
+        sourceId: '11-1',
+        url: 'https://www.aruodas.lt/11-1/',
+        locationConfidence: 'unknown',
+        photos: [],
+        raw: { importedBy: 'aruodas-bookmarklet', features: [] },
+      }),
+    )
+
+    const runtime = createTestRuntime()
+    mountRouter(runtime)
+    await runtime.createHousehold()
+
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('Review before saving'),
+    )
+  })
   it('renders a directly loaded imported Source Listing', async () => {
     const runtime = createTestRuntime()
     const listing: SourceListingDetail = {

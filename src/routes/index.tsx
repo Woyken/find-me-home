@@ -13,6 +13,7 @@ export default function Home() {
   const plannedCount = createMemo(
     () => household.getVisitPlan().sourceListingIds.length,
   )
+  const inboxCount = createMemo(() => household.listImportInbox().length)
   const [showImport, setShowImport] = createSignal(false)
 
   return (
@@ -21,6 +22,14 @@ export default function Home() {
         <header class="flex flex-wrap items-center justify-between gap-3 border-b border-[#18241e] px-4 py-4 sm:px-7">
           <HouseholdHeader />
           <div class="flex items-center gap-3">
+            <Show when={inboxCount() > 0}>
+              <a
+                class="bg-[#c65c35] px-3 py-2 font-mono text-xs font-bold text-white"
+                href={paths.importInbox}
+              >
+                Import Inbox ({inboxCount()})
+              </a>
+            </Show>
             <a
               class="border-b border-[#204d3a] font-mono text-xs font-bold text-[#204d3a]"
               href={paths.visitPlan}
@@ -141,12 +150,13 @@ function ListingRow(props: { listing: SourceListingDetail }) {
 function ImportSetup() {
   const [bookmarklet, setBookmarklet] = createSignal('')
   const [message, setMessage] = createSignal('')
-  const prepare = () =>
+  const prepare = () => {
     setBookmarklet(
       createAruodasBookmarklet(
         new URL(import.meta.env.BASE_URL, window.location.origin).toString(),
       ),
     )
+  }
 
   return (
     <section class="border-b border-[#18241e] bg-[#e5ece8] px-4 py-5 sm:px-7">
@@ -154,7 +164,7 @@ function ImportSetup() {
         <div>
           <h2 class="font-serif text-xl">Aruodas bookmarklet</h2>
           <p class="mt-1 text-xs text-[#647169]">
-            Run it on an Aruodas land advert, then review before saving.
+            Run it on an Aruodas land advert or your favorites page.
           </p>
         </div>
         <Show

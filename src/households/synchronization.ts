@@ -5,14 +5,18 @@ import type {
   SourceListingSharedRecord,
   VisitPlanRecord,
 } from '../source-listings/model'
+import type { ImportInboxRecord } from '../imports/inbox-model'
 
 export type SharedRecord =
   | { type: 'household'; record: HouseholdRecord }
   | { type: 'source-listing'; record: SourceListingRecord }
   | { type: 'candidate-plot'; record: CandidatePlotRecord }
   | { type: 'visit-plan'; record: VisitPlanRecord }
+  | { type: 'import-inbox'; record: ImportInboxRecord }
 
-export type Manifest = Record<SharedRecord['type'], Record<string, number>>
+export type Manifest = Partial<
+  Record<SharedRecord['type'], Record<string, number>>
+>
 export type RecordKey = Pick<SharedRecord, 'type'> & { id: string }
 
 export type HouseholdRoom = {
@@ -40,12 +44,13 @@ const types: SharedRecord['type'][] = [
   'source-listing',
   'candidate-plot',
   'visit-plan',
+  'import-inbox',
 ]
 
 const makeManifest = (records: SharedRecord[]) => {
   const result = Object.fromEntries(types.map((type) => [type, {}])) as Manifest
   for (const value of records)
-    result[value.type][value.record.id] = value.record.updatedAt
+    result[value.type]![value.record.id] = value.record.updatedAt
   return result
 }
 
@@ -54,6 +59,7 @@ const validManifest = (value: unknown): value is Manifest =>
   value !== null &&
   types.every((type) => {
     const section = (value as Record<string, unknown>)[type]
+    if (section === undefined) return type === 'import-inbox'
     return (
       typeof section === 'object' &&
       section !== null &&
@@ -96,7 +102,18 @@ const validRecords = (
         'priceEur' in record &&
         'areaAres' in record
       )
-    return Array.isArray(record.sourceListingIds)
+    if (candidate.type === 'visit-plan')
+      return Array.isArray(record.sourceListingIds)
+    return (
+      record.source === 'aruodas' &&
+      typeof record.sourceId === 'string' &&
+      (record.title === undefined || typeof record.title === 'string') &&
+      (record.description === undefined ||
+        typeof record.description === 'string') &&
+      (record.priceEur === undefined || Number.isFinite(record.priceEur)) &&
+      (record.areaAres === undefined || Number.isFinite(record.areaAres)) &&
+      (record.thumbnail === undefined || typeof record.thumbnail === 'string')
+    )
   })
 
 export const createSharedRepository = (dependencies: {
@@ -108,19 +125,24 @@ export const createSharedRepository = (dependencies: {
     ) => () => void
   }
   sourceListings: {
-    allRecords: () => SourceListingSharedRecord[]
+    allRecords: () => (SourceListingSharedRecord | ImportInboxRecord)[]
     applyRemote: (
-      records: SourceListingSharedRecord[],
-    ) => Promise<SourceListingSharedRecord[]>
+      records: (SourceListingSharedRecord | ImportInboxRecord)[],
+    ) => Promise<(SourceListingSharedRecord | ImportInboxRecord)[]>
     subscribeLocalMutations: (
-      listener: (records: SourceListingSharedRecord[]) => void,
+      listener: (
+        records: (SourceListingSharedRecord | ImportInboxRecord)[],
+      ) => void,
     ) => () => void
   }
 }): SharedRepository => {
-  const wrapSource = (record: SourceListingSharedRecord): SharedRecord => {
+  const wrapSource = (
+    record: SourceListingSharedRecord | ImportInboxRecord,
+  ): SharedRecord => {
     if ('sourceListingIds' in record) return { type: 'visit-plan', record }
     if ('sourceListingId' in record) return { type: 'candidate-plot', record }
-    return { type: 'source-listing', record }
+    if ('url' in record) return { type: 'source-listing', record }
+    return { type: 'import-inbox', record }
   }
   return {
     allRecords: () => [
@@ -178,6 +200,16 @@ export const synchronizeHousehold = (options: {
   let remoteApplications = Promise.resolve()
   let initialSyncs = Promise.resolve()
   let stopped = false
+  const sendRecords = (records: SharedRecord[], peerId?: string) => {
+    const established = records.filter(
+      (record) => record.type !== 'import-inbox',
+    )
+    const inboxRecords = records.filter(
+      (record) => record.type === 'import-inbox',
+    )
+    if (established.length) options.room.sendRecords(established, peerId)
+    if (inboxRecords.length) options.room.sendRecords(inboxRecords, peerId)
+  }
   const isStopped = () => stopped
   const status = () =>
     peers.size === 0
@@ -214,12 +246,14 @@ export const synchronizeHousehold = (options: {
       const request: RecordKey[] = []
       const send: SharedRecord[] = []
       for (const type of types) {
-        for (const [id, updatedAt] of Object.entries(value[type]))
-          if (updatedAt > (local[type][id] ?? -1)) request.push({ type, id })
+        const remoteSection = value[type] ?? {}
+        const localSection = local[type] ?? {}
+        for (const [id, updatedAt] of Object.entries(remoteSection))
+          if (updatedAt > (localSection[id] ?? -1)) request.push({ type, id })
         for (const record of options.repository
           .allRecords()
           .filter((candidate) => candidate.type === type))
-          if (record.record.updatedAt > (value[type][record.record.id] ?? -1))
+          if (record.record.updatedAt > (remoteSection[record.record.id] ?? -1))
             send.push(record)
       }
       peers.set(
@@ -227,12 +261,12 @@ export const synchronizeHousehold = (options: {
         new Map(
           request.map((key) => [
             `${key.type}:${key.id}`,
-            value[key.type][key.id],
+            (value[key.type] ?? {})[key.id],
           ]),
         ),
       )
       if (request.length) options.room.sendRequest(request, peerId)
-      if (send.length) options.room.sendRecords(send, peerId)
+      sendRecords(send, peerId)
       updateStatus()
       if (!request.length)
         completeInitialSync(status() as 'syncing' | 'connected')
@@ -240,7 +274,7 @@ export const synchronizeHousehold = (options: {
     options.room.onRequest((value, peerId) => {
       if (!Array.isArray(value)) return
       const requested = new Set(value.map((key) => `${key.type}:${key.id}`))
-      options.room.sendRecords(
+      sendRecords(
         options.repository
           .allRecords()
           .filter((record) =>
@@ -254,7 +288,17 @@ export const synchronizeHousehold = (options: {
       remoteApplications = remoteApplications
         .then(async () => {
           if (isStopped()) return
-          await options.repository.applyRemote(value)
+          const corrections = await options.repository.applyRemote(value)
+          const generatedCorrections = corrections.filter(
+            (correction) =>
+              !value.some(
+                (incoming) =>
+                  incoming.type === correction.type &&
+                  incoming.record.id === correction.record.id &&
+                  incoming.record.updatedAt === correction.record.updatedAt,
+              ),
+          )
+          if (generatedCorrections.length) sendRecords(generatedCorrections)
           if (isStopped()) return
           const local = makeManifest(options.repository.allRecords())
           let completed = false
@@ -266,7 +310,7 @@ export const synchronizeHousehold = (options: {
                 SharedRecord['type'],
                 string,
               ]
-              if ((local[type][id] ?? -1) >= requestedAt) pending.delete(key)
+              if ((local[type]?.[id] ?? -1) >= requestedAt) pending.delete(key)
             }
             completed ||= hadPending && pending.size === 0
           }
@@ -279,7 +323,7 @@ export const synchronizeHousehold = (options: {
         })
     }),
     options.repository.subscribeLocalMutations((records) => {
-      if (!isStopped()) options.room.sendRecords(records)
+      if (!isStopped()) sendRecords(records)
     }),
   ]
   updateStatus()

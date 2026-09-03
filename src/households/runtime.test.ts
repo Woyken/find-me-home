@@ -1276,6 +1276,14 @@ describe('Household runtime', () => {
         open: async () => undefined,
         list: () => [],
         get: () => undefined,
+        listImportInbox: () => [],
+        captureImportInbox: async () => ({
+          added: 0,
+          refreshed: 0,
+          alreadyImported: 0,
+          records: [],
+        }),
+        removeImportInbox: async () => undefined,
         saveReviewedImport: async () => {
           throw new Error('Not used')
         },

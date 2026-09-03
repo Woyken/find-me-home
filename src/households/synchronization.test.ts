@@ -25,6 +25,19 @@ const deferred = () => {
   return { promise, resolve }
 }
 
+const inbox = (updatedAt: number) =>
+  ({
+    type: 'import-inbox',
+    record: {
+      id: 'inbox-record',
+      householdId: 'household-id',
+      source: 'aruodas',
+      sourceId: '11-1472707',
+      title: 'Inbox listing',
+      updatedAt,
+    },
+  }) satisfies SharedRecord
+
 const createRoom = () => {
   const sent = {
     manifests: [] as {
@@ -83,6 +96,42 @@ const createRoom = () => {
 }
 
 describe('Household synchronization', () => {
+  it('synchronizes inbox records and accepts legacy manifests without inbox', () => {
+    const repository: SharedRepository = {
+      allRecords: () => [household(10), inbox(20)],
+      applyRemote: async () => [],
+      subscribeLocalMutations: () => () => undefined,
+    }
+    const { room, listeners, sent } = createRoom()
+    synchronizeHousehold({
+      householdId: 'household-id',
+      room,
+      repository,
+      onStatus: () => undefined,
+      onInitialSync: async () => undefined,
+      onError: () => undefined,
+    })
+
+    listeners.join('legacy-peer')
+    listeners.manifest(
+      {
+        household: { 'household-record': 10 },
+        'source-listing': {},
+        'candidate-plot': {},
+        'visit-plan': {},
+      },
+      'legacy-peer',
+    )
+
+    expect(sent.records).toContainEqual({
+      peerId: 'legacy-peer',
+      value: [inbox(20)],
+    })
+    expect(sent.manifests[0].value['import-inbox']).toEqual({
+      'inbox-record': 20,
+    })
+  })
+
   it('keeps the newest record when several peers deliver concurrently', async () => {
     const newestGate = deferred()
     const olderGate = deferred()

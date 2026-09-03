@@ -17,6 +17,13 @@ A household record of an advertisement published by a property marketplace.
 One Source Listing may offer one or more Candidate Plots.
 _Avoid_: Listing, property
 
+**Import Inbox**:
+The Household's shared collection of lightweight references to Aruodas land
+advertisements that do not have an active Source Listing. Capturing or restoring
+a Source Listing removes every Import Inbox reference with the same marketplace
+identity.
+_Avoid_: Todo list, Visit Plan, import queue
+
 **Candidate Plot**:
 A distinct purchasable option the household is considering. It may correspond
 to one Registered Parcel, several parcels sold together, or land that has not

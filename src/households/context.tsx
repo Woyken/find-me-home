@@ -13,6 +13,9 @@ type HouseholdContextValue = {
   renameActiveHousehold: (name: string) => Promise<void>
   listSourceListings: HouseholdRuntime['listSourceListings']
   getSourceListing: HouseholdRuntime['getSourceListing']
+  listImportInbox: HouseholdRuntime['listImportInbox']
+  captureImportInbox: HouseholdRuntime['captureImportInbox']
+  removeImportInbox: HouseholdRuntime['removeImportInbox']
   saveReviewedImport: (
     review: ReviewedImport,
   ) => ReturnType<HouseholdRuntime['saveReviewedImport']>
@@ -81,6 +84,13 @@ export function HouseholdProvider(
           state()
           return props.runtime.getSourceListing(id)
         },
+        listImportInbox: () => {
+          state()
+          return props.runtime.listImportInbox()
+        },
+        captureImportInbox: (imports) =>
+          props.runtime.captureImportInbox(imports),
+        removeImportInbox: (id) => props.runtime.removeImportInbox(id),
         saveReviewedImport: (review) =>
           props.runtime.saveReviewedImport(review),
         addCandidatePlot: (sourceListingId) =>

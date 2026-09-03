@@ -68,14 +68,77 @@ const allowedPhoto = (source: string) => {
   }
 }
 const url = new URL(window.location.href)
+const returnTo =
+  url.hash === '#find-me-home-return=import-inbox' ? 'import-inbox' : undefined
 url.search = ''
 url.hash = ''
 
-if (
+if (url.pathname.startsWith('/isiminti-skelbimai')) {
+  let skippedNonLand = 0
+  let skippedInactive = 0
+  let unreadable = 0
+  const seen = new Set<string>()
+  const items = [
+    ...document.querySelectorAll<HTMLElement>('.list-row-container'),
+  ].flatMap((card) => {
+    const id = card
+      .querySelector<HTMLAnchorElement>('a[href]')
+      ?.href.match(/(?:-|\/)(\d{1,3}-\d+)\/?(?:[?#]|$)/)?.[1]
+    if (!id) {
+      unreadable += 1
+      return []
+    }
+    if (!id.startsWith('11-')) {
+      skippedNonLand += 1
+      return []
+    }
+    if (
+      card.classList.contains('inactive-saved') ||
+      card.querySelector('.advert-is-passive')
+    ) {
+      skippedInactive += 1
+      return []
+    }
+    if (seen.has(id)) return []
+    seen.add(id)
+    const thumbnail = card.querySelector<HTMLImageElement>('.list-img img')?.src
+    return [
+      {
+        sourceId: id,
+        title: clean(card.querySelector('h3 a')?.textContent),
+        description: clean(card.querySelector('.description')?.textContent),
+        priceEur: numberFrom(
+          card.querySelector('.rememb-item-price')?.textContent,
+        ),
+        areaAres: numberFrom(card.querySelector('.description')?.textContent),
+        thumbnail: thumbnail && allowedPhoto(thumbnail) ? thumbnail : undefined,
+      },
+    ]
+  })
+  const text = JSON.stringify({
+    version: 2,
+    kind: 'favorites',
+    payload: { items, skippedNonLand, skippedInactive, unreadable },
+  })
+  if (text.length > 100_000) {
+    fail('Your favorites list is too large to import.')
+  } else {
+    const bytes = new TextEncoder().encode(text)
+    let binary = ''
+    for (const byte of bytes) binary += String.fromCharCode(byte)
+    const encoded = btoa(binary)
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+    window.location.href = `${appUrl}import-inbox#import=${encoded}`
+  }
+} else if (
   !url.pathname.startsWith('/sklypai') ||
   !/-(\d{1,3}-\d+)\/?$/.test(url.pathname)
 ) {
-  fail('Open an individual Aruodas land advertisement before importing.')
+  fail(
+    'Open an individual Aruodas land advertisement or your favorites page before importing.',
+  )
 } else {
   const structured = jsonLd()
   const offer = structured
@@ -151,7 +214,12 @@ if (
       gas: utility(/duj/i),
     },
   }
-  const text = JSON.stringify({ version: 1, payload })
+  const text = JSON.stringify({
+    version: 2,
+    kind: 'listing',
+    payload,
+    ...(returnTo ? { returnTo } : {}),
+  })
   if (text.length > 100_000) {
     fail('This advertisement is too large to import.')
   } else {

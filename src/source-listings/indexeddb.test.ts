@@ -45,6 +45,92 @@ const review = {
 }
 
 describe('Household Source Listing repository', () => {
+  it('captures, refreshes, restores, and removes inbox records with stable identity', async () => {
+    const prefix = `import-inbox-${crypto.randomUUID()}`
+    databases.push(`${prefix}-household-a`)
+    let uuid = 0
+    const repository = createIndexedDbSourceListingRepository(prefix, {
+      now: () => 100,
+      uuid: () => `id-${++uuid}`,
+    })
+    await repository.open('household-a')
+
+    const first = await repository.captureImportInbox(
+      [imported, imported, { ...imported, sourceId: '11-9999999' }],
+      10,
+    )
+    expect(first).toMatchObject({
+      added: 2,
+      refreshed: 0,
+      alreadyImported: 0,
+    })
+    expect(repository.listImportInbox()).toHaveLength(2)
+    const original = repository
+      .listImportInbox()
+      .find((record) => record.sourceId === imported.sourceId)!
+
+    const refreshed = await repository.captureImportInbox(
+      [{ ...imported, title: 'Refreshed title' }],
+      20,
+    )
+    expect(refreshed).toMatchObject({
+      added: 0,
+      refreshed: 1,
+      alreadyImported: 0,
+    })
+    expect(refreshed.records[0]).toMatchObject({
+      id: original.id,
+      title: 'Refreshed title',
+      updatedAt: 20,
+    })
+
+    await repository.removeImportInbox(original.id, 30)
+    expect(repository.listImportInbox()).toHaveLength(1)
+    const restored = await repository.captureImportInbox([imported], 40)
+    expect(restored).toMatchObject({ added: 0, refreshed: 1 })
+    expect(restored.records[0]).toMatchObject({
+      id: original.id,
+      updatedAt: 40,
+    })
+    expect(restored.records[0].deletedAt).toBeUndefined()
+    repository.close()
+  })
+
+  it('keeps active Source Listings out of the inbox and tombstones on review', async () => {
+    const prefix = `reviewed-inbox-${crypto.randomUUID()}`
+    databases.push(`${prefix}-household-a`)
+    let uuid = 0
+    const repository = createIndexedDbSourceListingRepository(prefix, {
+      now: () => 100,
+      uuid: () => `id-${++uuid}`,
+    })
+    await repository.open('household-a')
+    await repository.captureImportInbox([imported], 10)
+
+    await repository.saveReviewedImport(review, 20)
+    expect(repository.listImportInbox()).toEqual([])
+    expect(
+      repository
+        .allRecords()
+        .find(
+          (record) =>
+            'sourceId' in record &&
+            !('url' in record) &&
+            record.sourceId === imported.sourceId,
+        ),
+    ).toMatchObject({ updatedAt: 20, deletedAt: 20 })
+
+    const captured = await repository.captureImportInbox([imported], 30)
+    expect(captured).toMatchObject({
+      added: 0,
+      refreshed: 0,
+      alreadyImported: 1,
+      records: [],
+    })
+    expect(repository.listImportInbox()).toEqual([])
+    repository.close()
+  })
+
   it('atomically saves review edits with UUID identity and reopens them', async () => {
     const prefix = `source-listings-${crypto.randomUUID()}`
     databases.push(`${prefix}-household-a`)
