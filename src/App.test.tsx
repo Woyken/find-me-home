@@ -205,8 +205,10 @@ describe('App Household boundary', () => {
     await waitFor(() =>
       expect(document.body.textContent).toContain('Imported listing'),
     )
-    expect(runtime.resolveCandidatePlotLocation).toHaveBeenCalledTimes(1)
-    expect(runtime.runCandidatePlotAutomaticChecks).toHaveBeenCalledTimes(1)
+    await waitFor(() => {
+      expect(runtime.resolveCandidatePlotLocation).toHaveBeenCalledTimes(1)
+      expect(runtime.runCandidatePlotAutomaticChecks).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('removes an import fragment and resumes its review after creating a Household', async () => {

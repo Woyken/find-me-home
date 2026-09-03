@@ -325,8 +325,11 @@ function CandidatePlotEditor(props: {
       props.plot.id,
     )
 
-  if (props.plot.locationResolutionState === 'missing') void resolveLocation()
-  if (!props.plot.automaticChecks) void runAutomaticChecks()
+  queueMicrotask(async () => {
+    if (props.plot.locationResolutionState === 'missing')
+      await resolveLocation()
+    if (!props.plot.automaticChecks) await runAutomaticChecks()
+  })
 
   const save = async () => {
     setStatus('Saving...')
