@@ -116,7 +116,7 @@ export function CandidatePlotsMap(props: {
         }`,
       })
       location.addTo(plotLayer)
-      bounds.extend(location.getBounds())
+      bounds.extend([plot.latitude, plot.longitude])
     }
 
     if (fitBounds && bounds.isValid()) {
@@ -132,7 +132,6 @@ export function CandidatePlotsMap(props: {
       map = loaded.map(element, { zoomControl: false })
       plotLayer = loaded.layerGroup().addTo(map)
       householdLayer = loaded.layerGroup().addTo(map)
-      draw(true, props.plots, props.selectedPlotId)
       loaded
         .tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution:
@@ -140,6 +139,7 @@ export function CandidatePlotsMap(props: {
           maxZoom: 19,
         })
         .addTo(map)
+      draw(true, props.plots, props.selectedPlotId)
       loaded.control.zoom({ position: 'bottomright' }).addTo(map)
       map.on('zoomend moveend', resolveLabelCollisions)
       resizeObserver = new ResizeObserver(() => map?.invalidateSize())
