@@ -368,6 +368,14 @@ upstreams. It has no application authentication, arbitrary target URL, KV, D1,
 Durable Object, database, or Household access. Origin restriction discourages
 casual use but is not authentication.
 
+The deployed operations are `GET /regia/address-search`, `GET
+/inspire/protected-area`, `GET /inspire/flood`, `GET
+/inspire/transport-noise`, `GET /trafi/nearby-stops`, `GET
+/trafi/walking-directions`, `POST /trafi/route-search`, and `GET
+/crime/density`. Trafi device and search identifiers are generated ephemerally;
+the Worker does not create Firebase users, send bearer credentials, or persist
+identifiers between requests.
+
 If a Worker or upstream call fails, show that result as unavailable or unknown
 and allow manual retry. Do not add another service or public proxy fallback.
 

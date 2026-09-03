@@ -1,5 +1,8 @@
 import { handleRequest } from './regia'
 import { handleInspireRequest } from './inspire'
+import { handleTrafiRequest } from './trafi'
+import { handleCrimeRequest } from './crime'
+import type { WorkerOptions } from './request'
 
 interface Env {
   PRODUCTION_ORIGIN: string
@@ -7,11 +10,17 @@ interface Env {
 
 export const handleWorkerRequest = (
   request: Request,
-  options: { productionOrigin: string; fetch?: typeof fetch },
-) =>
-  new URL(request.url).pathname.startsWith('/inspire/')
-    ? handleInspireRequest(request, options)
-    : handleRequest(request, options)
+  options: WorkerOptions,
+) => {
+  const pathname = new URL(request.url).pathname
+  if (pathname.startsWith('/inspire/'))
+    return handleInspireRequest(request, options)
+  if (pathname.startsWith('/trafi/'))
+    return handleTrafiRequest(request, options)
+  if (pathname.startsWith('/crime/'))
+    return handleCrimeRequest(request, options)
+  return handleRequest(request, options)
+}
 
 export default {
   fetch(request: Request, env: Env) {

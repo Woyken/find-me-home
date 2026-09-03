@@ -1,4 +1,5 @@
 import proj4 from 'proj4'
+import { corsHeaders } from './request'
 
 proj4.defs(
   'EPSG:3346',
@@ -98,14 +99,13 @@ export const handleRequest = async (
   request: Request,
   options: { productionOrigin: string; fetch?: typeof fetch },
 ) => {
-  const origin = request.headers.get('origin')
-  const cors =
-    origin === options.productionOrigin
-      ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' }
-      : undefined
+  const cors = corsHeaders(request, options.productionOrigin)
   if (request.method === 'OPTIONS')
-    return new Response(null, { status: cors ? 204 : 403, headers: cors })
-  if (!cors) return new Response('Origin not allowed', { status: 403 })
+    return new Response(null, {
+      status: cors === null ? 403 : 204,
+      headers: cors ?? undefined,
+    })
+  if (cors === null) return new Response('Origin not allowed', { status: 403 })
   const url = new URL(request.url)
   if (request.method !== 'GET' || url.pathname !== '/regia/address-search')
     return Response.json({ error: 'Not found' }, { status: 404, headers: cors })
