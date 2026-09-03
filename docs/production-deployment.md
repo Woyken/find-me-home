@@ -14,7 +14,7 @@ The Worker exposes only fixed Regia, Trafi, INSPIRE, and IRD operations. CORS al
 
 ## Release and verification
 
-The `Refresh Registered Parcel assets` workflow uses a least-privilege Cloudflare API token stored as `CLOUDFLARE_API_TOKEN`, the public `CLOUDFLARE_ACCOUNT_ID`, and the public `VITE_WORKER_URL`. Its jobs enforce this order:
+The `Refresh Registered Parcel assets` workflow uses a least-privilege Cloudflare API token stored as `CLOUDFLARE_API_TOKEN`, the public `CLOUDFLARE_ACCOUNT_ID`, and the public `VITE_WORKER_URL`. Push releases preserve the currently published parcel assets; scheduled and manually dispatched runs refresh them before publication. A failed external refresh does not replace the last good Pages deployment. The workflow jobs enforce this order:
 
 1. Deploy `find-me-home-operations` with Wrangler.
 2. Run `pnpm smoke:worker "$VITE_WORKER_URL"` against the live deployment.

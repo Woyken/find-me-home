@@ -63,8 +63,12 @@ jobs:
         run: pnpm verify:worker-build
         env:
           VITE_WORKER_URL: ${{ vars.VITE_WORKER_URL }}
-      - run: pnpm generate:parcels
-      - run: pnpm validate:parcels
+      - name: Refresh Registered Parcel assets
+        if: github.event_name != 'push'
+        run: pnpm generate:parcels
+      - name: Validate refreshed Registered Parcel assets
+        if: github.event_name != 'push'
+        run: pnpm validate:parcels
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
