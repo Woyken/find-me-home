@@ -1,6 +1,8 @@
 allowBuilds:
   better-sqlite3: true
+  esbuild: true
   unrs-resolver: false
+  workerd: true
 minimumReleaseAgeExclude:
   - '@solidjs/router@2.0.0-next.20'
 packages:

@@ -1,5 +1,7 @@
 Welcome to your new TanStack Start app! 
 
+Production Cloudflare Worker and GitHub Pages setup, release, rollback, and verification are documented in [Production deployment](docs/production-deployment.md). Run `scripts/setup-production.sh` for interactive first-time setup or credential rotation.
+
 # Getting Started
 
 To run this application:
