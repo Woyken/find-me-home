@@ -7,6 +7,7 @@ import { HouseholdHeader } from './components/HouseholdHeader'
 import type { HouseholdRuntime } from './households/runtime'
 import type { HouseholdRuntimeState } from './households/model'
 import { encodeImportFragment } from './imports/aruodas'
+import type { SourceListingDetail } from './source-listings/model'
 
 let dispose: (() => void) | undefined
 
@@ -29,6 +30,12 @@ const mount = (runtime: HouseholdRuntime) => {
     ),
     container,
   )
+}
+
+const mountRouter = (runtime: HouseholdRuntime) => {
+  const container = document.createElement('div')
+  document.body.append(container)
+  dispose = render(() => <App runtime={runtime} />, container)
 }
 
 const findButton = (name: string) =>
@@ -136,6 +143,68 @@ const createTestRuntime = () => {
 }
 
 describe('App Household boundary', () => {
+  it('renders a directly loaded imported Source Listing', async () => {
+    const runtime = createTestRuntime()
+    const listing: SourceListingDetail = {
+      id: 'listing-id',
+      householdId: 'household-id',
+      source: 'aruodas',
+      sourceId: '11-1471486',
+      url: 'https://www.aruodas.lt/sklypai/example-11-1471486/',
+      title: 'Imported listing',
+      address: 'Vilniaus r.',
+      description: null,
+      photos: [],
+      utilities: {},
+      raw: { importedBy: 'aruodas-bookmarklet', features: [] },
+      visitedAt: null,
+      updatedAt: 100,
+      candidatePlots: [
+        {
+          id: 'plot-id',
+          householdId: 'household-id',
+          sourceListingId: 'listing-id',
+          importKey: 'primary',
+          name: null,
+          priceEur: 40_000,
+          areaAres: 10,
+          purposeText: 'Namų valda',
+          notes: null,
+          parcelNumberClue: null,
+          latitudeClue: null,
+          longitudeClue: null,
+          coordinateCluePrecision: null,
+          addressClue: 'Vilniaus r.',
+          roadAccessRating: null,
+          areaFeelingRating: null,
+          viewRating: null,
+          resolvedLatitude: null,
+          resolvedLongitude: null,
+          resolvedAddress: null,
+          resolvedParcelNumber: null,
+          resolvedCadastralNumber: null,
+          resolvedBoundary: null,
+          resolvedPrecision: null,
+          effectiveLocationSource: null,
+          locationResolutionState: 'missing',
+          parcelDatasetVersion: null,
+          automaticChecks: null,
+          automaticChecksRevision: null,
+          updatedAt: 100,
+        },
+      ],
+    }
+    runtime.start = runtime.createHousehold
+    runtime.getSourceListing = (id) => (id === listing.id ? listing : undefined)
+    history.replaceState(null, '', '/source-listings/listing-id')
+
+    mountRouter(runtime)
+
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('Imported listing'),
+    )
+  })
+
   it('removes an import fragment and resumes its review after creating a Household', async () => {
     const fragment = encodeImportFragment({
       url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-upes-g-sklypas-11-1472707/',

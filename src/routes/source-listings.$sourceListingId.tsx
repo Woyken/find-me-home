@@ -325,21 +325,27 @@ function CandidatePlotEditor(props: {
       props.plot.id,
     )
 
-  createEffect(() => {
-    if (
-      props.plot.locationResolutionState === 'missing' &&
-      !household.isCandidatePlotLocationRunning(props.plot.id)
-    )
-      void resolveLocation()
-  })
+  createEffect(
+    () =>
+      [
+        props.plot.locationResolutionState,
+        household.isCandidatePlotLocationRunning(props.plot.id),
+      ] as const,
+    ([resolutionState, running]) => {
+      if (resolutionState === 'missing' && !running) void resolveLocation()
+    },
+  )
 
-  createEffect(() => {
-    if (
-      !props.plot.automaticChecks &&
-      !household.isCandidatePlotAutomaticChecksRunning(props.plot.id)
-    )
-      void runAutomaticChecks()
-  })
+  createEffect(
+    () =>
+      [
+        props.plot.automaticChecks,
+        household.isCandidatePlotAutomaticChecksRunning(props.plot.id),
+      ] as const,
+    ([automaticChecks, running]) => {
+      if (!automaticChecks && !running) void runAutomaticChecks()
+    },
+  )
 
   const save = async () => {
     setStatus('Saving...')

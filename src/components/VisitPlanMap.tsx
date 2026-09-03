@@ -72,7 +72,10 @@ export function VisitPlanMap(props: {
     })
   }
 
-  createEffect(() => draw(props.sourceListings))
+  createEffect(
+    () => props.sourceListings,
+    (sourceListings) => draw(sourceListings),
+  )
 
   onCleanup(() => {
     disposed = true
