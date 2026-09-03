@@ -196,6 +196,8 @@ describe('App Household boundary', () => {
     }
     runtime.start = runtime.createHousehold
     runtime.getSourceListing = (id) => (id === listing.id ? listing : undefined)
+    runtime.resolveCandidatePlotLocation = vi.fn(async () => undefined)
+    runtime.runCandidatePlotAutomaticChecks = vi.fn(async () => undefined)
     history.replaceState(null, '', '/source-listings/listing-id')
 
     mountRouter(runtime)
@@ -203,6 +205,8 @@ describe('App Household boundary', () => {
     await waitFor(() =>
       expect(document.body.textContent).toContain('Imported listing'),
     )
+    expect(runtime.resolveCandidatePlotLocation).toHaveBeenCalledTimes(1)
+    expect(runtime.runCandidatePlotAutomaticChecks).toHaveBeenCalledTimes(1)
   })
 
   it('removes an import fragment and resumes its review after creating a Household', async () => {

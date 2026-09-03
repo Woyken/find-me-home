@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal } from 'solid-js'
+import { For, Show, createMemo, createSignal } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { CandidatePlotsMap } from '../components/CandidatePlotsMap'
 import { useHousehold } from '../households/context'
@@ -325,27 +325,8 @@ function CandidatePlotEditor(props: {
       props.plot.id,
     )
 
-  createEffect(
-    () =>
-      [
-        props.plot.locationResolutionState,
-        household.isCandidatePlotLocationRunning(props.plot.id),
-      ] as const,
-    ([resolutionState, running]) => {
-      if (resolutionState === 'missing' && !running) void resolveLocation()
-    },
-  )
-
-  createEffect(
-    () =>
-      [
-        props.plot.automaticChecks,
-        household.isCandidatePlotAutomaticChecksRunning(props.plot.id),
-      ] as const,
-    ([automaticChecks, running]) => {
-      if (!automaticChecks && !running) void runAutomaticChecks()
-    },
-  )
+  if (props.plot.locationResolutionState === 'missing') void resolveLocation()
+  if (!props.plot.automaticChecks) void runAutomaticChecks()
 
   const save = async () => {
     setStatus('Saving...')
