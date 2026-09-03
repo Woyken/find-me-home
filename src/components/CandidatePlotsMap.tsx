@@ -70,6 +70,10 @@ export function CandidatePlotsMap(props: {
     for (const plot of plots) {
       const selected = plot.id === selectedPlotId
       const color = selected ? '#d96a45' : '#315f73'
+      const select = () => {
+        props.onSelect(plot.id)
+        map?.panTo([plot.latitude, plot.longitude])
+      }
 
       if (plot.boundary) {
         const feature: Feature<Polygon> = {
@@ -85,14 +89,16 @@ export function CandidatePlotsMap(props: {
             fillOpacity: selected ? 0.3 : 0.14,
           },
         })
-        boundary.on('click', () => props.onSelect(plot.id))
+        boundary.on('click', select)
         boundary.bindTooltip(plot.label, {
           permanent: true,
           direction: 'center',
+          interactive: true,
           className: `candidate-plot-map-label ${
             selected ? 'candidate-plot-map-label-selected' : ''
           }`,
         })
+        boundary.getTooltip()?.on('click', select)
         boundary.addTo(plotLayer)
         bounds.extend(boundary.getBounds())
         continue
@@ -107,14 +113,16 @@ export function CandidatePlotsMap(props: {
         fillOpacity: selected ? 0.24 : 0.1,
         dashArray: '6 5',
       })
-      location.on('click', () => props.onSelect(plot.id))
+      location.on('click', select)
       location.bindTooltip(plot.label, {
         permanent: true,
         direction: 'center',
+        interactive: true,
         className: `candidate-plot-map-label ${
           selected ? 'candidate-plot-map-label-selected' : ''
         }`,
       })
+      location.getTooltip()?.on('click', select)
       location.addTo(plotLayer)
       bounds.extend([plot.latitude, plot.longitude])
     }
@@ -144,14 +152,6 @@ export function CandidatePlotsMap(props: {
       map.on('zoomend moveend', resolveLabelCollisions)
       resizeObserver = new ResizeObserver(() => map?.invalidateSize())
       resizeObserver.observe(element)
-      try {
-        locate()
-      } catch {
-        setLocationState('unavailable')
-        setLocationMessage(
-          'Live location is unavailable. Map and field notes remain usable.',
-        )
-      }
     })
   }
 
