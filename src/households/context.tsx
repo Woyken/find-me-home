@@ -20,6 +20,8 @@ type HouseholdContextValue = {
   updateCandidatePlot: HouseholdRuntime['updateCandidatePlot']
   resolveCandidatePlotLocation: HouseholdRuntime['resolveCandidatePlotLocation']
   isCandidatePlotLocationRunning: HouseholdRuntime['isCandidatePlotLocationRunning']
+  runCandidatePlotAutomaticChecks: HouseholdRuntime['runCandidatePlotAutomaticChecks']
+  isCandidatePlotAutomaticChecksRunning: HouseholdRuntime['isCandidatePlotAutomaticChecksRunning']
   getVisitPlan: HouseholdRuntime['getVisitPlan']
   setVisitPlan: HouseholdRuntime['setVisitPlan']
   markSourceListingVisited: HouseholdRuntime['markSourceListingVisited']
@@ -97,6 +99,17 @@ export function HouseholdProvider(
         isCandidatePlotLocationRunning: (candidatePlotId) => {
           state()
           return props.runtime.isCandidatePlotLocationRunning(candidatePlotId)
+        },
+        runCandidatePlotAutomaticChecks: (sourceListingId, candidatePlotId) =>
+          props.runtime.runCandidatePlotAutomaticChecks(
+            sourceListingId,
+            candidatePlotId,
+          ),
+        isCandidatePlotAutomaticChecksRunning: (candidatePlotId) => {
+          state()
+          return props.runtime.isCandidatePlotAutomaticChecksRunning(
+            candidatePlotId,
+          )
         },
         getVisitPlan: () => {
           state()

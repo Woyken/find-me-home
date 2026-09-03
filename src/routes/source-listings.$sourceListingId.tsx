@@ -6,6 +6,8 @@ import { paths } from '../paths'
 import type { CandidatePlotRecord } from '../source-listings/model'
 import { candidatePlotMapItem } from '../source-listings/map'
 import { formatDate } from './index'
+import { AUTOMATIC_CHECK_KEYS } from '../automatic-checks'
+import type { AutomaticCheckKey } from '../automatic-checks'
 
 export const preloadSourceListing = () => undefined
 
@@ -317,6 +319,11 @@ function CandidatePlotEditor(props: {
           props.plot.sourceListingId,
           props.plot.id,
         )
+  const runAutomaticChecks = () =>
+    household.runCandidatePlotAutomaticChecks(
+      props.plot.sourceListingId,
+      props.plot.id,
+    )
 
   createEffect(() => {
     if (
@@ -324,6 +331,14 @@ function CandidatePlotEditor(props: {
       !household.isCandidatePlotLocationRunning(props.plot.id)
     )
       void resolveLocation()
+  })
+
+  createEffect(() => {
+    if (
+      !props.plot.automaticChecks &&
+      !household.isCandidatePlotAutomaticChecksRunning(props.plot.id)
+    )
+      void runAutomaticChecks()
   })
 
   const save = async () => {
@@ -430,6 +445,49 @@ function CandidatePlotEditor(props: {
           </dl>
         </Show>
       </section>
+      <section class="mt-4 border border-[#24483a]/20 bg-[#e4efe7] p-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h3 class="font-serif text-xl">Automatic Checks</h3>
+          <button
+            class="border border-[#24483a] px-3 py-2 text-xs font-bold text-[#24483a] disabled:opacity-50"
+            disabled={household.isCandidatePlotAutomaticChecksRunning(
+              props.plot.id,
+            )}
+            onClick={() => void runAutomaticChecks()}
+          >
+            {household.isCandidatePlotAutomaticChecksRunning(props.plot.id)
+              ? 'Checking...'
+              : props.plot.automaticChecks
+                ? 'Retry checks'
+                : 'Run checks'}
+          </button>
+        </div>
+        <div class="mt-3 grid gap-2">
+          <For each={AUTOMATIC_CHECK_KEYS}>
+            {(key) => {
+              const check = () =>
+                props.plot.automaticChecks?.find((result) => result.key === key)
+              return (
+                <div class="border border-[#24483a]/15 bg-white px-3 py-2 text-sm">
+                  <div class="flex items-start justify-between gap-3">
+                    <b>{automaticCheckLabel(key)}</b>
+                    <span class="font-mono text-xs font-bold uppercase">
+                      {check()?.status ?? 'unknown'}
+                    </span>
+                  </div>
+                  <p class="mt-1">{check()?.value ?? 'Not checked'}</p>
+                  <Show when={check()?.detail}>
+                    <p class="mt-1 text-xs text-[#607067]">{check()!.detail}</p>
+                  </Show>
+                </div>
+              )
+            }}
+          </For>
+        </div>
+        <p class="mt-3 text-xs text-[#526058]">
+          Checks are independent advisory results, not an aggregate score.
+        </p>
+      </section>
       <div class="mt-4 grid gap-4 sm:grid-cols-2">
         <Field label="Name" value={name()} onInput={setName} />
         <Field label="Price (€)" value={price()} onInput={setPrice} />
@@ -521,6 +579,17 @@ function CandidatePlotEditor(props: {
     </article>
   )
 }
+
+const automaticCheckLabel = (key: AutomaticCheckKey) =>
+  ({
+    price: 'Price',
+    area: 'Area',
+    radius: 'Radius',
+    purpose: 'Purpose',
+    eso_cost: 'ESO cost',
+    legal_flags: 'Legal flags',
+    water_sewage: 'Water / sewage',
+  })[key]
 
 function Field(props: {
   label: string

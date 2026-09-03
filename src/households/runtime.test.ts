@@ -5,6 +5,7 @@ import { createHouseholdRuntime } from './runtime'
 import { parseAruodasImport } from '../imports/aruodas'
 import { createInMemoryRoomNetwork } from './in-memory-room'
 import type { ResolvedLocationData } from '../source-listings/model'
+import type { AutomaticCheckServices } from '../automatic-checks'
 
 const databasePrefixes: string[] = []
 
@@ -38,6 +39,234 @@ afterEach(async () => {
 })
 
 describe('Household runtime', () => {
+  it('runs independent Automatic Checks and stores completed results on the Candidate Plot', async () => {
+    const prefix = `automatic-checks-${crypto.randomUUID()}`
+    databasePrefixes.push(prefix)
+    let uuid = 0
+    const services: AutomaticCheckServices = {
+      estimateEsoCost: async () => ({
+        distanceM: 80,
+        group: 'I',
+        feeInclVat: 1_552,
+        note: 'Recorded ESO fixture',
+      }),
+      legalFlags: async () => [
+        { name: 'protected area', flag: false, detail: 'not protected' },
+        { name: 'heritage', flag: true, detail: 'heritage nearby' },
+        { name: 'flood zone', flag: false, detail: 'not flooded' },
+        { name: 'state forest', flag: false, detail: 'not forest' },
+      ],
+    }
+    const runtime = createBrowserHouseholdRuntime({
+      accessDatabaseName: `${prefix}-access`,
+      sharedDatabasePrefix: prefix,
+      crypto,
+      now: () => 10_000,
+      uuid: () => `check-${++uuid}`,
+      automaticCheckServices: services,
+    })
+    try {
+      await runtime.start()
+      await runtime.createHousehold()
+      const saved = await runtime.saveReviewedImport({
+        imported: parseAruodasImport({
+          url: 'https://www.aruodas.lt/sklypai-vilniuje-checks-1-1/',
+          description: 'Miesto vandentiekis ir kanalizacija',
+          photos: [],
+          features: [],
+        }),
+        priceEur: 55_000,
+        areaAres: 15,
+        purposeText: 'Namų valda',
+        notes: null,
+        parcelNumberClue: null,
+        latitudeClue: 54.7,
+        longitudeClue: 25.3,
+        coordinateCluePrecision: 'exact',
+        addressClue: null,
+      })
+
+      await runtime.runCandidatePlotAutomaticChecks(
+        saved.sourceListingId,
+        saved.candidatePlotId,
+      )
+
+      const plot = runtime.getSourceListing(saved.sourceListingId)!
+        .candidatePlots[0]
+      expect(plot.automaticChecks).toMatchObject([
+        { key: 'price', status: 'pass' },
+        { key: 'area', status: 'pass' },
+        { key: 'radius', status: 'pass' },
+        { key: 'purpose', status: 'pass' },
+        { key: 'eso_cost', status: 'pass', value: '€1,552 · Group I' },
+        { key: 'legal_flags', status: 'warning', value: '1 flag · heritage' },
+        { key: 'water_sewage', status: 'pass' },
+      ])
+      expect(runtime.isCandidatePlotAutomaticChecksRunning(plot.id)).toBe(false)
+    } finally {
+      runtime.dispose()
+    }
+  })
+
+  it('rejects stale Automatic Checks and maps an unavailable service on retry', async () => {
+    const prefix = `automatic-check-revision-${crypto.randomUUID()}`
+    databasePrefixes.push(prefix)
+    let finishEso:
+      | ((value: {
+          distanceM: number | null
+          group: 'I'
+          feeInclVat: number
+          note: string
+        }) => void)
+      | undefined
+    let firstRun = true
+    const runtime = createBrowserHouseholdRuntime({
+      accessDatabaseName: `${prefix}-access`,
+      sharedDatabasePrefix: prefix,
+      crypto,
+      now: () => 20_000,
+      automaticCheckServices: {
+        estimateEsoCost: () =>
+          firstRun
+            ? new Promise((resolve) => {
+                finishEso = resolve
+              })
+            : Promise.reject(new Error('ESO unavailable')),
+        legalFlags: async () => [],
+      },
+    })
+    try {
+      await runtime.start()
+      await runtime.createHousehold()
+      const saved = await runtime.saveReviewedImport({
+        imported: parseAruodasImport({
+          url: 'https://www.aruodas.lt/sklypai-vilniuje-stale-checks-1-1/',
+          photos: [],
+          features: [],
+        }),
+        priceEur: 50_000,
+        areaAres: 12,
+        purposeText: 'Namų valda',
+        notes: null,
+        parcelNumberClue: null,
+        latitudeClue: 54.7,
+        longitudeClue: 25.3,
+        coordinateCluePrecision: 'exact',
+        addressClue: null,
+      })
+      const running = runtime.runCandidatePlotAutomaticChecks(
+        saved.sourceListingId,
+        saved.candidatePlotId,
+      )
+      const plot = runtime.getSourceListing(saved.sourceListingId)!
+        .candidatePlots[0]
+      await runtime.updateCandidatePlot(saved.sourceListingId, plot.id, {
+        name: plot.name,
+        priceEur: 70_000,
+        areaAres: plot.areaAres,
+        purposeText: plot.purposeText,
+        notes: plot.notes,
+        parcelNumberClue: plot.parcelNumberClue,
+        latitudeClue: plot.latitudeClue,
+        longitudeClue: plot.longitudeClue,
+        coordinateCluePrecision: plot.coordinateCluePrecision,
+        addressClue: plot.addressClue,
+        roadAccessRating: plot.roadAccessRating,
+        areaFeelingRating: plot.areaFeelingRating,
+        viewRating: plot.viewRating,
+      })
+      finishEso?.({
+        distanceM: 50,
+        group: 'I',
+        feeInclVat: 1_000,
+        note: 'stale fixture',
+      })
+      await running
+      expect(
+        runtime.getSourceListing(saved.sourceListingId)!.candidatePlots[0]
+          .automaticChecks,
+      ).toBeNull()
+
+      firstRun = false
+      await runtime.runCandidatePlotAutomaticChecks(
+        saved.sourceListingId,
+        saved.candidatePlotId,
+      )
+      expect(
+        runtime
+          .getSourceListing(saved.sourceListingId)!
+          .candidatePlots[0].automaticChecks?.find(
+            (check) => check.key === 'eso_cost',
+          ),
+      ).toMatchObject({ status: 'unknown', value: 'Unavailable' })
+      expect(
+        runtime
+          .getSourceListing(saved.sourceListingId)!
+          .candidatePlots[0].automaticChecks?.find(
+            (check) => check.key === 'price',
+          ),
+      ).toMatchObject({ status: 'fail' })
+    } finally {
+      runtime.dispose()
+    }
+  })
+
+  it('retains successful legal evidence when another legal service is unavailable', async () => {
+    const prefix = `partial-legal-${crypto.randomUUID()}`
+    databasePrefixes.push(prefix)
+    const runtime = createBrowserHouseholdRuntime({
+      accessDatabaseName: `${prefix}-access`,
+      sharedDatabasePrefix: prefix,
+      crypto,
+      now: () => 30_000,
+      automaticCheckServices: {
+        estimateEsoCost: async () => ({
+          distanceM: 50,
+          group: 'I',
+          feeInclVat: 1_000,
+          note: 'fixture',
+        }),
+        legalFlags: async () => [
+          { name: 'protected area', flag: true, detail: 'protected' },
+          { name: 'flood zone', flag: null, detail: 'service unavailable' },
+        ],
+      },
+    })
+    try {
+      await runtime.start()
+      await runtime.createHousehold()
+      const saved = await runtime.saveReviewedImport({
+        imported: parseAruodasImport({
+          url: 'https://www.aruodas.lt/sklypai-vilniuje-partial-legal-1-1/',
+          photos: [],
+          features: [],
+        }),
+        priceEur: null,
+        areaAres: null,
+        purposeText: null,
+        notes: null,
+        parcelNumberClue: null,
+        latitudeClue: 54.7,
+        longitudeClue: 25.3,
+        coordinateCluePrecision: 'exact',
+        addressClue: null,
+      })
+      await runtime.runCandidatePlotAutomaticChecks(
+        saved.sourceListingId,
+        saved.candidatePlotId,
+      )
+      expect(
+        runtime
+          .getSourceListing(saved.sourceListingId)!
+          .candidatePlots[0].automaticChecks?.find(
+            (check) => check.key === 'legal_flags',
+          ),
+      ).toMatchObject({ status: 'warning', value: '1 flag · protected area' })
+    } finally {
+      runtime.dispose()
+    }
+  })
+
   it('joins an invitation read-only and receives the complete Household', async () => {
     const prefix = `paired-${crypto.randomUUID()}`
     databasePrefixes.push(prefix)
@@ -51,6 +280,15 @@ describe('Household runtime', () => {
         now: () => 10_000,
         uuid: () => `${device}-${++uuid}`,
         roomFactory,
+        automaticCheckServices: {
+          estimateEsoCost: async () => ({
+            distanceM: null,
+            group: 'individual',
+            feeInclVat: null,
+            note: 'fixture',
+          }),
+          legalFlags: async () => [],
+        },
       })
     const existing = createRuntime('existing')
     const invited = createRuntime('invited')
@@ -98,6 +336,19 @@ describe('Household runtime', () => {
       expect(invited.getVisitPlan().sourceListingIds).toEqual([
         saved.sourceListingId,
       ])
+      await existing.runCandidatePlotAutomaticChecks(
+        saved.sourceListingId,
+        saved.candidatePlotId,
+      )
+      await waitFor(
+        () =>
+          invited.getSourceListing(saved.sourceListingId)?.candidatePlots[0]
+            .automaticChecks?.length === 7,
+      )
+      expect(
+        invited.getSourceListing(saved.sourceListingId)?.candidatePlots[0]
+          .automaticChecks,
+      ).toHaveLength(7)
     } finally {
       existing.dispose()
       invited.dispose()
@@ -1035,6 +1286,7 @@ describe('Household runtime', () => {
           throw new Error('Not used')
         },
         applyCandidatePlotResolution: async () => false,
+        applyCandidatePlotAutomaticChecks: async () => false,
         getVisitPlan: () => ({
           id: 'visit-plan',
           householdId: 'second-household',

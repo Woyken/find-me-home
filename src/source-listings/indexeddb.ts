@@ -9,6 +9,8 @@ import type {
   SourceListingRecord,
   VisitPlanRecord,
 } from './model'
+import type { AutomaticCheck } from '../automatic-checks'
+import { automaticCheckRevision } from '../automatic-checks'
 
 export type SourceListingRepository = {
   open: (householdId: string) => Promise<void>
@@ -37,6 +39,13 @@ export type SourceListingRepository = {
     candidatePlotId: string,
     expectedClues: RecordedLocationClues,
     resolution: ResolvedLocationData,
+    updatedAt: number,
+  ) => Promise<boolean>
+  applyCandidatePlotAutomaticChecks: (
+    sourceListingId: string,
+    candidatePlotId: string,
+    expectedRevision: string,
+    checks: AutomaticCheck[],
     updatedAt: number,
   ) => Promise<boolean>
   getVisitPlan: () => VisitPlanRecord
@@ -198,6 +207,8 @@ export const createIndexedDbSourceListingRepository = (
           ? record.locationResolutionState
           : 'missing',
         parcelDatasetVersion: record.parcelDatasetVersion ?? null,
+        automaticChecks: record.automaticChecks ?? null,
+        automaticChecksRevision: record.automaticChecksRevision ?? null,
       }
     })
   }
@@ -297,8 +308,31 @@ export const createIndexedDbSourceListingRepository = (
               plot.importKey === 'primary',
           )
         : undefined
+      const sourceInputsChanged =
+        existing !== undefined &&
+        JSON.stringify([existing.utilities ?? {}, existing.description]) !==
+          JSON.stringify([
+            sourceListing.utilities ?? {},
+            sourceListing.description,
+          ])
       const candidatePlot: CandidatePlotRecord = existingPlot
-        ? { ...existingPlot, updatedAt: timestamp, deletedAt: undefined }
+        ? (() => {
+            const restored = {
+              ...existingPlot,
+              updatedAt: timestamp,
+              deletedAt: undefined,
+            }
+            return automaticCheckRevision({
+              plot: restored,
+              sourceListing,
+            }) === existingPlot.automaticChecksRevision
+              ? restored
+              : {
+                  ...restored,
+                  automaticChecks: null,
+                  automaticChecksRevision: null,
+                }
+          })()
         : {
             id: dependencies.uuid(),
             householdId: active.householdId,
@@ -328,6 +362,8 @@ export const createIndexedDbSourceListingRepository = (
               review.latitudeClue === null ? null : 'coordinates',
             locationResolutionState: 'missing',
             parcelDatasetVersion: null,
+            automaticChecks: null,
+            automaticChecksRevision: null,
             updatedAt: timestamp,
           }
       const transaction = active.database.transaction(
@@ -336,6 +372,23 @@ export const createIndexedDbSourceListingRepository = (
       )
       transaction.objectStore('source-listings').put(sourceListing)
       transaction.objectStore('candidate-plots').put(candidatePlot)
+      const secondaryPlots = existing
+        ? candidatePlots
+            .filter(
+              (plot) =>
+                plot.sourceListingId === existing.id &&
+                plot.id !== candidatePlot.id &&
+                sourceInputsChanged,
+            )
+            .map((plot) => ({
+              ...plot,
+              automaticChecks: null,
+              automaticChecksRevision: null,
+              updatedAt: timestamp,
+            }))
+        : []
+      for (const plot of secondaryPlots)
+        transaction.objectStore('candidate-plots').put(plot)
       await transactionComplete(transaction)
       sourceListings = existing
         ? sourceListings.map((record) =>
@@ -347,8 +400,16 @@ export const createIndexedDbSourceListingRepository = (
             plot.id === candidatePlot.id ? candidatePlot : plot,
           )
         : [...candidatePlots, candidatePlot]
+      if (secondaryPlots.length) {
+        const secondaryById = new Map(
+          secondaryPlots.map((plot) => [plot.id, plot]),
+        )
+        candidatePlots = candidatePlots.map(
+          (plot) => secondaryById.get(plot.id) ?? plot,
+        )
+      }
       publish()
-      publishLocal([sourceListing, candidatePlot])
+      publishLocal([sourceListing, candidatePlot, ...secondaryPlots])
       return {
         sourceListingId: sourceListing.id,
         candidatePlotId: candidatePlot.id,
@@ -392,6 +453,8 @@ export const createIndexedDbSourceListingRepository = (
         effectiveLocationSource: null,
         locationResolutionState: 'missing',
         parcelDatasetVersion: null,
+        automaticChecks: null,
+        automaticChecksRevision: null,
         updatedAt,
       }
       const transaction = active.database.transaction(
@@ -446,6 +509,18 @@ export const createIndexedDbSourceListingRepository = (
           : {}),
         updatedAt,
       }
+      if (
+        sourceListings.find((record) => record.id === sourceListingId) &&
+        automaticCheckRevision({
+          plot: candidatePlot,
+          sourceListing: sourceListings.find(
+            (record) => record.id === sourceListingId,
+          )!,
+        }) !== existing.automaticChecksRevision
+      ) {
+        candidatePlot.automaticChecks = null
+        candidatePlot.automaticChecksRevision = null
+      }
       const transaction = active.database.transaction(
         'candidate-plots',
         'readwrite',
@@ -457,6 +532,50 @@ export const createIndexedDbSourceListingRepository = (
       )
       publish()
       publishLocal([candidatePlot])
+    },
+    async applyCandidatePlotAutomaticChecks(
+      sourceListingId,
+      candidatePlotId,
+      expectedRevision,
+      checks,
+      updatedAt,
+    ) {
+      const active = requireOpen()
+      const existing = candidatePlots.find(
+        (plot) =>
+          plot.id === candidatePlotId &&
+          plot.sourceListingId === sourceListingId &&
+          plot.householdId === active.householdId &&
+          !plot.deletedAt,
+      )
+      const sourceListing = sourceListings.find(
+        (record) => record.id === sourceListingId && !record.deletedAt,
+      )
+      if (
+        !existing ||
+        !sourceListing ||
+        automaticCheckRevision({ plot: existing, sourceListing }) !==
+          expectedRevision
+      )
+        return false
+      const candidatePlot = {
+        ...existing,
+        automaticChecks: structuredClone(checks),
+        automaticChecksRevision: expectedRevision,
+        updatedAt,
+      }
+      const transaction = active.database.transaction(
+        'candidate-plots',
+        'readwrite',
+      )
+      transaction.objectStore('candidate-plots').put(candidatePlot)
+      await transactionComplete(transaction)
+      candidatePlots = candidatePlots.map((plot) =>
+        plot.id === candidatePlotId ? candidatePlot : plot,
+      )
+      publish()
+      publishLocal([candidatePlot])
+      return true
     },
     async applyCandidatePlotResolution(
       sourceListingId,
@@ -483,10 +602,21 @@ export const createIndexedDbSourceListingRepository = (
       }
       if (JSON.stringify(currentClues) !== JSON.stringify(expectedClues))
         return false
-      const candidatePlot = {
+      const candidatePlot: CandidatePlotRecord = {
         ...existing,
         ...structuredClone(resolution),
         updatedAt,
+      }
+      const sourceListing = sourceListings.find(
+        (record) => record.id === sourceListingId,
+      )
+      if (
+        sourceListing &&
+        automaticCheckRevision({ plot: candidatePlot, sourceListing }) !==
+          existing.automaticChecksRevision
+      ) {
+        candidatePlot.automaticChecks = null
+        candidatePlot.automaticChecksRevision = null
       }
       const transaction = active.database.transaction(
         'candidate-plots',

@@ -116,6 +116,8 @@ const createTestRuntime = () => {
     updateCandidatePlot: async () => undefined,
     resolveCandidatePlotLocation: async () => undefined,
     isCandidatePlotLocationRunning: () => false,
+    runCandidatePlotAutomaticChecks: () => Promise.resolve(),
+    isCandidatePlotAutomaticChecksRunning: () => false,
     getVisitPlan: () => ({
       id: 'visit-plan',
       householdId: 'household-id',

@@ -10,6 +10,8 @@ import type {
 } from '../source-listings/model'
 import { recordedLocationClues } from '../location-resolution'
 import type { LocationResolver } from '../location-resolution'
+import { automaticCheckRevision, runAutomaticChecks } from '../automatic-checks'
+import type { AutomaticCheckServices } from '../automatic-checks'
 
 export type HouseholdRuntime = {
   state: () => HouseholdRuntimeState
@@ -37,6 +39,11 @@ export type HouseholdRuntime = {
     candidatePlotId: string,
   ) => Promise<void>
   isCandidatePlotLocationRunning: (candidatePlotId: string) => boolean
+  runCandidatePlotAutomaticChecks: (
+    sourceListingId: string,
+    candidatePlotId: string,
+  ) => Promise<void>
+  isCandidatePlotAutomaticChecksRunning: (candidatePlotId: string) => boolean
   getVisitPlan: SourceListingRepository['getVisitPlan']
   setVisitPlan: (sourceListingIds: string[]) => Promise<void>
   markSourceListingVisited: (sourceListingId: string) => Promise<void>
@@ -68,6 +75,7 @@ export const createHouseholdRuntime = (dependencies: {
   }) => HouseholdRoom
   invitationBaseUrl?: () => string
   locationResolver?: LocationResolver
+  automaticCheckServices?: AutomaticCheckServices
 }): HouseholdRuntime => {
   let state: HouseholdRuntimeState = { status: 'starting' }
   let lastMutationAt = 0
@@ -75,6 +83,7 @@ export const createHouseholdRuntime = (dependencies: {
   let localHouseholds: LocalHousehold[] = []
   const listeners = new Set<() => void>()
   const runningLocationResolutions = new Set<string>()
+  const runningAutomaticChecks = new Set<string>()
   const setState = (next: HouseholdRuntimeState) => {
     state = next
     for (const listener of listeners) listener()
@@ -545,6 +554,42 @@ export const createHouseholdRuntime = (dependencies: {
     },
     isCandidatePlotLocationRunning: (candidatePlotId) =>
       runningLocationResolutions.has(candidatePlotId),
+    async runCandidatePlotAutomaticChecks(sourceListingId, candidatePlotId) {
+      if (!dependencies.automaticCheckServices) return
+      if (runningAutomaticChecks.has(candidatePlotId)) return
+      const sourceListing = dependencies.sourceListings.get(sourceListingId)
+      const plot = sourceListing?.candidatePlots.find(
+        (candidate) => candidate.id === candidatePlotId,
+      )
+      if (!sourceListing || !plot) throw new Error('Candidate Plot not found')
+      const expectedRevision = automaticCheckRevision({
+        plot,
+        sourceListing,
+      })
+      runningAutomaticChecks.add(candidatePlotId)
+      for (const listener of listeners) listener()
+      try {
+        const checks = await runAutomaticChecks(
+          { plot, sourceListing },
+          dependencies.automaticCheckServices,
+        )
+        const updatedAt = mutationTime()
+        await serializeWrite(() =>
+          dependencies.sourceListings.applyCandidatePlotAutomaticChecks(
+            sourceListingId,
+            candidatePlotId,
+            expectedRevision,
+            checks,
+            updatedAt,
+          ),
+        )
+      } finally {
+        runningAutomaticChecks.delete(candidatePlotId)
+        for (const listener of listeners) listener()
+      }
+    },
+    isCandidatePlotAutomaticChecksRunning: (candidatePlotId) =>
+      runningAutomaticChecks.has(candidatePlotId),
     getVisitPlan: () => dependencies.sourceListings.getVisitPlan(),
     setVisitPlan: (sourceListingIds) => {
       const updatedAt = mutationTime()
@@ -591,6 +636,7 @@ export const createHouseholdRuntime = (dependencies: {
       unsubscribeHouseholds()
       listeners.clear()
       runningLocationResolutions.clear()
+      runningAutomaticChecks.clear()
       dependencies.accessStore.close()
       dependencies.households.close()
       dependencies.sourceListings.close()

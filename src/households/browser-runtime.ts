@@ -9,6 +9,8 @@ import type { HouseholdRoom } from './synchronization'
 import { createIndexedDbSourceListingRepository } from '../source-listings/indexeddb'
 import type { LocationResolver } from '../location-resolution'
 import { createBrowserLocationResolver } from '../location-services'
+import type { AutomaticCheckServices } from '../automatic-checks'
+import { createBrowserAutomaticCheckServices } from '../automatic-check-services'
 
 export const createBrowserHouseholdRuntime = (options?: {
   accessDatabaseName?: string
@@ -23,6 +25,7 @@ export const createBrowserHouseholdRuntime = (options?: {
     roomPassword: string
   }) => HouseholdRoom
   locationResolver?: LocationResolver
+  automaticCheckServices?: AutomaticCheckServices
 }) => {
   const cryptoApi = options?.crypto ?? crypto
   const sharedDatabasePrefix =
@@ -63,5 +66,10 @@ export const createBrowserHouseholdRuntime = (options?: {
       (typeof window === 'undefined'
         ? undefined
         : createBrowserLocationResolver()),
+    automaticCheckServices:
+      options?.automaticCheckServices ??
+      (typeof window === 'undefined'
+        ? undefined
+        : createBrowserAutomaticCheckServices()),
   })
 }

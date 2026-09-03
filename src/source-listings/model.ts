@@ -1,5 +1,6 @@
 import type { AruodasImport } from '../imports/aruodas'
 import type { Polygon } from 'geojson'
+import type { AutomaticCheck } from '../automatic-checks'
 
 export type SourceListingRecord = {
   id: string
@@ -46,6 +47,8 @@ export type CandidatePlotRecord = {
   effectiveLocationSource: 'parcel_number' | 'coordinates' | 'address' | null
   locationResolutionState: 'missing' | 'resolved' | 'no-result' | 'unavailable'
   parcelDatasetVersion: string | null
+  automaticChecks?: AutomaticCheck[] | null
+  automaticChecksRevision?: string | null
   updatedAt: number
   deletedAt?: number
 }
