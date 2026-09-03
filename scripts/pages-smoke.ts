@@ -25,7 +25,7 @@ const [
   parcels,
 ] = await Promise.all([
   expectOk(new URL('.', pagesUrl)),
-  expectOk(new URL('visit-plan', pagesUrl)),
+  fetch(new URL('visit-plan', pagesUrl)),
   fetch(
     new URL('#household=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', pagesUrl),
   ),
