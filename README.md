@@ -1,139 +1,40 @@
-Welcome to your new TanStack Start app! 
+# Find Me Home
 
-Production Cloudflare Worker and GitHub Pages setup, release, rollback, and verification are documented in [Production deployment](docs/production-deployment.md). Run `scripts/setup-production.sh` for interactive first-time setup or credential rotation.
+Find Me Home is an installable, browser-owned application for coordinating a Household's property search. Household records remain in each browser's IndexedDB and synchronize directly between online Household members. The static application is hosted at <https://woyken.github.io/find-me-home/> and uses a stateless Cloudflare Worker only for fixed external-service operations.
 
-# Getting Started
+## Local development
 
-To run this application:
-
-```bash
-npm install
-npm run dev
-```
-
-# Building For Production
-
-To build this application for production:
+Use Node.js 24 and pnpm 11:
 
 ```bash
-npm run build
+pnpm install
+pnpm dev
 ```
 
-## Styling
+The browser app runs at `http://localhost:3000`. Set `VITE_WORKER_URL` in `.env` to use the deployed Worker for automatic checks. No application server, SQLite database, or writable runtime data directory is required.
 
-This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
-
-### Removing Tailwind CSS
-
-If you prefer not to use Tailwind CSS:
-
-1. Remove the demo pages in `src/routes/demo/`
-2. Replace the Tailwind import in `src/styles.css` with your own styles
-3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Uninstall the packages: `npm install @tailwindcss/vite tailwindcss -D`
-
-
-
-## Routing
-
-This project uses [TanStack Router](https://tanstack.com/router) with file-based routing. Routes are managed as files in `src/routes`.
-
-### Adding A Route
-
-To add a new route to your application just add a new file in the `./src/routes` directory.
-
-TanStack will automatically generate the content of the route file for you.
-
-Now that you have two routes you can use a `Link` component to navigate between them.
-
-### Adding Links
-
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/solid-router`.
-
-```tsx
-import { Link } from "@tanstack/solid-router";
-```
-
-Then anywhere in your JSX you can use it like so:
-
-```tsx
-<Link to="/about">About</Link>
-```
-
-This will create a link that will navigate to the `/about` route.
-
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/solid/api/router/linkComponent).
-
-### Using A Layout
-
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes.
-
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/solid/guide/routing-concepts#layouts).
-
-## Server Functions
-
-TanStack Start provides server functions that allow you to write server-side code that seamlessly integrates with your client components.
-
-```tsx
-import { createServerFn } from '@tanstack/solid-start'
-
-const getServerTime = createServerFn({
-  method: 'GET',
-}).handler(async () => {
-  return new Date().toISOString()
-})
-```
-
-## Data Fetching
-
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
-
-For example:
-
-```tsx
-import { createFileRoute } from '@tanstack/solid-router'
-
-export const Route = createFileRoute('/people')({
-  loader: async () => {
-    const response = await fetch('https://swapi.dev/api/people')
-    return response.json()
-  },
-  component: PeopleComponent,
-})
-
-function PeopleComponent() {
-  const data = Route.useLoaderData()
-  return (
-    <ul>
-      <For each={data().results}>
-        {(person) => <li>{person.name}</li>}
-      </For>
-    </ul>
-  )
-}
-```
-
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/solid/guide/data-loading#loader-parameters).
-
-# Demo files
-
-Files prefixed with `demo` can be safely deleted. They are there to provide a starting point for you to play around with the features you've installed.
-
-
-## Linting & Formatting
-
-
-This project uses [eslint](https://eslint.org/) and [prettier](https://prettier.io/) for linting and formatting. Eslint is configured using [tanstack/eslint-config](https://tanstack.com/config/latest/docs/eslint). The following scripts are available:
+Run the project checks with:
 
 ```bash
-npm run lint
-npm run format
-npm run check
+pnpm test
+pnpm typecheck
+pnpm lint
+pnpm check
 ```
 
+`pnpm build` creates the complete static artifact in `dist/client`, including the repository-aware manifest, history-route fallback, and versioned offline shell. Registered Parcel shards are generated separately into `public/parcels` before a production build and are fetched lazily rather than precached.
 
-# Learn More
+## Production
 
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
+The `Refresh Registered Parcel assets` GitHub Actions workflow deploys from `main`, runs every Friday at 18:00 UTC, and supports manual dispatch. It deploys and verifies the Worker, transforms and validates Registered Parcel data, builds one Pages artifact, and smoke-tests the deployed application. Any failure before Pages deployment leaves the previous site reachable.
 
-For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
+Initial configuration, release checks, rollback, and incident procedures are documented in [Production deployment](docs/production-deployment.md). Run `scripts/setup-production.sh` only for first-time setup or credential rotation.
+
+## Data and map attribution
+
+- Property listings are supplied by Household members from [Aruodas.lt](https://www.aruodas.lt/) using the local bookmarklet review flow.
+- Registered Parcel data is derived from public datasets published by Lithuania's [State Enterprise Centre of Registers](https://www.registrucentras.lt/).
+- Maps use [OpenStreetMap](https://www.openstreetmap.org/copyright) data and Leaflet.
+- External checks use the fixed Regia, Trafi, INSPIRE, and IRD boundaries documented in the production guide.
+
+Availability and reuse remain subject to each upstream provider's terms and attribution requirements.

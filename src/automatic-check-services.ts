@@ -82,8 +82,9 @@ const estimateEsoCost: AutomaticCheckServices['estimateEsoCost'] = async (
           ]
         : [],
     )
-    .sort((left, right) => left.distanceM - right.distanceM)[0]
-  if (!nearest)
+    .sort((left, right) => left.distanceM - right.distanceM)
+    .at(0)
+  if (nearest === undefined)
     return {
       distanceM: null,
       group: 'individual',

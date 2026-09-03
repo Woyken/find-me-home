@@ -12,6 +12,12 @@ import './styles.css'
 export default function App(
   props: ParentProps<{ runtime?: HouseholdRuntime }>,
 ) {
+  if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+    void navigator.serviceWorker.register(
+      `${import.meta.env.BASE_URL}service-worker.js`,
+      { scope: import.meta.env.BASE_URL },
+    )
+  }
   const runtime = props.runtime ?? createBrowserHouseholdRuntime()
   return (
     <ImportProvider>

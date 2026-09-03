@@ -75,7 +75,7 @@ ask CLOUDFLARE_ACCOUNT_ID "Paste the Account ID:"
 write_env CLOUDFLARE_API_TOKEN "$CLOUDFLARE_API_TOKEN"
 write_env CLOUDFLARE_ACCOUNT_ID "$CLOUDFLARE_ACCOUNT_ID"
 set_secret CLOUDFLARE_API_TOKEN "$CLOUDFLARE_API_TOKEN"
-set_var CLOUDFLARE_ACCOUNT_ID "$CLOUDFLARE_ACCOUNT_ID"
+set_secret CLOUDFLARE_ACCOUNT_ID "$CLOUDFLARE_ACCOUNT_ID"
 
 stage "Workers subdomain"
 open_url "https://dash.cloudflare.com/?to=/:account/workers-and-pages"
@@ -97,9 +97,9 @@ if [[ "$VITE_WORKER_URL" != "https://find-me-home-operations.karolis-uzkuraitis.
   exit 1
 fi
 write_env VITE_WORKER_URL "$VITE_WORKER_URL"
-set_var VITE_WORKER_URL "$VITE_WORKER_URL"
+set_secret VITE_WORKER_URL "$VITE_WORKER_URL"
 pnpm smoke:worker "$VITE_WORKER_URL" "https://woyken.github.io"
 open_url "https://github.com/Woyken/find-me-home/actions/workflows/parcel-pages.yml"
-say "The next Pages release will deploy and verify this Worker before publishing the app."
+say "The next Pages release will deploy and verify this Worker before publishing and smoke-testing the app at https://woyken.github.io/find-me-home/."
 
 finish

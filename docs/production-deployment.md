@@ -4,9 +4,9 @@ The stateless Cloudflare Worker is deployed before the GitHub Pages artifact tha
 
 ## Production boundaries
 
-- Pages origin: `https://woyken.github.io`
+- Pages URL: `https://woyken.github.io/find-me-home/` (Worker CORS origin: `https://woyken.github.io`)
 - Worker name: `find-me-home-operations`
-- Worker endpoint: `https://find-me-home-operations.karolis-uzkuraitis.workers.dev`, also stored in GitHub variable `VITE_WORKER_URL`
+- Worker endpoint: `https://find-me-home-operations.karolis-uzkuraitis.workers.dev`, also stored as GitHub Actions secret `VITE_WORKER_URL`
 - Worker binding: plaintext `PRODUCTION_ORIGIN` only
 - Worker storage: no KV, D1, Durable Objects, databases, Household data, application credentials, or durable sessions
 
@@ -14,13 +14,14 @@ The Worker exposes only fixed Regia, Trafi, INSPIRE, and IRD operations. CORS al
 
 ## Release and verification
 
-The `Refresh Registered Parcel assets` workflow uses a least-privilege Cloudflare API token stored as `CLOUDFLARE_API_TOKEN`, the public `CLOUDFLARE_ACCOUNT_ID`, and the public `VITE_WORKER_URL`. Push releases preserve the currently published parcel assets; scheduled and manually dispatched runs refresh them before publication. A failed external refresh does not replace the last good Pages deployment. The workflow jobs enforce this order:
+The `Refresh Registered Parcel assets` workflow reads `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `VITE_WORKER_URL` from GitHub Actions secrets. The account ID and Worker URL are not credentials and the URL is necessarily included in the browser bundle, but storing all three in one Actions mechanism keeps production configuration consistent. Push, scheduled, and manually dispatched releases refresh parcel assets before publication so each upload is one complete, validated artifact. A failed external refresh does not replace the last good Pages deployment. The workflow jobs enforce this order:
 
 1. Deploy `find-me-home-operations` with Wrangler.
 2. Run `pnpm smoke:worker "$VITE_WORKER_URL"` against the live deployment.
-3. Build Pages with the explicit `VITE_WORKER_URL`.
-4. Reject the `dist/client` Pages artifact if it lacks that endpoint or contains a conventional local Worker/dev-server fallback.
-5. Publish the verified artifact.
+3. Generate and validate Registered Parcel assets into `public/parcels`.
+4. Build Pages with the explicit `VITE_WORKER_URL`.
+5. Reject the `dist/client` Pages artifact if it lacks that endpoint or contains a conventional local Worker/dev-server fallback.
+6. Publish the verified artifact and smoke-test direct routing, PWA metadata, the parcel manifest, and Worker CORS from the production origin.
 
 The smoke command verifies allowed-origin preflight, rejected foreign-origin CORS, a valid fixed Trafi operation, invalid-input rejection, an ignored hostile upstream override, and Trafi upstream-failure mapping using impossible route parameters. Browser operations map network and upstream failures to unavailable/unknown states and permit manual retry.
 

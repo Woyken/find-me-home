@@ -1,3 +1,8 @@
-package-lock.json
+.agents/
+.cta.json
+AGENTS.md
+dist/
+eslint.config.js
 pnpm-lock.yaml
-yarn.lock
+prettier.config.js
+tsconfig.json

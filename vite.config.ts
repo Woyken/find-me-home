@@ -32,14 +32,7 @@ export default defineConfig({
       ? `/${process.env.GITHUB_REPOSITORY?.split('/')[1] ?? ''}/`
       : '/',
   resolve: { tsconfigPaths: true },
-  plugins: [
-    bookmarkletPlugin(),
-    tailwindcss(),
-    solid({
-      start: { middleware: './src/middleware.ts' },
-      ssr: false,
-      serverFunctions: true,
-    }),
-  ],
+  plugins: [bookmarkletPlugin(), tailwindcss(), solid()],
+  build: { outDir: 'dist/client' },
   server: { port: 3000 },
 })
