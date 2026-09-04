@@ -1,21 +1,27 @@
 import { Show, createEffect, createSignal, onCleanup } from 'solid-js'
 import 'leaflet/dist/leaflet.css'
 import type * as Leaflet from 'leaflet'
-import type { Feature, Polygon } from 'geojson'
+import type { CandidatePlotMapItem } from '../source-listings/map'
+import {
+  BLUE,
+  OSM_ATTRIBUTION,
+  OSM_TILES,
+  STAKE,
+  itemsBounds,
+  shapeLayer,
+} from './leaflet-shapes'
 
-interface MapPlot {
-  id: string
-  label: string
-  latitude: number
-  longitude: number
-  boundary: Polygon | null
-  precision: 'exact' | 'approx'
-}
+export type MapFocusRequest = { plotId: string; nonce: number }
 
+/**
+ * The big map of a plot's marked areas. Clicking a shape selects it; a
+ * `focus` request flies to one. Includes "Where am I" and full screen.
+ */
 export function CandidatePlotsMap(props: {
-  plots: Array<MapPlot>
+  plots: Array<CandidatePlotMapItem>
   selectedPlotId: string | undefined
   onSelect: (plotId: string) => void
+  focus?: MapFocusRequest
 }) {
   let map: Leaflet.Map | undefined
   let plotLayer: Leaflet.LayerGroup | undefined
@@ -32,17 +38,11 @@ export function CandidatePlotsMap(props: {
 
   const resolveLabelCollisions = () => {
     if (!map) return
-    const mapContainer = map.getContainer()
     const labels = [
-      ...mapContainer.querySelectorAll<HTMLElement>(
-        '.candidate-plot-map-label',
-      ),
+      ...map.getContainer().querySelectorAll<HTMLElement>('.fmh-label'),
     ]
     labels.forEach((label) => (label.style.visibility = 'visible'))
-    labels.sort((label) =>
-      label.classList.contains('candidate-plot-map-label-selected') ? -1 : 1,
-    )
-
+    labels.sort((label) => (label.classList.contains('sel') ? -1 : 1))
     const visible: Array<DOMRect> = []
     for (const label of labels) {
       const bounds = label.getBoundingClientRect()
@@ -60,75 +60,27 @@ export function CandidatePlotsMap(props: {
 
   const draw = (
     fitBounds: boolean,
-    plots: Array<MapPlot>,
+    plots: Array<CandidatePlotMapItem>,
     selectedPlotId: string | undefined,
   ) => {
     if (!map || !leaflet || !plotLayer) return
-
+    const bounds = itemsBounds(leaflet, plots)
+    if (fitBounds && bounds) map.fitBounds(bounds.pad(0.3), { maxZoom: 17 })
+    else if (fitBounds) map.setView([54.6872, 25.2797], 10)
     plotLayer.clearLayers()
-    const bounds = leaflet.latLngBounds([])
     for (const plot of plots) {
       const selected = plot.id === selectedPlotId
-      const color = selected ? '#d96a45' : '#315f73'
-      const select = () => {
-        props.onSelect(plot.id)
-        map?.panTo([plot.latitude, plot.longitude])
-      }
-
-      if (plot.boundary) {
-        const feature: Feature<Polygon> = {
-          type: 'Feature',
-          properties: {},
-          geometry: plot.boundary,
-        }
-        const boundary = leaflet.geoJSON(feature, {
-          style: {
-            color,
-            weight: selected ? 4 : 2,
-            fillColor: color,
-            fillOpacity: selected ? 0.3 : 0.14,
-          },
-        })
-        boundary.on('click', select)
-        boundary.bindTooltip(plot.label, {
-          permanent: true,
-          direction: 'center',
-          interactive: true,
-          className: `candidate-plot-map-label ${
-            selected ? 'candidate-plot-map-label-selected' : ''
-          }`,
-        })
-        boundary.getTooltip()?.on('click', select)
-        boundary.addTo(plotLayer)
-        bounds.extend(boundary.getBounds())
-        continue
-      }
-
-      const radius = plot.precision === 'approx' ? 80 : 24
-      const location = leaflet.circle([plot.latitude, plot.longitude], {
-        radius,
-        color,
-        weight: selected ? 4 : 2,
-        fillColor: color,
-        fillOpacity: selected ? 0.24 : 0.1,
-        dashArray: '6 5',
-      })
-      location.on('click', select)
-      location.bindTooltip(plot.label, {
+      const shape = shapeLayer(leaflet, plot, selected ? STAKE : BLUE, selected)
+      const select = () => props.onSelect(plot.id)
+      shape.on('click', select)
+      shape.bindTooltip(plot.label, {
         permanent: true,
-        direction: 'center',
+        direction: 'top',
         interactive: true,
-        className: `candidate-plot-map-label ${
-          selected ? 'candidate-plot-map-label-selected' : ''
-        }`,
+        className: `fmh-label ${selected ? 'sel' : ''}`,
       })
-      location.getTooltip()?.on('click', select)
-      location.addTo(plotLayer)
-      bounds.extend([plot.latitude, plot.longitude])
-    }
-
-    if (fitBounds && bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [28, 28], maxZoom: 17 })
+      shape.getTooltip()?.on('click', select)
+      shape.addTo(plotLayer)
     }
     requestAnimationFrame(resolveLabelCollisions)
   }
@@ -141,14 +93,10 @@ export function CandidatePlotsMap(props: {
       plotLayer = loaded.layerGroup().addTo(map)
       householdLayer = loaded.layerGroup().addTo(map)
       loaded
-        .tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-          maxZoom: 19,
-        })
+        .tileLayer(OSM_TILES, { attribution: OSM_ATTRIBUTION, maxZoom: 19 })
         .addTo(map)
-      draw(true, props.plots, props.selectedPlotId)
       loaded.control.zoom({ position: 'bottomright' }).addTo(map)
+      draw(true, props.plots, props.selectedPlotId)
       map.on('zoomend moveend', resolveLabelCollisions)
       resizeObserver = new ResizeObserver(() => map?.invalidateSize())
       resizeObserver.observe(element)
@@ -160,6 +108,18 @@ export function CandidatePlotsMap(props: {
     ([plots, selectedPlotId]) => draw(false, plots, selectedPlotId),
   )
 
+  createEffect(
+    () => props.focus,
+    (focus) => {
+      if (!focus || !map) return
+      const plot = props.plots.find((item) => item.id === focus.plotId)
+      if (!plot) return
+      map.flyTo([plot.latitude, plot.longitude], Math.max(map.getZoom(), 16), {
+        duration: 0.5,
+      })
+    },
+  )
+
   onCleanup(() => {
     disposed = true
     resizeObserver?.disconnect()
@@ -169,13 +129,11 @@ export function CandidatePlotsMap(props: {
   const locate = () => {
     if (!('geolocation' in navigator) || !leaflet || !map || !householdLayer) {
       setLocationState('unavailable')
-      setLocationMessage(
-        'Live location is unavailable. Map and field notes remain usable.',
-      )
+      setLocationMessage('Your location is not available here.')
       return
     }
     setLocationState('locating')
-    setLocationMessage('Finding your location…')
+    setLocationMessage('Finding you…')
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         if (disposed || !leaflet || !map || !householdLayer) return
@@ -183,18 +141,18 @@ export function CandidatePlotsMap(props: {
         leaflet
           .circle([coords.latitude, coords.longitude], {
             radius: coords.accuracy,
-            color: '#315f73',
+            color: BLUE,
             weight: 1,
-            fillColor: '#315f73',
+            fillColor: BLUE,
             fillOpacity: 0.1,
           })
           .addTo(householdLayer)
         leaflet
           .circleMarker([coords.latitude, coords.longitude], {
             radius: 7,
-            color: '#faf9f4',
+            color: '#fff',
             weight: 3,
-            fillColor: '#315f73',
+            fillColor: BLUE,
             fillOpacity: 1,
           })
           .bindTooltip(`You · ±${Math.round(coords.accuracy)} m`)
@@ -204,7 +162,7 @@ export function CandidatePlotsMap(props: {
           Math.max(map.getZoom(), 16),
         )
         setLocationMessage(
-          `Live location accuracy ±${Math.round(coords.accuracy)} m`,
+          `You are here, give or take ${Math.round(coords.accuracy)} m`,
         )
         setLocationState('available')
       },
@@ -213,10 +171,10 @@ export function CandidatePlotsMap(props: {
         setLocationState('unavailable')
         setLocationMessage(
           error.code === error.PERMISSION_DENIED
-            ? 'Location access denied. Map and field notes remain usable.'
+            ? 'Location access was denied. The map still works.'
             : error.code === error.TIMEOUT
-              ? 'Location timed out. Map and field notes remain usable.'
-              : 'Live location is unavailable. Map and field notes remain usable.',
+              ? 'Finding you took too long. The map still works.'
+              : 'Your location is not available. The map still works.',
         )
       },
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 15_000 },
@@ -224,10 +182,9 @@ export function CandidatePlotsMap(props: {
   }
 
   const toggleFullscreen = async () => {
-    const element = container
-    if (!element) return
+    if (!container) return
     if (document.fullscreenElement) await document.exitFullscreen()
-    else await element.requestFullscreen()
+    else await container.requestFullscreen()
   }
 
   const onFullscreenChange = () => {
@@ -243,35 +200,27 @@ export function CandidatePlotsMap(props: {
   }
 
   return (
-    <div
-      ref={container}
-      class="relative h-80 w-full border border-[#17231d]/15 bg-[#f6f4ec] fullscreen:h-screen"
-    >
-      <div
-        ref={init}
-        class="absolute inset-0"
-        aria-label="Map of Candidate Plots"
-      />
-      <div class="absolute left-3 top-3 z-[500] flex max-w-[calc(100%-1.5rem)] flex-wrap gap-2">
+    <div ref={container} class="bigmap">
+      <div ref={init} class="canvas" aria-label="Map of the marked areas" />
+      <div class="overlay">
         <button
-          class="min-h-11 border border-[#17231d]/25 bg-[#faf9f4] px-3 text-xs font-bold shadow"
+          class="btn sm"
+          type="button"
           disabled={locationState() === 'locating'}
           onClick={locate}
         >
-          {locationState() === 'locating' ? 'Locating…' : 'Center on me'}
+          {locationState() === 'locating' ? 'Finding you…' : 'Where am I'}
         </button>
         <button
-          class="min-h-11 border border-[#17231d]/25 bg-[#faf9f4] px-3 text-xs font-bold shadow"
+          class="btn sm"
+          type="button"
           onClick={() => void toggleFullscreen()}
         >
           {fullscreen() ? 'Exit full screen' : 'Full screen'}
         </button>
       </div>
       <Show when={locationMessage()}>
-        <p
-          class="absolute bottom-3 left-3 z-[500] max-w-[calc(100%-5rem)] bg-[#faf9f4] px-3 py-2 text-xs font-bold shadow"
-          role="status"
-        >
+        <p class="status" role="status">
           {locationMessage()}
         </p>
       </Show>

@@ -7,6 +7,7 @@ import type { ReviewedImport } from '../source-listings/model'
 type HouseholdContextValue = {
   state: () => HouseholdRuntimeState
   createHousehold: () => Promise<void>
+  joinHousehold: HouseholdRuntime['joinHousehold']
   listHouseholds: HouseholdRuntime['listHouseholds']
   switchHousehold: HouseholdRuntime['switchHousehold']
   removeHousehold: HouseholdRuntime['removeHousehold']
@@ -67,6 +68,8 @@ export function HouseholdProvider(
       value={{
         state,
         createHousehold: () => props.runtime.createHousehold(),
+        joinHousehold: (invitationSecret) =>
+          props.runtime.joinHousehold(invitationSecret),
         listHouseholds: () => {
           state()
           return props.runtime.listHouseholds()

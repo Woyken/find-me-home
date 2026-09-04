@@ -1,22 +1,41 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { CandidatePlotsMap } from '../components/CandidatePlotsMap'
+import type { MapFocusRequest } from '../components/CandidatePlotsMap'
+import { CheckStrip, CheckSummaryText } from '../components/CheckStrip'
+import { FannedStack } from '../components/FannedStack'
+import { GoSeeButton } from '../components/GoSeeButton'
+import { CheckIcon, PinIcon } from '../components/icons'
 import { useHousehold } from '../households/context'
 import { paths } from '../paths'
 import type {
   CandidatePlotRecord,
   SourceListingRecord,
 } from '../source-listings/model'
-import { candidatePlotMapItem } from '../source-listings/map'
-import { formatDate } from './index'
+import {
+  candidatePlotName,
+  sourceListingMapItems,
+} from '../source-listings/map'
 import {
   AUTOMATIC_CHECK_KEYS,
   automaticCheckRevision,
 } from '../automatic-checks'
-import type { AutomaticCheckKey } from '../automatic-checks'
+import {
+  checkCells,
+  checkStatusTagClass,
+  checkStatusWord,
+} from '../check-summary'
 import { describeLks94 } from '../location-resolution'
+import { formatAgo, formatDateLong, formatDateShort } from '../format'
 
 export const preloadSourceListing = () => undefined
+
+const utilityLabel = {
+  electricity: 'electricity',
+  water: 'water',
+  sewage: 'sewage',
+  gas: 'gas',
+} as const
 
 export default function SourceListingPage(props: {
   params: Record<string, string | undefined>
@@ -27,151 +46,176 @@ export default function SourceListingPage(props: {
     household.getSourceListing(props.params.sourceListingId ?? ''),
   )
   const [selectedPlotId, setSelectedPlotId] = createSignal<string>()
+  const [focus, setFocus] = createSignal<MapFocusRequest>()
+  const [photoIndex, setPhotoIndex] = createSignal(0)
   const [error, setError] = createSignal('')
   const [busy, setBusy] = createSignal(false)
-  const positionedPlots = createMemo(() =>
-    (listing()?.candidatePlots ?? []).flatMap((candidatePlot, index) => {
-      const item = candidatePlotMapItem(
-        candidatePlot,
-        candidatePlot.name ?? `Candidate Plot ${index + 1}`,
-      )
-      return item ? [item] : []
-    }),
-  )
-  const planned = createMemo(() => {
-    const id = listing()?.id
-    return id ? household.getVisitPlan().sourceListingIds.includes(id) : false
+  const positionedPlots = createMemo(() => {
+    const current = listing()
+    return current ? sourceListingMapItems(current) : []
   })
-
-  const addPlot = async () => {
+  const title = () => {
     const current = listing()
-    if (!current) return
+    return current
+      ? (current.title ?? `Aruodas advert ${current.sourceId}`)
+      : ''
+  }
+  const utilities = () =>
+    (Object.keys(utilityLabel) as Array<keyof typeof utilityLabel>).filter(
+      (key) => listing()?.utilities?.[key] !== undefined,
+    )
+
+  const scrollTo = (id: string) =>
+    requestAnimationFrame(() =>
+      document
+        .getElementById(id)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    )
+  const selectFromMap = (plotId: string) => {
+    setSelectedPlotId(plotId)
+    scrollTo(`area-${plotId}`)
+  }
+  const showOnMap = (plotId: string) => {
+    setSelectedPlotId(plotId)
+    setFocus({ plotId, nonce: Date.now() })
+    scrollTo('bigmap')
+  }
+
+  const run = async (action: () => Promise<void>) => {
     setBusy(true)
     setError('')
     try {
-      setSelectedPlotId(await household.addCandidatePlot(current.id))
+      await action()
     } catch (caught) {
       setError(errorMessage(caught))
     } finally {
       setBusy(false)
     }
   }
-
-  const togglePlan = async () => {
-    const current = listing()
-    if (!current) return
-    setBusy(true)
-    setError('')
-    try {
-      const ids = household.getVisitPlan().sourceListingIds
-      await household.setVisitPlan(
-        planned()
-          ? ids.filter((id) => id !== current.id)
-          : [...ids, current.id],
-      )
-    } catch (caught) {
-      setError(errorMessage(caught))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const completeVisit = async () => {
-    const current = listing()
-    if (!current) return
-    setBusy(true)
-    setError('')
-    try {
+  const addPlot = () =>
+    run(async () => {
+      const current = listing()
+      if (!current) return
+      const id = await household.addCandidatePlot(current.id)
+      setSelectedPlotId(id)
+      scrollTo(`area-${id}`)
+    })
+  const completeVisit = () =>
+    run(async () => {
+      const current = listing()
+      if (!current) return
       await household.markSourceListingVisited(current.id)
       navigate(paths.visitPlan)
-    } catch (caught) {
-      setError(errorMessage(caught))
-      setBusy(false)
-    }
-  }
-
-  const remove = async () => {
+    })
+  const remove = () => {
     const current = listing()
     if (!current) return
     if (
       !window.confirm(
-        `Remove "${current.title ?? 'Untitled Source Listing'}" and all its Candidate Plots from this Household and its Visit Plan? Importing the same marketplace advertisement later can restore it.`,
+        `Remove "${title()}" and its marked areas from the search? Saving the same advert again can bring it back.`,
       )
     )
       return
-    setBusy(true)
-    setError('')
-    try {
+    void run(async () => {
       await household.removeSourceListing(current.id)
       navigate(paths.home)
-    } catch (caught) {
-      setError(errorMessage(caught))
-      setBusy(false)
-    }
+    })
   }
 
   return (
-    <main class="min-h-screen bg-[#f6f4ec] px-5 py-8 text-[#17231d] sm:px-10">
-      <Show when={listing()} fallback={<p>Source Listing not found.</p>}>
+    <main class="wrap">
+      <a class="crumb" href={paths.home}>
+        ‹ All plots
+      </a>
+      <Show
+        when={listing()}
+        fallback={
+          <div class="panel empty">
+            <h2>This plot isn't here any more</h2>
+            <p>It may have been removed on another device.</p>
+            <a class="btn" href={paths.home}>
+              Back to plots
+            </a>
+          </div>
+        }
+      >
         {(item) => (
-          <div class="mx-auto max-w-5xl">
-            <div class="flex flex-wrap gap-x-5 gap-y-2">
-              <a
-                class="text-sm font-bold text-[#315f73] underline"
-                href={paths.visitPlan}
-              >
-                Visit Plan
-              </a>
-              <a
-                class="text-sm font-bold text-[#315f73] underline"
-                href={paths.home}
-              >
-                Saved Source Listings
-              </a>
-            </div>
-            <header class="mt-8 border-b border-[#17231d]/20 pb-8 sm:flex sm:items-end sm:justify-between sm:gap-6">
+          <>
+            <header class="head">
               <div>
-                <p class="font-mono text-xs font-bold uppercase text-[#315f73]">
-                  Aruodas · {item().sourceId}
-                </p>
-                <h1 class="mt-3 font-serif text-4xl sm:text-6xl">
-                  {item().title ?? 'Untitled Source Listing'}
-                </h1>
-                <p class="mt-4 text-lg text-[#607067]">
-                  {item().address ?? 'Location not recorded'}
-                </p>
-              </div>
-              <button
-                class="mt-5 border border-[#24483a] px-5 py-3 font-bold text-[#24483a] sm:mt-0"
-                disabled={busy()}
-                onClick={() => void togglePlan()}
-              >
-                {planned() ? 'Remove from Visit Plan' : 'Add to Visit Plan'}
-              </button>
-            </header>
-            <div class="mt-8 grid gap-8 lg:grid-cols-[1fr_18rem]">
-              <section class="min-w-0">
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                  <h2 class="font-serif text-3xl">Candidate Plots</h2>
-                  <button
-                    class="bg-[#d96a45] px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
-                    disabled={busy()}
-                    onClick={() => void addPlot()}
-                  >
-                    + Add Candidate Plot
-                  </button>
+                <h1>{title()}</h1>
+                <div class="place">
+                  {item().address ?? 'Location not recorded yet'}
                 </div>
-                <Show when={positionedPlots().length > 0}>
-                  <div class="mt-5">
+                <div class="tags">
+                  <a
+                    class="tag blue"
+                    href={item().url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Aruodas {item().sourceId} ↗
+                  </a>
+                  <Show
+                    when={item().visitedAt !== null}
+                    fallback={<span class="tag">not visited yet</span>}
+                  >
+                    <span class="tag pass">
+                      visited {formatDateShort(item().visitedAt)}
+                    </span>
+                  </Show>
+                  <span class="tag">changed {formatAgo(item().updatedAt)}</span>
+                </div>
+              </div>
+              <div>
+                <GoSeeButton sourceListingId={item().id} />
+              </div>
+            </header>
+
+            <div class="cols">
+              <div>
+                <Show
+                  when={positionedPlots().length > 0}
+                  fallback={
+                    <div class="panel blue">
+                      <b>Not on the map yet.</b>{' '}
+                      <span class="muted">
+                        Add a location hint to one of the marked areas below and
+                        we'll look it up.
+                      </span>
+                    </div>
+                  }
+                >
+                  <div id="bigmap">
                     <CandidatePlotsMap
                       plots={positionedPlots()}
                       selectedPlotId={selectedPlotId()}
-                      onSelect={setSelectedPlotId}
+                      onSelect={selectFromMap}
+                      focus={focus()}
                     />
                   </div>
                 </Show>
+
+                <div class="section-h">
+                  <div>
+                    <h2>Marked areas</h2>
+                    <p class="small muted" style={{ margin: '2px 0 0' }}>
+                      {item().candidatePlots.length === 1
+                        ? 'The whole plot as advertised. Mark another area if you would only buy part of it, or want to compare a split.'
+                        : `${item().candidatePlots.length} ways of buying this plot, compared side by side.`}
+                    </p>
+                  </div>
+                  <button
+                    class="btn stake ghost"
+                    type="button"
+                    disabled={busy()}
+                    onClick={() => void addPlot()}
+                  >
+                    + Mark another area
+                  </button>
+                </div>
                 <Show when={error()}>
-                  <p class="mt-4 font-bold text-[#a13d22]" role="alert">
+                  <p class="alert" role="alert">
                     {error()}
                   </p>
                 </Show>
@@ -182,7 +226,9 @@ export default function SourceListingPage(props: {
                       sourceListing={item()}
                       importedAddress={item().address}
                       number={index() + 1}
+                      total={item().candidatePlots.length}
                       selected={selectedPlotId() === plot.id}
+                      onShowOnMap={() => showOnMap(plot.id)}
                       onSave={(update) =>
                         household.updateCandidatePlot(
                           item().id,
@@ -193,80 +239,133 @@ export default function SourceListingPage(props: {
                     />
                   )}
                 </For>
-              </section>
-              <aside class="space-y-5">
-                <Show when={item().photos[0]}>
-                  {(photo) => (
+              </div>
+
+              <aside>
+                <Show
+                  when={item().photos.length > 0}
+                  fallback={
+                    <div class="panel soft muted small">
+                      No photos came with the advert.
+                    </div>
+                  }
+                >
+                  <div class="gallery">
                     <img
-                      class="aspect-[4/3] w-full object-cover"
-                      src={photo()}
+                      src={
+                        item().photos[
+                          Math.min(photoIndex(), item().photos.length - 1)
+                        ]
+                      }
                       alt=""
                     />
-                  )}
+                    <Show when={item().photos.length > 1}>
+                      <div class="thumbs">
+                        <For each={item().photos}>
+                          {(photo, index) => (
+                            <button
+                              type="button"
+                              aria-label={`Photo ${index() + 1}`}
+                              aria-pressed={
+                                index() === photoIndex() ? 'true' : 'false'
+                              }
+                              onClick={() => setPhotoIndex(index())}
+                            >
+                              <img src={photo} alt="" />
+                            </button>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
+                  </div>
                 </Show>
-                <div class="bg-[#e7edf0] p-5">
-                  <p>{item().description ?? 'No description imported.'}</p>
-                  <p class="mt-4 text-sm">
-                    <b>Last visited:</b> {formatDate(item().visitedAt)}
+                <div class="panel soft" style={{ 'margin-top': '14px' }}>
+                  <p class="aside-p first">
+                    <Show
+                      when={item().description}
+                      fallback={
+                        <span class="muted">
+                          No description came with the advert.
+                        </span>
+                      }
+                    >
+                      {item().description}
+                    </Show>
+                  </p>
+                  <Show when={utilities().length > 0}>
+                    <div class="util">
+                      <For each={utilities()}>
+                        {(key) => (
+                          <span class="tag pass">
+                            {utilityLabel[key]} mentioned
+                          </span>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                  <p class="aside-p">
+                    <b>Last visit:</b> {formatDateLong(item().visitedAt)}
                   </p>
                   <a
-                    class="mt-5 inline-block font-bold text-[#315f73] underline"
+                    class="linkbtn"
+                    style={{ display: 'inline-block', 'margin-top': '8px' }}
                     href={item().url}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Open original advert
+                    Open the original advert ↗
                   </a>
                 </div>
-                <div class="border border-[#24483a] bg-[#e4efe7] p-5">
-                  <p class="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#24483a]">
-                    Visit complete
-                  </p>
-                  <p class="mt-2 text-sm text-[#526058]">
-                    Records the latest Visit and removes this Source Listing
-                    from the Visit Plan. Candidate Plot observations stay saved.
+                <div class="panel stake" style={{ 'margin-top': '14px' }}>
+                  <h3>We went to see it</h3>
+                  <p class="small" style={{ margin: '6px 0 12px' }}>
+                    Records today's visit and takes it off the "going to see"
+                    list. Your notes and ratings stay.
                   </p>
                   <button
-                    class="mt-4 w-full bg-[#24483a] px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
+                    class="btn stake wide"
+                    type="button"
                     disabled={busy()}
                     onClick={() => void completeVisit()}
                   >
-                    Mark Source Listing visited
+                    <CheckIcon /> Mark as visited
                   </button>
                 </div>
-                <div class="border border-[#a13d22]/30 bg-[#fff1eb] p-5">
-                  <p class="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#a13d22]">
-                    Remove from Household
-                  </p>
-                  <p class="mt-2 text-sm text-[#6f3525]">
-                    Removes this Source Listing and its Candidate Plots from the
-                    Household and Visit Plan. Re-importing the same
-                    advertisement can restore it without losing Household
-                    observations.
+                <div class="panel danger" style={{ 'margin-top': '14px' }}>
+                  <h3>Remove this plot</h3>
+                  <p class="small" style={{ margin: '6px 0 12px' }}>
+                    Removes it and its marked areas for everyone in the search.
+                    Saving the same advert again brings it back with your notes.
                   </p>
                   <button
-                    class="mt-4 w-full border border-[#a13d22] px-4 py-3 text-sm font-bold text-[#a13d22] disabled:opacity-50"
+                    class="btn danger wide"
+                    type="button"
                     disabled={busy()}
-                    onClick={() => void remove()}
+                    onClick={remove}
                   >
-                    Remove Source Listing
+                    Remove plot
                   </button>
                 </div>
               </aside>
             </div>
-          </div>
+          </>
         )}
       </Show>
+      <FannedStack />
     </main>
   )
 }
+
+type ClueKind = 'parcel' | 'coordinates' | 'address'
 
 function CandidatePlotEditor(props: {
   plot: CandidatePlotRecord
   sourceListing: SourceListingRecord
   importedAddress: string | null
   number: number
+  total: number
   selected: boolean
+  onShowOnMap: () => void
   onSave: (
     update: Parameters<
       ReturnType<typeof useHousehold>['updateCandidatePlot']
@@ -279,9 +378,7 @@ function CandidatePlotEditor(props: {
   const [area, setArea] = createSignal(textNumber(props.plot.areaAres))
   const [purpose, setPurpose] = createSignal(props.plot.purposeText ?? '')
   const [notes, setNotes] = createSignal(props.plot.notes ?? '')
-  const [clueKind, setClueKind] = createSignal<
-    'parcel' | 'coordinates' | 'address'
-  >(
+  const [clueKind, setClueKind] = createSignal<ClueKind>(
     props.plot.parcelNumberClue
       ? 'parcel'
       : props.plot.latitudeClue !== null
@@ -301,22 +398,21 @@ function CandidatePlotEditor(props: {
   const [precision, setPrecision] = createSignal<'exact' | 'approx'>(
     props.plot.coordinateCluePrecision ?? 'approx',
   )
-  const [road, setRoad] = createSignal(textNumber(props.plot.roadAccessRating))
-  const [feeling, setFeeling] = createSignal(
-    textNumber(props.plot.areaFeelingRating),
-  )
-  const [view, setView] = createSignal(textNumber(props.plot.viewRating))
-  const [status, setStatus] = createSignal('')
+  const [road, setRoad] = createSignal(props.plot.roadAccessRating)
+  const [feeling, setFeeling] = createSignal(props.plot.areaFeelingRating)
+  const [view, setView] = createSignal(props.plot.viewRating)
+  const [status, setStatus] = createSignal<{ text: string; bad: boolean }>()
+
+  const heading = () =>
+    candidatePlotName(props.plot, props.number - 1, props.total)
+  const located = () =>
+    props.plot.resolvedLatitude !== null &&
+    props.plot.resolvedLongitude !== null
   const directionsDestination = () => {
-    if (
-      props.plot.resolvedLatitude !== null &&
-      props.plot.resolvedLongitude !== null
-    ) {
+    if (located())
       return `${props.plot.resolvedLatitude},${props.plot.resolvedLongitude}`
-    }
-    if (props.plot.latitudeClue !== null && props.plot.longitudeClue !== null) {
+    if (props.plot.latitudeClue !== null && props.plot.longitudeClue !== null)
       return `${props.plot.latitudeClue},${props.plot.longitudeClue}`
-    }
     return props.plot.addressClue
   }
   const directionsUrl = () => {
@@ -333,6 +429,20 @@ function CandidatePlotEditor(props: {
         props.plot.resolvedBoundary === null))
   const locationDiagnostic = () =>
     household.getCandidatePlotLocationDiagnostic(props.plot.id)
+  const locationNote = () => {
+    switch (props.plot.locationResolutionState) {
+      case 'resolved':
+        return props.plot.resolvedPrecision === 'exact'
+          ? 'Exact shape from the land registry.'
+          : 'Roughly here — the hint was not precise enough for the exact shape.'
+      case 'no-result':
+        return 'Nothing found for this hint. Check the location hint below and try again.'
+      case 'unavailable':
+        return 'The location service could not be reached. Try again when online.'
+      default:
+        return 'Waiting to look up the location hint…'
+    }
+  }
   const clueLks94 = () => {
     if (props.plot.latitudeClue === null || props.plot.longitudeClue === null)
       return null
@@ -343,27 +453,23 @@ function CandidatePlotEditor(props: {
     }
   }
   const hasPartialLocation = () =>
-    props.plot.resolvedLatitude !== null ||
+    located() ||
     props.plot.resolvedAddress !== null ||
     props.plot.resolvedParcelNumber !== null
-  const resolveLocation = () => {
-    console.info('[location] Retry location requested', {
-      candidatePlotId: props.plot.id,
-      state: props.plot.locationResolutionState,
-      needsLocationRetry: needsLocationRetry(),
-    })
-    return needsLocationRetry()
+  const resolveLocation = () =>
+    needsLocationRetry()
       ? household.resolveCandidatePlotLocation(
           props.plot.sourceListingId,
           props.plot.id,
         )
       : undefined
-  }
   const runAutomaticChecks = () =>
     household.runCandidatePlotAutomaticChecks(
       props.plot.sourceListingId,
       props.plot.id,
     )
+  const cells = () => checkCells(props.plot.automaticChecks)
+  const hasChecks = () => cells().some((cell) => cell.status !== 'unknown')
 
   createEffect(
     () => {
@@ -393,7 +499,7 @@ function CandidatePlotEditor(props: {
   )
 
   const save = async () => {
-    setStatus('Saving...')
+    setStatus({ text: 'Saving…', bad: false })
     try {
       await props.onSave({
         name: optionalText(name()),
@@ -407,307 +513,329 @@ function CandidatePlotEditor(props: {
         coordinateCluePrecision:
           latitude().trim() || longitude().trim() ? precision() : null,
         addressClue: optionalText(address()),
-        roadAccessRating: optionalNumber(road()),
-        areaFeelingRating: optionalNumber(feeling()),
-        viewRating: optionalNumber(view()),
+        roadAccessRating: road(),
+        areaFeelingRating: feeling(),
+        viewRating: view(),
       })
-      setStatus('Saved')
+      setStatus({ text: 'Saved', bad: false })
     } catch (caught) {
-      setStatus(errorMessage(caught))
+      setStatus({ text: errorMessage(caught), bad: true })
     }
   }
 
   return (
     <article
-      class={`mt-5 border bg-white p-5 ${props.selected ? 'border-[#d96a45]' : 'border-[#17231d]/20'}`}
+      class={`panel area ${props.selected ? 'selected' : ''}`}
+      id={`area-${props.plot.id}`}
     >
-      <p class="font-mono text-xs font-bold uppercase text-[#607067]">
-        Candidate Plot {props.number}
-      </p>
-      <Show when={directionsUrl()}>
-        {(url) => (
-          <a
-            class="mt-2 inline-block text-sm font-bold text-[#315f73] underline"
-            href={url()}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open directions
-          </a>
-        )}
-      </Show>
-      <section class="mt-4 border border-[#315f73]/20 bg-[#e7edf0] p-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <h3 class="font-serif text-xl">Resolved Location Data</h3>
+      <div class="area-h">
+        <h3>
+          <span class="num" aria-hidden="true">
+            {props.number}
+          </span>
+          {heading()}
+        </h3>
+        <div class="rowline tight">
+          <Show when={directionsUrl()}>
+            {(url) => (
+              <a
+                class="btn ghost sm"
+                href={url()}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <PinIcon /> Directions
+              </a>
+            )}
+          </Show>
+          <Show when={located()}>
+            <button
+              class="btn ghost sm"
+              type="button"
+              onClick={props.onShowOnMap}
+            >
+              Show on map
+            </button>
+          </Show>
+        </div>
+      </div>
+
+      <section class="panel blue block">
+        <div class="sub-h">
+          <h4>Where it is</h4>
           <Show when={needsLocationRetry()}>
             <button
-              class="border border-[#315f73] px-3 py-2 text-xs font-bold text-[#315f73] disabled:opacity-50"
+              class="btn blue sm"
+              type="button"
               disabled={household.isCandidatePlotLocationRunning(props.plot.id)}
               onClick={() => void resolveLocation()}
             >
               {household.isCandidatePlotLocationRunning(props.plot.id)
-                ? 'Resolving...'
-                : 'Retry location'}
+                ? 'Looking up…'
+                : 'Look up again'}
             </button>
           </Show>
         </div>
-        <Show when={props.plot.locationResolutionState !== 'resolved'}>
-          <p class="mt-2 text-sm" role="status">
-            {props.plot.locationResolutionState === 'unavailable'
-              ? 'Location service unavailable. Retry when online.'
-              : props.plot.locationResolutionState === 'no-result'
-                ? 'No location found. Check the Recorded Location Clue and retry.'
-                : 'Waiting to resolve the Recorded Location Clue.'}
-          </p>
-        </Show>
-        <Show
-          when={
-            props.plot.locationResolutionState === 'resolved' ||
-            hasPartialLocation()
-          }
-        >
-          <dl class="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-            <div>
-              <dt class="font-bold">Coordinates</dt>
-              <dd>
-                {props.plot.resolvedLatitude !== null
-                  ? `${props.plot.resolvedLatitude}, ${props.plot.resolvedLongitude}`
-                  : 'Unavailable'}
-              </dd>
-            </div>
-            <div>
-              <dt class="font-bold">Precision</dt>
-              <dd>{props.plot.resolvedPrecision ?? 'Unavailable'}</dd>
-            </div>
-            <div>
-              <dt class="font-bold">Address</dt>
-              <dd>{props.plot.resolvedAddress ?? 'Unavailable'}</dd>
-            </div>
-            <div>
-              <dt class="font-bold">Unique parcel number</dt>
-              <dd>{props.plot.resolvedParcelNumber ?? 'Not found'}</dd>
-            </div>
-            <div>
-              <dt class="font-bold">Cadastral number</dt>
-              <dd>{props.plot.resolvedCadastralNumber ?? 'Not found'}</dd>
-            </div>
-            <div>
-              <dt class="font-bold">Parcel dataset</dt>
-              <dd>{props.plot.parcelDatasetVersion ?? 'Not loaded'}</dd>
-            </div>
+        <p class="small" style={{ margin: '6px 0 0' }} role="status">
+          {locationNote()}
+        </p>
+        <Show when={hasPartialLocation()}>
+          <dl class="kv">
+            <dt>Address</dt>
+            <dd>{props.plot.resolvedAddress ?? 'Unavailable'}</dd>
+            <dt>Coordinates</dt>
+            <dd>
+              {located()
+                ? `${props.plot.resolvedLatitude}, ${props.plot.resolvedLongitude}`
+                : 'Unavailable'}
+            </dd>
+            <dt>Unique parcel no.</dt>
+            <dd>{props.plot.resolvedParcelNumber ?? 'Not found'}</dd>
+            <dt>Cadastral no.</dt>
+            <dd>{props.plot.resolvedCadastralNumber ?? 'Not found'}</dd>
+            <dt>Registry data</dt>
+            <dd>{props.plot.parcelDatasetVersion ?? 'Not loaded'}</dd>
           </dl>
         </Show>
         <Show when={clueLks94()}>
           {(lks94) => (
-            <p class="mt-3 font-mono text-xs text-[#526058]">
-              Clue {props.plot.latitudeClue}, {props.plot.longitudeClue} →{' '}
+            <p class="small muted" style={{ margin: '10px 0 0' }}>
+              Hint {props.plot.latitudeClue}, {props.plot.longitudeClue} →{' '}
               {lks94()}
             </p>
           )}
         </Show>
         <Show when={locationDiagnostic()}>
           {(diagnostic) => (
-            <details class="mt-3 text-xs" open>
-              <summary class="cursor-pointer font-bold text-[#a13d22]">
-                Last attempt details
-              </summary>
-              <pre class="mt-2 overflow-x-auto whitespace-pre-wrap break-words border border-[#a13d22]/30 bg-white p-3 font-mono text-[#6f3525]">
-                {diagnostic()}
-              </pre>
+            <details class="diag" style={{ 'margin-top': '10px' }}>
+              <summary>What went wrong</summary>
+              <pre>{diagnostic()}</pre>
             </details>
           )}
         </Show>
       </section>
-      <section class="mt-4 border border-[#24483a]/20 bg-[#e4efe7] p-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <h3 class="font-serif text-xl">Automatic Checks</h3>
+
+      <section class="panel soft block">
+        <div class="sub-h">
+          <h4>Automatic checks</h4>
           <button
-            class="border border-[#24483a] px-3 py-2 text-xs font-bold text-[#24483a] disabled:opacity-50"
+            class="btn ghost sm"
+            type="button"
             disabled={household.isCandidatePlotAutomaticChecksRunning(
               props.plot.id,
             )}
             onClick={() => void runAutomaticChecks()}
           >
             {household.isCandidatePlotAutomaticChecksRunning(props.plot.id)
-              ? 'Checking...'
-              : props.plot.automaticChecks
-                ? 'Retry checks'
+              ? 'Checking…'
+              : hasChecks()
+                ? 'Check again'
                 : 'Run checks'}
           </button>
         </div>
-        <div class="mt-3 grid gap-2">
-          <For each={AUTOMATIC_CHECK_KEYS}>
-            {(key) => {
-              const check = () =>
-                props.plot.automaticChecks?.find((result) => result.key === key)
-              return (
-                <div class="border border-[#24483a]/15 bg-white px-3 py-2 text-sm">
-                  <div class="flex items-start justify-between gap-3">
-                    <b>{automaticCheckLabel(key)}</b>
-                    <span class="font-mono text-xs font-bold uppercase">
-                      {check()?.status ?? 'unknown'}
-                    </span>
-                  </div>
-                  <p class="mt-1">{check()?.value ?? 'Not checked'}</p>
-                  <Show when={check()?.detail}>
-                    <p class="mt-1 text-xs break-words text-[#607067]">
-                      {check()!.detail}
-                    </p>
-                  </Show>
-                </div>
-              )
-            }}
+        <div style={{ 'margin-top': '10px' }}>
+          <CheckStrip checks={props.plot.automaticChecks} large />
+        </div>
+        <div class="small" style={{ 'margin-top': '6px' }}>
+          <CheckSummaryText checks={props.plot.automaticChecks} block />
+        </div>
+        <div class="checklist">
+          <For each={cells()}>
+            {(cell) => (
+              <div class={`check ${cell.status}`}>
+                <b>{cell.label}</b>
+                <span class={`tag ${checkStatusTagClass(cell.status)}`}>
+                  {checkStatusWord(cell.status)}
+                </span>
+                <span class="v">{cell.value}</span>
+                <Show when={cell.detail}>
+                  <span class="d">{cell.detail}</span>
+                </Show>
+              </div>
+            )}
           </For>
         </div>
-        <p class="mt-3 text-xs text-[#526058]">
-          Checks are independent advisory results, not an aggregate score.
+        <p class="small muted" style={{ margin: '10px 0 0' }}>
+          Each check is independent advice — there is no overall score.
         </p>
       </section>
-      <div class="mt-4 grid gap-4 sm:grid-cols-2">
-        <Field label="Name" value={name()} onInput={setName} />
-        <Field label="Price (€)" value={price()} onInput={setPrice} />
-        <Field label="Area (a)" value={area()} onInput={setArea} />
-        <Field label="Purpose" value={purpose()} onInput={setPurpose} />
-      </div>
-      <label class="mt-4 block text-sm font-bold">
-        Notes
-        <textarea
-          class="mt-2 min-h-24 w-full border border-[#17231d]/25 p-3 font-normal"
-          value={notes()}
-          onInput={(event) => setNotes(event.currentTarget.value)}
-        />
-      </label>
-      <fieldset class="mt-5 border-t border-[#17231d]/10 pt-4">
-        <legend class="font-serif text-xl">Recorded Location Clue</legend>
-        <select
-          class="mt-3 border border-[#17231d]/25 p-3"
-          value={clueKind()}
-          onChange={(event) =>
-            setClueKind(
-              event.currentTarget.value as typeof clueKind extends () => infer T
-                ? T
-                : never,
-            )
-          }
-        >
-          <option value="parcel">Unique parcel number</option>
-          <option value="coordinates">Coordinates</option>
-          <option value="address">Address</option>
-        </select>
-        <Show when={clueKind() === 'parcel'}>
-          <div class="mt-3">
+
+      <section class="block bare">
+        <div class="grid2">
+          <Field
+            label="Name for this area"
+            value={name()}
+            onInput={setName}
+            placeholder="e.g. Whole plot"
+          />
+          <Field
+            label="Price (€)"
+            value={price()}
+            onInput={setPrice}
+            inputmode="decimal"
+          />
+          <Field
+            label="Area (ares)"
+            value={area()}
+            onInput={setArea}
+            inputmode="decimal"
+          />
+          <Field label="Land purpose" value={purpose()} onInput={setPurpose} />
+        </div>
+        <label class="f" style={{ 'margin-top': '14px' }}>
+          Our notes
+          <textarea
+            value={notes()}
+            onInput={(event) => setNotes(event.currentTarget.value)}
+          />
+        </label>
+      </section>
+
+      <section class="panel soft block">
+        <div class="sub-h">
+          <h4>Location hint</h4>
+          <span class="small muted">What we use to find it on the map</span>
+        </div>
+        <label class="f" style={{ 'margin-top': '8px' }}>
+          Find it by
+          <select
+            name="clue-kind"
+            value={clueKind()}
+            onChange={(event) =>
+              setClueKind(event.currentTarget.value as ClueKind)
+            }
+          >
+            <option value="parcel">Unique parcel number (most exact)</option>
+            <option value="coordinates">Coordinates</option>
+            <option value="address">Address</option>
+          </select>
+        </label>
+        <div style={{ 'margin-top': '10px' }}>
+          <Show when={clueKind() === 'parcel'}>
             <Field
               label="Unique parcel number"
               value={parcel()}
               onInput={setParcel}
+              placeholder="4400-1234-5678"
             />
-          </div>
-        </Show>
-        <Show when={clueKind() === 'coordinates'}>
-          <div class="mt-3 grid gap-4 sm:grid-cols-3">
-            <Field label="Latitude" value={latitude()} onInput={setLatitude} />
-            <Field
-              label="Longitude"
-              value={longitude()}
-              onInput={setLongitude}
-            />
-            <label class="text-sm font-bold">
-              Precision
-              <select
-                class="mt-2 w-full border border-[#17231d]/25 p-3 font-normal"
-                value={precision()}
-                onChange={(event) =>
-                  setPrecision(event.currentTarget.value as 'exact' | 'approx')
-                }
-              >
-                <option value="exact">Exact</option>
-                <option value="approx">Approximate</option>
-              </select>
-            </label>
-          </div>
-        </Show>
-        <Show when={clueKind() === 'address'}>
-          <div class="mt-3">
+            <p class="small muted" style={{ margin: '6px 0 0' }}>
+              Found on the advert or in the Registrų centras extract.
+            </p>
+          </Show>
+          <Show when={clueKind() === 'coordinates'}>
+            <div class="grid2">
+              <Field
+                label="Latitude"
+                value={latitude()}
+                onInput={setLatitude}
+                inputmode="decimal"
+              />
+              <Field
+                label="Longitude"
+                value={longitude()}
+                onInput={setLongitude}
+                inputmode="decimal"
+              />
+              <label class="f">
+                How exact
+                <select
+                  value={precision()}
+                  onChange={(event) =>
+                    setPrecision(
+                      event.currentTarget.value as 'exact' | 'approx',
+                    )
+                  }
+                >
+                  <option value="exact">Exactly on the plot</option>
+                  <option value="approx">Roughly there</option>
+                </select>
+              </label>
+            </div>
+          </Show>
+          <Show when={clueKind() === 'address'}>
             <Field label="Address" value={address()} onInput={setAddress} />
-          </div>
-        </Show>
-      </fieldset>
-      <fieldset class="mt-5 border-t border-[#17231d]/10 pt-4">
-        <legend class="font-serif text-xl">Manual Ratings</legend>
-        <div class="mt-3 grid gap-4 sm:grid-cols-3">
-          <Rating label="Road/access" value={road()} onInput={setRoad} />
-          <Rating label="Area feeling" value={feeling()} onInput={setFeeling} />
-          <Rating label="View" value={view()} onInput={setView} />
+          </Show>
         </div>
-      </fieldset>
-      <div class="mt-5 flex items-center gap-3">
-        <button
-          class="bg-[#24483a] px-5 py-3 text-sm font-bold text-white"
-          onClick={() => void save()}
-        >
-          Save Candidate Plot
+      </section>
+
+      <section class="panel soft block">
+        <div class="sub-h">
+          <h4>Our ratings</h4>
+          <span class="small muted">After you've been there</span>
+        </div>
+        <Stars label="Road & access" value={road()} onChange={setRoad} />
+        <Stars
+          label="Feel of the area"
+          value={feeling()}
+          onChange={setFeeling}
+        />
+        <Stars label="View" value={view()} onChange={setView} />
+      </section>
+
+      <div class="rowline" style={{ 'margin-top': '16px' }}>
+        <button class="btn" type="button" onClick={() => void save()}>
+          Save this area
         </button>
-        <span role="status" class="text-sm">
-          {status()}
-        </span>
+        <Show when={status()}>
+          {(current) => (
+            <span
+              class={`status-text ${current().bad ? 'bad' : ''}`}
+              role="status"
+            >
+              {current().text}
+            </span>
+          )}
+        </Show>
       </div>
     </article>
   )
 }
 
-const automaticCheckLabel = (key: AutomaticCheckKey) =>
-  ({
-    price: 'Price',
-    area: 'Area',
-    radius: 'Radius',
-    purpose: 'Purpose',
-    walk_to_stop: 'Walk to transit stop',
-    commute: 'Transit to city centre',
-    eso_cost: 'ESO cost',
-    budget: 'Plot + ESO budget',
-    crime: 'Crime density',
-    legal_flags: 'Legal flags',
-    noise: 'Noise',
-    livability: 'Livability',
-    water_sewage: 'Water / sewage',
-  })[key]
-
 function Field(props: {
   label: string
   value: string
   onInput: (value: string) => void
+  placeholder?: string
+  inputmode?: 'decimal'
 }) {
   return (
-    <label class="text-sm font-bold">
+    <label class="f">
       {props.label}
       <input
-        class="mt-2 w-full border border-[#17231d]/25 p-3 font-normal"
         value={props.value}
+        placeholder={props.placeholder}
+        inputmode={props.inputmode}
         onInput={(event) => props.onInput(event.currentTarget.value)}
       />
     </label>
   )
 }
 
-function Rating(props: {
+/** Five stars; clicking the current one clears the rating. */
+function Stars(props: {
   label: string
-  value: string
-  onInput: (value: string) => void
+  value: number | null
+  onChange: (value: number | null) => void
 }) {
   return (
-    <label class="text-sm font-bold">
-      {props.label}
-      <select
-        class="mt-2 w-full border border-[#17231d]/25 p-3 font-normal"
-        value={props.value}
-        onChange={(event) => props.onInput(event.currentTarget.value)}
-      >
-        <option value="">Not rated</option>
+    <div class="rating">
+      <span>{props.label}</span>
+      <span class="stars" role="group" aria-label={props.label}>
         <For each={[1, 2, 3, 4, 5]}>
-          {(rating) => <option value={rating}>{rating} / 5</option>}
+          {(star) => (
+            <button
+              type="button"
+              class={props.value !== null && props.value >= star ? 'on' : ''}
+              aria-label={`${star} of 5`}
+              aria-pressed={props.value === star ? 'true' : 'false'}
+              onClick={() => props.onChange(props.value === star ? null : star)}
+            >
+              ★
+            </button>
+          )}
         </For>
-      </select>
-    </label>
+      </span>
+    </div>
   )
 }
 
@@ -715,7 +843,8 @@ const optionalText = (value: string) => value.trim() || null
 const optionalNumber = (value: string) => {
   if (!value.trim()) return null
   const parsed = Number(value.replace(',', '.'))
-  if (!Number.isFinite(parsed)) throw new Error('Enter a valid number')
+  if (!Number.isFinite(parsed))
+    throw new Error('Enter a number — check price and area')
   return parsed
 }
 const textNumber = (value: number | null) => value?.toString() ?? ''

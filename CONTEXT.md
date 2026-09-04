@@ -85,3 +85,23 @@ A single saved, ordered list of distinct Source Listings the household intends
 to inspect. The household has only one active Visit Plan and may reorder it at
 any time, including while visiting listings.
 _Avoid_: Route
+
+## Screen wording
+
+The user interface speaks plainly and does not use the terms above. Code,
+tests and this document keep the domain names; only copy shown to the
+household changes. The mapping is one-to-one:
+
+| Domain term                                              | On screen                            |
+| -------------------------------------------------------- | ------------------------------------ |
+| Household                                                | Our search / the search              |
+| Source Listing                                           | Plot                                 |
+| Candidate Plot                                           | Marked area                          |
+| Visit Plan                                               | Going to see (its items are "stops") |
+| Import Inbox                                             | Clippings from Aruodas               |
+| Resolved Location Data                                   | Where it is                          |
+| Recorded Location Clue                                   | Location hint                        |
+| Automatic Check statuses pass / warning / fail / unknown | fine / look / problem / not checked  |
+| Manual Rating                                            | Our ratings                          |
+| Mark Source Listing visited                              | We went to see it → Mark as visited  |
+| Bookmarklet                                              | The Find Me Home bookmark            |

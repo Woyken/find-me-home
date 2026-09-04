@@ -18,8 +18,8 @@ const manifest = {
   start_url: base,
   scope: base,
   display: 'standalone',
-  theme_color: '#1f4d3e',
-  background_color: '#f6f4ec',
+  theme_color: '#1b2733',
+  background_color: '#eef3ec',
   icons: [
     {
       src: 'icon.svg',
@@ -42,6 +42,10 @@ const shellFiles = [
     .readdirSync(path.join(outputDirectory, 'assets'))
     .filter((file) => /\.(?:css|js)$/.test(file))
     .map((file) => `assets/${file}`),
+  ...fs
+    .readdirSync(path.join(outputDirectory, 'fonts'))
+    .filter((file) => file.endsWith('.woff2'))
+    .map((file) => `fonts/${file}`),
 ]
 const shellVersion = createHash('sha256')
   .update(index)

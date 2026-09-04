@@ -170,7 +170,9 @@ describe('App Household boundary', () => {
     await runtime.createHousehold()
 
     await waitFor(() =>
-      expect(document.body.textContent).toContain('Review before saving'),
+      expect(document.body.textContent).toContain(
+        'Check what we found, then save',
+      ),
     )
   })
   it('renders a directly loaded imported Source Listing', async () => {
@@ -244,16 +246,17 @@ describe('App Household boundary', () => {
 
     listing.candidatePlots[0].locationResolutionState = 'resolved'
     await runtime.renameActiveHousehold('Parcel retry')
-    await waitFor(() => expect(findButton('Retry location')).toBeTruthy())
-    findButton('Retry location')?.click()
+    await waitFor(() => expect(findButton('Look up again')).toBeTruthy())
+    findButton('Look up again')?.click()
     await waitFor(() =>
       expect(runtime.resolveCandidatePlotLocation).toHaveBeenCalledTimes(2),
     )
 
     const updateCandidatePlot = vi.spyOn(runtime, 'updateCandidatePlot')
-    const clueKind =
-      document.querySelector<HTMLSelectElement>('fieldset select')
-    if (!clueKind) throw new Error('Recorded Location Clue selector is missing')
+    const clueKind = document.querySelector<HTMLSelectElement>(
+      'select[name="clue-kind"]',
+    )
+    if (!clueKind) throw new Error('Location hint selector is missing')
     clueKind.value = 'address'
     clueKind.dispatchEvent(new Event('change', { bubbles: true }))
 
@@ -264,7 +267,7 @@ describe('App Household boundary', () => {
         ),
       ).toBeTruthy(),
     )
-    findButton('Save Candidate Plot')?.click()
+    findButton('Save this area')?.click()
     await waitFor(() =>
       expect(updateCandidatePlot).toHaveBeenCalledWith(
         'listing-id',
@@ -291,13 +294,17 @@ describe('App Household boundary', () => {
     mount(createTestRuntime())
 
     expect(location.hash).toBe('')
-    await waitFor(() => expect(findButton('Create Household')).toBeTruthy())
-    expect(document.body.textContent).not.toContain('Review before saving')
+    await waitFor(() => expect(findButton('Start a search')).toBeTruthy())
+    expect(document.body.textContent).not.toContain(
+      'Check what we found, then save',
+    )
 
-    findButton('Create Household')?.click()
+    findButton('Start a search')?.click()
 
     await waitFor(() =>
-      expect(document.body.textContent).toContain('Review before saving'),
+      expect(document.body.textContent).toContain(
+        'Check what we found, then save',
+      ),
     )
     expect(document.body.textContent).toContain('Žemųjų Rusokų sklypas')
     expect(sessionStorage.getItem('find-me-home-import-draft')).toContain(
@@ -308,11 +315,11 @@ describe('App Household boundary', () => {
   it('offers create or join before mounting Household content', async () => {
     mount(createTestRuntime())
 
-    await waitFor(() => expect(findButton('Create Household')).toBeTruthy())
-    expect(document.body.textContent).toContain('Join Household')
+    await waitFor(() => expect(findButton('Start a search')).toBeTruthy())
+    expect(document.body.textContent).toContain("Join someone's search")
     expect(document.body.textContent).not.toContain('Existing product flows')
 
-    findButton('Create Household')?.click()
+    findButton('Start a search')?.click()
 
     await waitFor(() =>
       expect(document.body.textContent).toContain('Our home search'),
@@ -320,86 +327,88 @@ describe('App Household boundary', () => {
     expect(document.body.textContent).toContain('Existing product flows')
   })
 
-  it('renames the active Household through the runtime', async () => {
+  it('renames the active search through the runtime', async () => {
     const runtime = createTestRuntime()
     mount(runtime)
-    await waitFor(() => expect(findButton('Create Household')).toBeTruthy())
-    findButton('Create Household')?.click()
-    await waitFor(() => expect(findButton('Rename Household')).toBeTruthy())
-    findButton('Rename Household')?.click()
+    await waitFor(() => expect(findButton('Start a search')).toBeTruthy())
+    findButton('Start a search')?.click()
+    await waitFor(() => expect(findButton('Our search settings')).toBeTruthy())
+    findButton('Our search settings')?.click()
     await waitFor(() => {
       expect(
-        document.querySelector('input[aria-label="Household name"]'),
+        document.querySelector('input[aria-label="Search name"]'),
       ).toBeTruthy()
     })
-    const householdNameInput = document.querySelector<HTMLInputElement>(
-      'input[aria-label="Household name"]',
+    const nameInput = document.querySelector<HTMLInputElement>(
+      'input[aria-label="Search name"]',
     )
-    if (!householdNameInput) throw new Error('Household name input is missing')
-    householdNameInput.value = 'Forest edge search'
-    householdNameInput.dispatchEvent(new InputEvent('input', { bubbles: true }))
-    await waitFor(() => expect(findButton('Save name')).toBeTruthy())
-    findButton('Save name')?.click()
+    if (!nameInput) throw new Error('Search name input is missing')
+    nameInput.value = 'Forest edge search'
+    nameInput.dispatchEvent(new InputEvent('input', { bubbles: true }))
+    await waitFor(() => expect(findButton('Save')).toBeTruthy())
+    findButton('Save')?.click()
 
     await waitFor(() =>
-      expect(document.body.textContent).toContain('Forest edge search'),
+      expect(document.querySelector('h1')?.textContent).toBe(
+        'Forest edge search',
+      ),
     )
   })
 
   it('shares the invitation locally with full-access warnings', async () => {
     mount(createTestRuntime())
-    await waitFor(() => expect(findButton('Create Household')).toBeTruthy())
-    findButton('Create Household')?.click()
-    await waitFor(() => expect(findButton('Share Household')).toBeTruthy())
-    findButton('Share Household')?.click()
+    await waitFor(() => expect(findButton('Start a search')).toBeTruthy())
+    findButton('Start a search')?.click()
+    await waitFor(() => expect(findButton('Our search settings')).toBeTruthy())
+    findButton('Our search settings')?.click()
 
     await waitFor(() =>
       expect(
         document.querySelector<HTMLInputElement>(
-          'input[aria-label="Household invitation link"]',
+          'input[aria-label="Invitation link"]',
         )?.value,
       ).toContain('#household='),
     )
-    expect(document.body.textContent).toContain('can edit the Household')
-    expect(document.body.textContent).toContain('cannot be revoked')
+    expect(document.body.textContent).toContain('Anyone with it can edit')
+    expect(document.body.textContent).toContain("can't be taken back")
     await waitFor(() =>
       expect(
-        document.querySelector('img[alt="Household invitation QR code"]'),
+        document.querySelector('img[alt="Invitation QR code"]'),
       ).toBeTruthy(),
     )
   })
 
-  it('lists and switches local Households from the Household menu', async () => {
+  it('lists and switches the searches kept on this device', async () => {
     mount(createTestRuntime())
-    await waitFor(() => expect(findButton('Create Household')).toBeTruthy())
-    findButton('Create Household')?.click()
-    await waitFor(() => expect(findButton('Households')).toBeTruthy())
-    findButton('Households')?.click()
+    await waitFor(() => expect(findButton('Start a search')).toBeTruthy())
+    findButton('Start a search')?.click()
+    await waitFor(() => expect(findButton('Our search settings')).toBeTruthy())
+    findButton('Our search settings')?.click()
 
-    expect(document.body.textContent).toContain('Our home search')
     await waitFor(() =>
       expect(document.body.textContent).toContain('Lake search'),
     )
-    findButton('Lake search')?.click()
+    expect(document.body.textContent).toContain('Our home search')
+    findButton('Switch')?.click()
 
     await waitFor(() =>
       expect(document.querySelector('h1')?.textContent).toBe('Lake search'),
     )
   })
 
-  it('requires confirmation before removing a Household from this device', async () => {
+  it('requires confirmation before removing a search from this device', async () => {
     const runtime = createTestRuntime()
     const remove = vi.spyOn(runtime, 'removeHousehold')
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     mount(runtime)
-    await waitFor(() => expect(findButton('Create Household')).toBeTruthy())
-    findButton('Create Household')?.click()
-    await waitFor(() => expect(findButton('Households')).toBeTruthy())
-    findButton('Households')?.click()
+    await waitFor(() => expect(findButton('Start a search')).toBeTruthy())
+    findButton('Start a search')?.click()
+    await waitFor(() => expect(findButton('Our search settings')).toBeTruthy())
+    findButton('Our search settings')?.click()
     await waitFor(() =>
-      expect(findButton('Remove from this device')).toBeTruthy(),
+      expect(findButton('Remove this search from this device')).toBeTruthy(),
     )
-    findButton('Remove from this device')?.click()
+    findButton('Remove this search from this device')?.click()
 
     expect(confirm).toHaveBeenCalledWith(
       expect.stringContaining('other devices'),
@@ -407,8 +416,35 @@ describe('App Household boundary', () => {
     expect(remove).not.toHaveBeenCalled()
 
     confirm.mockReturnValue(true)
-    findButton('Remove from this device')?.click()
+    findButton('Remove this search from this device')?.click()
     await waitFor(() => expect(remove).toHaveBeenCalledOnce())
-    await waitFor(() => expect(findButton('Create Household')).toBeTruthy())
+    await waitFor(() => expect(findButton('Start a search')).toBeTruthy())
+  })
+
+  it('joins a search from a pasted invitation link', async () => {
+    const runtime = createTestRuntime()
+    const join = vi.spyOn(runtime, 'joinHousehold')
+    mount(runtime)
+    await waitFor(() => expect(findButton('Join')).toBeTruthy())
+    const linkInput = document.querySelector<HTMLInputElement>(
+      'input[aria-label="Invitation link"]',
+    )
+    if (!linkInput) throw new Error('Invitation link input is missing')
+    linkInput.value = 'not a link'
+    linkInput.dispatchEvent(new InputEvent('input', { bubbles: true }))
+    await new Promise((resolve) => setTimeout(resolve))
+    findButton('Join')?.click()
+    await waitFor(() =>
+      expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+        'invitation link',
+      ),
+    )
+    expect(join).not.toHaveBeenCalled()
+
+    linkInput.value = 'https://example.test/find-me-home/#household=abc123XYZ_-'
+    linkInput.dispatchEvent(new InputEvent('input', { bubbles: true }))
+    await new Promise((resolve) => setTimeout(resolve))
+    findButton('Join')?.click()
+    await waitFor(() => expect(join).toHaveBeenCalledWith('abc123XYZ_-'))
   })
 })

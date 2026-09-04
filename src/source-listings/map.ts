@@ -48,3 +48,43 @@ export const sourceListingMapLocation = (
   }
   return undefined
 }
+
+/** Display name of a Candidate Plot ("marked area") by position. */
+export const candidatePlotName = (
+  candidatePlot: CandidatePlotRecord,
+  index: number,
+  total: number,
+) => candidatePlot.name ?? (total > 1 ? `Marked area ${index + 1}` : 'The plot')
+
+/** Every Candidate Plot of the listing that can be drawn on a map. */
+export const sourceListingMapItems = (sourceListing: SourceListingDetail) =>
+  sourceListing.candidatePlots.flatMap((candidatePlot, index) => {
+    const item = candidatePlotMapItem(
+      candidatePlot,
+      candidatePlotName(
+        candidatePlot,
+        index,
+        sourceListing.candidatePlots.length,
+      ),
+    )
+    return item ? [item] : []
+  })
+
+export type SourceListingLocationState =
+  'exact' | 'approx' | 'problem' | 'unknown'
+
+/**
+ * How well we know where the listing is, judged by its first Candidate Plot:
+ * the exact registry shape, roughly there, a failed lookup, or nothing yet.
+ */
+export const sourceListingLocationState = (
+  sourceListing: SourceListingDetail,
+): SourceListingLocationState => {
+  const primary = sourceListing.candidatePlots[0] as
+    CandidatePlotRecord | undefined
+  if (!primary) return 'unknown'
+  if (primary.locationResolutionState === 'resolved')
+    return primary.resolvedPrecision === 'exact' ? 'exact' : 'approx'
+  if (primary.locationResolutionState === 'missing') return 'unknown'
+  return 'problem'
+}

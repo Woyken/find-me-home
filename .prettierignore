@@ -7,4 +7,3 @@ eslint.config.js
 pnpm-lock.yaml
 prettier.config.js
 tsconfig.json
-public/prototype/

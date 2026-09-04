@@ -5,6 +5,7 @@ import SourceListingPage, {
 } from './routes/source-listings.$sourceListingId'
 import VisitPlanPage, { preloadVisitPlan } from './routes/visit-plan'
 import ImportInboxPage, { preloadImportInbox } from './routes/import-inbox'
+import { paths } from './paths'
 
 export const Router = createRouter({
   base: import.meta.env.BASE_URL,
@@ -32,10 +33,13 @@ export const Router = createRouter({
 
 function NotFound() {
   return (
-    <main class="flex min-h-screen items-center justify-center bg-[#f6f4ec]">
-      <div class="text-center">
-        <h1 class="mb-2 text-4xl font-bold">404</h1>
-        <p class="text-gray-500">Page not found</p>
+    <main class="start-screen">
+      <div class="panel empty">
+        <h2>There's nothing at this address</h2>
+        <p>The page you opened doesn't exist in Find Me Home.</p>
+        <a class="btn" href={paths.home}>
+          Back to plots
+        </a>
       </div>
     </main>
   )
