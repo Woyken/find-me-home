@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createExternalServiceClient } from './external-service-client'
+import {
+  ExternalServiceError,
+  createExternalServiceClient,
+} from './external-service-client'
 
 describe('browser external-service client', () => {
   it('calls each fixed Worker operation and preserves no-result responses', async () => {
@@ -75,6 +78,53 @@ describe('browser external-service client', () => {
     )
     await expect(invalid.nearbyStops(54.7, 25.3)).rejects.toThrow(
       'External service unavailable',
+    )
+  })
+
+  it('explains why a Worker call failed so the household can investigate', async () => {
+    const workerError = createExternalServiceClient(
+      'https://worker.test',
+      vi.fn<typeof fetch>(async () =>
+        Response.json(
+          { error: 'IRD unavailable', reason: 'IRD responded HTTP 503' },
+          { status: 502, statusText: 'Bad Gateway' },
+        ),
+      ),
+    )
+    await expect(workerError.crimeDensity(54.7, 25.3)).rejects.toThrow(
+      'https://worker.test/crime/density?latitude=54.7&longitude=25.3&radiusMeters=1000&years=3: HTTP 502 Bad Gateway: IRD unavailable - IRD responded HTTP 503',
+    )
+
+    const plainBody = createExternalServiceClient(
+      'https://worker.test',
+      vi.fn<typeof fetch>(
+        async () => new Response('Origin not allowed', { status: 403 }),
+      ),
+    )
+    await expect(plainBody.crimeDensity(54.7, 25.3)).rejects.toThrow(
+      'HTTP 403: Origin not allowed',
+    )
+
+    const network = createExternalServiceClient(
+      'https://worker.test',
+      vi.fn<typeof fetch>(async () => {
+        throw new TypeError('Failed to fetch')
+      }),
+    )
+    const networkError = await network
+      .crimeDensity(54.7, 25.3)
+      .catch((error: unknown) => error)
+    expect(networkError).toBeInstanceOf(ExternalServiceError)
+    expect((networkError as Error).message).toContain(
+      'network error (TypeError: Failed to fetch); the Worker at https://worker.test did not answer',
+    )
+
+    const schema = createExternalServiceClient(
+      'https://worker.test',
+      vi.fn<typeof fetch>(async () => Response.json({ rawCount: 'many' })),
+    )
+    await expect(schema.crimeDensity(54.7, 25.3)).rejects.toThrow(
+      'response did not match the expected schema: {"rawCount":"many"}',
     )
   })
 

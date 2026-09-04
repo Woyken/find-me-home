@@ -38,7 +38,10 @@ export const handleCrimeRequest = async (
     years > 10
   )
     return Response.json(
-      { error: 'Invalid input' },
+      {
+        error: 'Invalid input',
+        reason: `latitude/longitude=${url.searchParams.get('latitude')}/${url.searchParams.get('longitude')}, radiusMeters=${radiusValue} (100-5000), years=${yearsValue} (1-10)`,
+      },
       { status: 400, headers: cors },
     )
   try {
@@ -77,20 +80,42 @@ export const handleCrimeRequest = async (
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
+    }).catch((error: unknown) => {
+      throw new Error(
+        `POST ${QUERY_URL} failed: ${error instanceof Error ? error.message : String(error)}`,
+      )
     })
-    if (!response.ok) throw new Error('IRD unavailable')
-    const value = (await response.json()) as Record<string, unknown>
-    if (!Array.isArray(value.bare)) throw new Error('IRD unavailable')
+    if (!response.ok)
+      throw new Error(
+        `IRD responded HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
+      )
+    const text = await response.text()
+    let value: Record<string, unknown>
+    try {
+      value = JSON.parse(text) as Record<string, unknown>
+    } catch {
+      throw new Error(
+        `IRD returned non-JSON body (${text.length} bytes): ${text.slice(0, 120)}`,
+      )
+    }
+    if (!Array.isArray(value.bare))
+      throw new Error(
+        `IRD response has no "bare" array; keys: ${Object.keys(value ?? {}).join(', ') || 'none'}`,
+      )
     let rawCount = 0
     let weightedCount = 0
     let violentCount = 0
     for (const row of value.bare) {
       if (!Array.isArray(row) || row.length < 4)
-        throw new Error('IRD unavailable')
+        throw new Error(
+          `IRD row has unexpected shape: ${JSON.stringify(row).slice(0, 120)}`,
+        )
       const px = row[1]
       const py = row[2]
       if (typeof px !== 'number' || typeof py !== 'number')
-        throw new Error('IRD unavailable')
+        throw new Error(
+          `IRD row has non-numeric coordinates: ${JSON.stringify(row).slice(0, 120)}`,
+        )
       if (Math.hypot(px - x, py - y) > radiusMeters) continue
       rawCount += 1
       const article = Number(/^\d+/.exec(String(row[3]))?.[0])
@@ -112,9 +137,11 @@ export const handleCrimeRequest = async (
       },
       { headers: cors },
     )
-  } catch {
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    console.error('[crime] IRD query failed', { reason })
     return Response.json(
-      { error: 'IRD unavailable' },
+      { error: 'IRD unavailable', reason },
       { status: 502, headers: cors },
     )
   }

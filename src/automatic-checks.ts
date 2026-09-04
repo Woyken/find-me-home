@@ -204,8 +204,34 @@ export const runAutomaticChecks = async (
     detail:
       'Source advertisement text only; verify water and sewage independently.',
   }
-  const unavailable = (key: AutomaticCheckKey, subject: string) =>
-    unknown(key, 'Unavailable', `${subject} unavailable. Retry when online.`)
+  const describeFailure = (error: unknown): string => {
+    if (!(error instanceof Error)) return String(error)
+    const name = error.name && error.name !== 'Error' ? `${error.name}: ` : ''
+    const message = error.message || 'no message'
+    const cause =
+      error.cause === undefined ? null : describeFailure(error.cause)
+    // Skip the cause when the message already spells it out.
+    const suffix = cause && !message.includes(cause) ? ` (cause: ${cause})` : ''
+    return `${name}${message}${suffix}`
+  }
+  /** The service call was made and rejected; say exactly why. */
+  const unavailable = (
+    key: AutomaticCheckKey,
+    subject: string,
+    error: unknown,
+  ) =>
+    unknown(
+      key,
+      'Unavailable',
+      `${subject} failed. ${describeFailure(error)} Retry, or investigate the failure above.`,
+    )
+  /** The service was never wired up in this build (no Worker URL configured). */
+  const notConfigured = (key: AutomaticCheckKey, subject: string) =>
+    unknown(
+      key,
+      'Not configured',
+      `${subject} is not configured in this build (no external-service Worker URL), so the check was skipped.`,
+    )
   const esoEstimate = location
     ? services.estimateEsoCost(location.latitude, location.longitude)
     : null
@@ -227,7 +253,9 @@ export const runAutomaticChecks = async (
               : `€${estimate.feeInclVat.toLocaleString('en-US')} · Group ${estimate.group}`,
           detail: estimate.note,
         }))
-        .catch(() => unavailable('eso_cost', 'ESO service'))
+        .catch((error: unknown) =>
+          unavailable('eso_cost', 'ESO service', error),
+        )
     : Promise.resolve(
         unknown(
           'eso_cost',
@@ -271,7 +299,9 @@ export const runAutomaticChecks = async (
                 detail: `Plot €${plot.priceEur!.toLocaleString('en-US')} + ESO €${estimate.feeInclVat.toLocaleString('en-US')} + technical conditions €41.89 + internal wiring €1,500; household limit €65,000.`,
               }
             })
-            .catch(() => unavailable('budget', 'ESO budget service'))
+            .catch((error: unknown) =>
+              unavailable('budget', 'ESO budget service', error),
+            )
   const walkToStop: Promise<AutomaticCheck> = location
     ? services.walkToStop
       ? services
@@ -292,8 +322,10 @@ export const runAutomaticChecks = async (
                   detail: `${(result.durationSeconds / 60).toFixed(1)} min${result.distanceMeters === null ? '' : ` / ${Math.round(result.distanceMeters)} m`}; household limit 17 min.`,
                 },
           )
-          .catch(() => unavailable('walk_to_stop', 'Trafi walking service'))
-      : Promise.resolve(unavailable('walk_to_stop', 'Trafi walking service'))
+          .catch((error: unknown) =>
+            unavailable('walk_to_stop', 'Trafi walking service', error),
+          )
+      : Promise.resolve(notConfigured('walk_to_stop', 'Trafi walking service'))
     : Promise.resolve(
         unknown(
           'walk_to_stop',
@@ -320,8 +352,10 @@ export const runAutomaticChecks = async (
                   detail: `Best of ${result.routesFound} route(s) to the city centre${result.summary ? `: ${result.summary}` : ''}; arrive by ${result.arriveBy}; household limit 70 min.`,
                 },
           )
-          .catch(() => unavailable('commute', 'Trafi route service'))
-      : Promise.resolve(unavailable('commute', 'Trafi route service'))
+          .catch((error: unknown) =>
+            unavailable('commute', 'Trafi route service', error),
+          )
+      : Promise.resolve(notConfigured('commute', 'Trafi route service'))
     : Promise.resolve(
         unknown(
           'commute',
@@ -345,8 +379,10 @@ export const runAutomaticChecks = async (
                   ? 'Moderate crime density; review the source map.'
                   : 'No elevated crime-density signal; rural coverage may under-report.',
           }))
-          .catch(() => unavailable('crime', 'Crime-density service'))
-      : Promise.resolve(unavailable('crime', 'Crime-density service'))
+          .catch((error: unknown) =>
+            unavailable('crime', 'Crime-density service', error),
+          )
+      : Promise.resolve(notConfigured('crime', 'Crime-density service'))
     : Promise.resolve(
         unknown(
           'crime',
@@ -398,8 +434,10 @@ export const runAutomaticChecks = async (
                   : 'No nearby major transport-noise proxy found.',
             }
           })
-          .catch(() => unavailable('noise', 'Noise service'))
-      : Promise.resolve(unavailable('noise', 'Noise service'))
+          .catch((error: unknown) =>
+            unavailable('noise', 'Noise service', error),
+          )
+      : Promise.resolve(notConfigured('noise', 'Noise service'))
     : Promise.resolve(
         unknown(
           'noise',
@@ -423,8 +461,10 @@ export const runAutomaticChecks = async (
               detail: `${nearbyBad.length ? `Nearby concerns: ${nearbyBad.map((item) => `${item.kind} ${item.distanceMeters} m`).join(', ')}. ` : ''}Fiber and 5G availability must be verified separately.`,
             }
           })
-          .catch(() => unavailable('livability', 'Livability service'))
-      : Promise.resolve(unavailable('livability', 'Livability service'))
+          .catch((error: unknown) =>
+            unavailable('livability', 'Livability service', error),
+          )
+      : Promise.resolve(notConfigured('livability', 'Livability service'))
     : Promise.resolve(
         unknown(
           'livability',
@@ -455,12 +495,8 @@ export const runAutomaticChecks = async (
               .join(' · '),
           }
         })
-        .catch(() =>
-          unknown(
-            'legal_flags',
-            'Unavailable',
-            'Legal map services unavailable. Retry when online.',
-          ),
+        .catch((error: unknown) =>
+          unavailable('legal_flags', 'Legal map services', error),
         )
     : Promise.resolve(
         unknown(

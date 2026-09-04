@@ -48,10 +48,14 @@ export const createLivabilityService = (fetcher: typeof fetch = fetch) =>
       body: new URLSearchParams({ data: query }),
     })
     if (!response.ok)
-      throw new Error('External service unavailable; retry manually')
+      throw new Error(
+        `External service unavailable; retry manually. ${OVERPASS_URL}: HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
+      )
     const value = (await response.json()) as { elements?: OverpassElement[] }
     if (!Array.isArray(value.elements))
-      throw new Error('External service unavailable; retry manually')
+      throw new Error(
+        `External service unavailable; retry manually. ${OVERPASS_URL}: response has no "elements" array (${JSON.stringify(value).slice(0, 200)})`,
+      )
     const origin = { latitude, longitude }
     const features = value.elements.flatMap((element) => {
       const lat = element.lat ?? element.center?.lat

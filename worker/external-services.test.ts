@@ -159,6 +159,56 @@ describe('retained external-service Worker operations', () => {
     )
   })
 
+  it('explains why the IRD crime query failed in the 502 body', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const path =
+      '/crime/density?latitude=54.7&longitude=25.3&radiusMeters=1000&years=3'
+    const upstreamDown = await handleWorkerRequest(
+      request(path),
+      options(
+        vi.fn<typeof fetch>(
+          async () =>
+            new Response('maintenance', {
+              status: 503,
+              statusText: 'Service Unavailable',
+            }),
+        ),
+      ),
+    )
+    const notJson = await handleWorkerRequest(
+      request(path),
+      options(vi.fn<typeof fetch>(async () => new Response('<html>oops'))),
+    )
+    const noBare = await handleWorkerRequest(
+      request(path),
+      options(vi.fn<typeof fetch>(async () => Response.json({ grid: [] }))),
+    )
+    const networkFailure = await handleWorkerRequest(
+      request(path),
+      options(
+        vi.fn<typeof fetch>(async () => {
+          throw new TypeError('fetch failed')
+        }),
+      ),
+    )
+
+    expect(upstreamDown.status).toBe(502)
+    expect(await upstreamDown.json()).toEqual({
+      error: 'IRD unavailable',
+      reason: 'IRD responded HTTP 503 Service Unavailable',
+    })
+    expect(await notJson.json()).toMatchObject({
+      reason: expect.stringContaining('IRD returned non-JSON body'),
+    })
+    expect(await noBare.json()).toMatchObject({
+      reason: 'IRD response has no "bare" array; keys: grid',
+    })
+    expect(await networkFailure.json()).toMatchObject({
+      reason:
+        'POST https://maps.ird.lt/nvzr-services/query failed: fetch failed',
+    })
+  })
+
   it('distinguishes valid empty transport noise from unavailable schemas', async () => {
     const emptyFetcher = vi.fn<typeof fetch>(async () =>
       Response.json({ features: [] }),

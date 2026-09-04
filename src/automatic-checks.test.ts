@@ -126,4 +126,44 @@ describe('Automatic Checks', () => {
     ).toHaveLength(9)
     expect(results).toHaveLength(13)
   })
+
+  it('reports the actual failure reason so it can be investigated', async () => {
+    const services: AutomaticCheckServices = {
+      estimateEsoCost: async () => {
+        throw new Error('ESO grid lookup timed out')
+      },
+      legalFlags: async () => {
+        throw new Error('WFS request failed', {
+          cause: new TypeError('Failed to fetch'),
+        })
+      },
+      crimeDensity: async () => {
+        throw new Error(
+          'External service unavailable; retry manually. https://worker.test/crime/density?latitude=54.6&longitude=25.4: HTTP 502 Bad Gateway: IRD unavailable - IRD responded HTTP 503',
+        )
+      },
+    }
+
+    const results = await runAutomaticChecks({ plot, sourceListing }, services)
+    const byKey = Object.fromEntries(
+      results.map((result) => [result.key, result]),
+    )
+
+    expect(byKey.crime).toEqual({
+      key: 'crime',
+      status: 'unknown',
+      value: 'Unavailable',
+      detail:
+        'Crime-density service failed. External service unavailable; retry manually. https://worker.test/crime/density?latitude=54.6&longitude=25.4: HTTP 502 Bad Gateway: IRD unavailable - IRD responded HTTP 503 Retry, or investigate the failure above.',
+    })
+    expect(byKey.eso_cost.detail).toContain('ESO grid lookup timed out')
+    expect(byKey.legal_flags.detail).toContain(
+      'WFS request failed (cause: TypeError: Failed to fetch)',
+    )
+    expect(byKey.walk_to_stop).toMatchObject({
+      status: 'unknown',
+      value: 'Not configured',
+    })
+    expect(byKey.walk_to_stop.detail).toContain('not configured in this build')
+  })
 })

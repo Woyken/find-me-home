@@ -550,7 +550,9 @@ function CandidatePlotEditor(props: {
                   </div>
                   <p class="mt-1">{check()?.value ?? 'Not checked'}</p>
                   <Show when={check()?.detail}>
-                    <p class="mt-1 text-xs text-[#607067]">{check()!.detail}</p>
+                    <p class="mt-1 text-xs break-words text-[#607067]">
+                      {check()!.detail}
+                    </p>
                   </Show>
                 </div>
               )

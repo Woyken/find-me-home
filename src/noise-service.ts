@@ -75,12 +75,17 @@ export const createNoiseService =
           returnGeometry: 'false',
           outFields: 'TRIUKSM',
         })
-        const response = await fetcher(`${CITY_URL}/${id}/query?${query}`)
+        const url = `${CITY_URL}/${id}/query?${query}`
+        const response = await fetcher(url)
         if (!response.ok)
-          throw new Error('External service unavailable; retry manually')
+          throw new Error(
+            `External service unavailable; retry manually. ${url}: HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
+          )
         const value = (await response.json()) as Record<string, unknown>
         if (!Array.isArray(value.features))
-          throw new Error('External service unavailable; retry manually')
+          throw new Error(
+            `External service unavailable; retry manually. ${url}: response has no "features" array (${JSON.stringify(value).slice(0, 200)})`,
+          )
         const lows = value.features.flatMap((feature) => {
           if (!feature || typeof feature !== 'object') return []
           const attributes = (feature as Record<string, unknown>).attributes

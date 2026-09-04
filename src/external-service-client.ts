@@ -41,8 +41,48 @@ const nullableNumber = (value: unknown) => value === null || number(value)
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
 
-const unavailable = () =>
-  new Error('External service unavailable; retry manually')
+/**
+ * Every failure of the Worker client is reported as this error so callers can
+ * treat it as "unavailable, retry manually" while still surfacing *why* it
+ * failed: the message carries the request path plus the HTTP status, the
+ * Worker's `error`/`reason` body, the network error, or the schema mismatch.
+ */
+export class ExternalServiceError extends Error {
+  readonly path: string
+  readonly reason: string
+
+  constructor(path: string, reason: string, cause?: unknown) {
+    super(`External service unavailable; retry manually. ${path}: ${reason}`, {
+      cause,
+    })
+    this.name = 'ExternalServiceError'
+    this.path = path
+    this.reason = reason
+  }
+}
+
+const describeCause = (error: unknown) =>
+  error instanceof Error
+    ? `${error.name && error.name !== 'Error' ? `${error.name}: ` : ''}${error.message || 'no message'}`
+    : String(error)
+
+const describeErrorBody = async (response: Response) => {
+  const status = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`
+  const text = await response.text().catch(() => '')
+  if (!text) return status
+  try {
+    const body = JSON.parse(text) as unknown
+    if (record(body)) {
+      const parts = [body.error, body.reason].filter(
+        (part): part is string => typeof part === 'string' && part.length > 0,
+      )
+      if (parts.length) return `${status}: ${parts.join(' - ')}`
+    }
+  } catch {
+    // fall through to the raw body
+  }
+  return `${status}: ${text.slice(0, 200)}`
+}
 
 export const createExternalServiceClient = (
   workerUrl: string,
@@ -50,14 +90,34 @@ export const createExternalServiceClient = (
 ) => {
   const base = workerUrl.replace(/\/$/, '')
   const request = async (path: string, init?: RequestInit) => {
+    const url = `${base}${path}`
+    let response: Response
     try {
-      const response = await fetcher(`${base}${path}`, init)
-      if (!response.ok) throw unavailable()
-      return await response.json()
-    } catch {
-      throw unavailable()
+      response = await fetcher(url, init)
+    } catch (error) {
+      throw new ExternalServiceError(
+        url,
+        `network error (${describeCause(error)}); the Worker at ${base} did not answer`,
+        error,
+      )
+    }
+    if (!response.ok)
+      throw new ExternalServiceError(url, await describeErrorBody(response))
+    try {
+      return (await response.json()) as unknown
+    } catch (error) {
+      throw new ExternalServiceError(
+        url,
+        `HTTP ${response.status} but the body is not JSON (${describeCause(error)})`,
+        error,
+      )
     }
   }
+  const invalidShape = (path: string, value: unknown) =>
+    new ExternalServiceError(
+      `${base}${path}`,
+      `response did not match the expected schema: ${JSON.stringify(value)?.slice(0, 200) ?? String(value)}`,
+    )
   const queryPoint = (latitude: number, longitude: number) =>
     new URLSearchParams({
       latitude: String(latitude),
@@ -66,9 +126,8 @@ export const createExternalServiceClient = (
 
   return {
     async nearbyStops(latitude: number, longitude: number) {
-      const value = await request(
-        `/trafi/nearby-stops?${queryPoint(latitude, longitude)}`,
-      )
+      const path = `/trafi/nearby-stops?${queryPoint(latitude, longitude)}`
+      const value = await request(path)
       if (
         !Array.isArray(value) ||
         !value.every(
@@ -80,7 +139,7 @@ export const createExternalServiceClient = (
             number(item.longitude),
         )
       )
-        throw unavailable()
+        throw invalidShape(path, value)
       return value as unknown as TrafiStop[]
     },
     async walkingDirections(start: Coordinate, end: Coordinate) {
@@ -90,20 +149,22 @@ export const createExternalServiceClient = (
         endLatitude: String(end.latitude),
         endLongitude: String(end.longitude),
       })
-      const value = await request(`/trafi/walking-directions?${query}`)
+      const path = `/trafi/walking-directions?${query}`
+      const value = await request(path)
       if (
         !record(value) ||
         !number(value.durationSeconds) ||
         !nullableNumber(value.distanceMeters)
       )
-        throw unavailable()
+        throw invalidShape(path, value)
       return value as unknown as {
         durationSeconds: number
         distanceMeters: number | null
       }
     },
     async searchRoutes(start: Coordinate, end: Coordinate, arriveBy: string) {
-      const value = await request('/trafi/route-search', {
+      const path = '/trafi/route-search'
+      const value = await request(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ start, end, arriveBy }),
@@ -128,7 +189,7 @@ export const createExternalServiceClient = (
             ),
         )
       )
-        throw unavailable()
+        throw invalidShape(path, value)
       return value as unknown as TrafiRoute[]
     },
     async crimeDensity(
@@ -140,7 +201,8 @@ export const createExternalServiceClient = (
       const query = queryPoint(latitude, longitude)
       query.set('radiusMeters', String(radiusMeters))
       query.set('years', String(years))
-      const value = await request(`/crime/density?${query}`)
+      const path = `/crime/density?${query}`
+      const value = await request(path)
       if (
         !record(value) ||
         !number(value.rawCount) ||
@@ -152,19 +214,18 @@ export const createExternalServiceClient = (
         typeof value.dateTo !== 'string' ||
         typeof value.emptyResponse !== 'boolean'
       )
-        throw unavailable()
+        throw invalidShape(path, value)
       return value as unknown as CrimeDensity
     },
     async transportNoise(latitude: number, longitude: number) {
-      const value = await request(
-        `/inspire/transport-noise?${queryPoint(latitude, longitude)}`,
-      )
+      const path = `/inspire/transport-noise?${queryPoint(latitude, longitude)}`
+      const value = await request(path)
       if (
         !record(value) ||
         !nullableNumber(value.railwayDistanceMeters) ||
         !nullableNumber(value.majorRoadDistanceMeters)
       )
-        throw unavailable()
+        throw invalidShape(path, value)
       return value as unknown as TransportNoise
     },
   }
