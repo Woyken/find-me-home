@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>New from Aruodas — Find Me Home prototype</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="notebook.css" />
+    <style>
+      .head { border-top: 2px solid var(--ink); padding-top: 16px; margin-bottom: 16px; }
+      .head h2 { font-size: 34px; }
+      .head p { margin: 6px 0 0; color: var(--ink-soft); max-width: 60ch; }
+      .summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+      .summary .nums { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+      .summary .nums span b { font-family: 'Bricolage Grotesque'; font-size: 20px; margin-right: 4px; }
+      .items { display: grid; gap: 12px; }
+      .item { display: grid; grid-template-columns: 128px 1fr auto; gap: 16px; align-items: start; }
+      .item img, .item .ph { width: 128px; aspect-ratio: 4/3; object-fit: cover; border: 1.5px solid var(--line); display: block; background: #dfe7e2; }
+      .item .ph { display: grid; place-items: center; color: var(--ink-faint); font-size: 13px; }
+      .item h3 { font-size: 21px; }
+      .item .d { color: var(--ink-soft); font-size: 15px; margin-top: 4px; }
+      .item .figs { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 8px; }
+      .item .figs b { font-family: 'Bricolage Grotesque'; font-size: 20px; }
+      .item .act { display: grid; gap: 8px; justify-items: stretch; }
+      @media (max-width: 640px) { .item { grid-template-columns: 96px 1fr; } .item img, .item .ph { width: 96px; } .item .act { grid-column: 1 / -1; grid-auto-flow: column; } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div id="header"></div>
+      <div class="head">
+        <h2>New from Aruodas</h2>
+        <p>Adverts you marked as favourites on Aruodas and brought over with the bookmark. They only have the basics. Open one, click the bookmark again, and it becomes a full plot with checks and a map.</p>
+      </div>
+      <div id="summary"></div>
+      <div id="content"></div>
+    </div>
+
+    <script src="shared.js"></script>
+    <script>
+      const P = PROTO, S = P.state
+      // The capture summary shows only right after a favourites import; ?captured=1 simulates it.
+      let showSummary = new URLSearchParams(location.search).has('captured')
+      function render() {
+        document.getElementById('summary').innerHTML = showSummary ? `<div class="panel blue summary"><div class="nums"><span><b>2</b>added</span><span><b>1</b>refreshed</span><span><b>3</b>already saved</span><span><b>1</b>skipped — not land</span><span><b>1</b>skipped — sold</span><span><b>0</b>unreadable</span></div><button class="btn ghost sm" onclick="showSummary=false;render()">Dismiss</button></div>` : ''
+        const c = document.getElementById('content')
+        if (!S.inbox.length) { c.innerHTML = `<div class="panel empty"><h2>Nothing waiting</h2><p>To bring over many adverts at once, open your favourites page on aruodas.lt and click the Find Me Home bookmark.</p><a class="btn" href="plots.html">Back to plots</a> &nbsp; <a class="linkbtn" href="inbox.html?captured=1">Show what it looks like right after an import</a></div>`; return }
+        c.innerHTML = `<div class="items">${S.inbox.map((it) => `<article class="panel soft item">
+          ${it.photo !== null ? `<img src="${P.scene(it.photo)}" alt="" />` : '<div class="ph">no photo</div>'}
+          <div>
+            <h3>${P.escape(it.title || 'Land advert on Aruodas')}</h3>
+            ${it.description ? `<div class="d">${P.escape(it.description)}</div>` : ''}
+            <div class="figs">${it.priceEur !== null ? `<span><b>${P.eur(it.priceEur)}</b></span>` : ''}${it.areaAres !== null ? `<span><b>${P.ares(it.areaAres)}</b></span>` : ''}<span class="tag">Aruodas ${it.sourceId}</span></div>
+          </div>
+          <div class="act">
+            <a class="btn blue" href="review.html?from=inbox" title="Opens the advert on aruodas.lt; click the bookmark there">Open advert ↗</a>
+            <button class="btn ghost sm" onclick="drop('${it.id}')">Not interested</button>
+          </div>
+        </article>`).join('')}</div>`
+      }
+      function drop(id) { S.inbox.splice(S.inbox.findIndex((x) => x.id === id), 1); P.save(); P.refreshHeader('inbox'); render() }
+      P.mount('inbox')
+      render()
+    </script>
+  </body>
+</html>

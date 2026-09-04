@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Plots — Find Me Home prototype</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="notebook.css" />
+    <style>
+      .legend { display: flex; flex-wrap: wrap; gap: 10px 22px; color: var(--ink-soft); font-size: 14px; padding: 10px 0 18px; border-top: 2px solid var(--ink); align-items: center; }
+      .legend b { color: var(--ink); }
+      .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin: 6px 0 14px; }
+      .sort { display: flex; gap: 6px; flex-wrap: wrap; }
+      .sort button { border-radius: 999px; padding: 6px 14px; border: 2px solid var(--line); background: var(--card); font-weight: 700; font-size: 14px; min-height: 36px; }
+      .sort button[aria-pressed='true'] { border-color: var(--ink); background: var(--ink); color: #fff; }
+      .list { display: grid; gap: 14px; }
+      .row { display: grid; grid-template-columns: 120px 1fr auto; gap: 18px; align-items: start; }
+      .title { font-size: 24px; font-weight: 600; line-height: 1.15; text-decoration: none; font-family: 'Bricolage Grotesque'; }
+      .title:hover { text-decoration: underline; text-decoration-color: var(--blue); }
+      .place { color: var(--ink-soft); margin-top: 2px; }
+      .figs { display: flex; flex-wrap: wrap; gap: 6px 26px; margin-top: 12px; }
+      .fig .v { font-family: 'Bricolage Grotesque'; font-size: 24px; font-weight: 700; line-height: 1; }
+      .fig .l { font-size: 13px; color: var(--ink-soft); }
+      .checks { display: flex; flex-wrap: wrap; align-items: center; margin-top: 12px; row-gap: 6px; }
+      .marks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; }
+      .side { display: grid; gap: 10px; justify-items: end; text-align: right; }
+      .plots, .updated { font-size: 13px; color: var(--ink-soft); }
+      @media (max-width: 640px) {
+        .row { grid-template-columns: 84px 1fr; }
+        .side { grid-column: 1 / -1; justify-items: start; text-align: left; }
+        .title { font-size: 21px; }
+        .fig .v { font-size: 21px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div id="header"></div>
+
+      <div class="legend">
+        <span><b>Each plot:</b> a map of where it is, its 13 automatic checks, and whether we're going to see it.</span>
+        <span><span class="strip" style="grid-template-columns:repeat(4,11px)"><i class="pass"></i><i class="warning"></i><i class="fail"></i><i></i></span> &nbsp;passed · look · problem · not checked</span>
+      </div>
+
+      <div class="tools">
+        <div class="sort" role="group" aria-label="Sort plots">
+          <button aria-pressed="true" onclick="sortBy('new', this)">Latest change</button>
+          <button aria-pressed="false" onclick="sortBy('cheap', this)">Cheapest</button>
+          <button aria-pressed="false" onclick="sortBy('big', this)">Biggest</button>
+          <button aria-pressed="false" onclick="sortBy('clean', this)">Fewest problems</button>
+        </div>
+        <span class="small muted" id="count"></span>
+      </div>
+
+      <section class="list" id="list" aria-label="Saved plots"></section>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="shared.js"></script>
+    <script>
+      const P = PROTO, S = P.state
+      let sort = 'new'
+      const locNote = { exact: 'exact shape', approx: 'roughly here', problem: 'location failed', unknown: 'no location yet' }
+      const sorted = () => {
+        const a = [...S.listings]
+        const price = (l) => P.primary(l).priceEur ?? 1e12
+        if (sort === 'cheap') a.sort((x, y) => price(x) - price(y))
+        else if (sort === 'big') a.sort((x, y) => (P.primary(y).areaAres ?? 0) - (P.primary(x).areaAres ?? 0))
+        else if (sort === 'clean') a.sort((x, y) => { const s = (l) => { const c = P.summary(P.primary(l).checks); return c.fail * 100 + c.warning + (c.pass ? 0 : 50) }; return s(x) - s(y) })
+        else a.sort((x, y) => y.updatedAt - x.updatedAt)
+        return a
+      }
+      function render() {
+        document.getElementById('count').textContent = `${S.listings.length} plots · ${S.plan.length} going to see`
+        document.getElementById('list').innerHTML = sorted().map((l) => {
+          const a = P.primary(l), going = P.planned(l.id), loc = P.locState(a)
+          const hasMap = P.located(l).length > 0
+          return `<article class="panel row ${going ? 'going' : ''}">
+            <div>
+              <a href="plot.html?id=${l.id}" aria-label="Open ${P.escape(l.title)}">
+                ${hasMap ? `<div class="mini" id="map-${l.id}"></div>` : `<div class="mini none">${loc === 'problem' ? '<span class="display" style="font-size:40px;color:var(--fail)">!</span>' : P.PIN}</div>`}
+              </a>
+              <small class="mini-cap">${locNote[loc]}</small>
+            </div>
+            <div>
+              <a class="title" href="plot.html?id=${l.id}">${P.escape(l.title)}</a>
+              <div class="place">${l.address ? P.escape(l.address) : 'Location not recorded yet'}</div>
+              <div class="figs">
+                <div class="fig"><div class="v">${P.eur(a.priceEur) ?? '—'}</div><div class="l">price</div></div>
+                <div class="fig"><div class="v">${P.ares(a.areaAres) ?? '—'}</div><div class="l">area</div></div>
+                <div class="fig"><div class="v">${P.perAre(a.priceEur, a.areaAres) ?? '—'}</div><div class="l">per are</div></div>
+              </div>
+              <div class="checks">${P.strip(a.checks)}${P.stripSum(a.checks)}</div>
+              <div class="marks">
+                ${l.visitedAt ? `<span class="tag pass">${P.CHECK.replace('<svg', '<svg width="14" height="14"')} visited ${P.dateShort(l.visitedAt)}</span>` : ''}
+                ${l.areas.length > 1 ? `<span class="tag">${l.areas.length} marked areas</span>` : ''}
+                ${l.photos.length ? '' : '<span class="tag">no photos</span>'}
+              </div>
+            </div>
+            <div class="side">
+              <button class="go" aria-pressed="${going}" onclick="toggle('${l.id}')">${P.FLAG}${going ? 'Going to see' : 'Go see it'}</button>
+              <span class="updated">changed ${P.ago(l.updatedAt)}</span>
+            </div>
+          </article>`
+        }).join('')
+        S.listings.forEach((l) => { const el = document.getElementById('map-' + l.id); if (el) P.miniMap(el, l, P.planned(l.id) ? '#e8641b' : '#2a5d9f') })
+      }
+      function toggle(id) { P.togglePlan(id); P.refreshHeader('plots'); render() }
+      function sortBy(k, btn) { sort = k; document.querySelectorAll('.sort button').forEach((b) => b.setAttribute('aria-pressed', b === btn)); render() }
+      P.mount('plots')
+      render()
+    </script>
+  </body>
+</html>

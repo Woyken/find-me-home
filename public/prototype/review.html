@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Review before saving — Find Me Home prototype</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="notebook.css" />
+    <style>
+      .wrap { max-width: 960px; }
+      .head h1 { font-size: clamp(30px, 5vw, 44px); line-height: 1.05; }
+      .head p { color: var(--ink-soft); margin: 8px 0 0; max-width: 60ch; }
+      .cols { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 22px; margin-top: 22px; align-items: start; }
+      .advert img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; border: 1.5px solid var(--ink); }
+      .advert h2 { font-size: 24px; margin-top: 12px; }
+      .advert .p { color: var(--ink-soft); margin-top: 4px; }
+      .found { margin-top: 12px; }
+      .found dt { color: var(--ink-soft); }
+      .form h2 { font-size: 26px; }
+      .form .hint { color: var(--ink-soft); font-size: 15px; margin: 4px 0 14px; }
+      .loc { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+      .loc svg { width: 22px; height: 22px; color: var(--blue); flex: none; }
+      @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div id="page"></div>
+    </div>
+
+    <script src="shared.js"></script>
+    <script>
+      const P = PROTO, S = P.state
+      const q = new URLSearchParams(location.search)
+      const broken = q.has('broken')
+      const fromInbox = q.get('from') === 'inbox'
+      const imported = { sourceId: '1-4130044', url: 'https://www.aruodas.lt/1-4130044/', title: 'Sklypas Skaidiškėse', address: 'Skaidiškės, Vilniaus r.', priceEur: 36500, areaAres: 11.2, purposeText: 'Namų valda', uniqueRegistryNumber: '4400-7777-1234', photo: 2,
+        description: 'Namų valdos sklypas ramioje vietoje, šalia miško. Elektra prie sklypo.', utilities: { electricity: 'nearby' } }
+      function render() {
+        const page = document.getElementById('page')
+        if (broken) {
+          page.innerHTML = `<div class="panel empty" style="max-width:560px;margin:40px auto"><h2>We couldn't read that advert</h2><p role="alert">The bookmark sent something this version doesn't understand: "photos[2] must be an https URL on aruodas.lt". Try the bookmark again on the advert page, or update the bookmark from the Add a plot step.</p><a class="btn" href="plots.html">Back to plots</a> &nbsp; <button class="btn ghost" onclick="document.getElementById('imp').showModal()">Update the bookmark</button></div>`
+          return
+        }
+        page.innerHTML = `
+          <header class="head">
+            <span class="tag blue">Aruodas ${imported.sourceId}</span>
+            <h1 style="margin-top:10px">Check what we found, then save</h1>
+            <p>We read this from the advert. Fix anything that looks wrong; you can change all of it later.</p>
+          </header>
+          <div class="cols">
+            <aside class="panel advert">
+              <img src="${P.scene(imported.photo)}" alt="" />
+              <h2>${imported.title}</h2>
+              <div class="p">${imported.address}</div>
+              <p class="small" style="margin-top:10px">${imported.description}</p>
+              <a class="linkbtn" style="display:inline-block;margin-top:10px" href="${imported.url}" target="_blank" rel="noreferrer">Open the original advert ↗</a>
+              <div class="panel blue found">
+                <div class="loc">${P.PIN}<div><b>We'll find it by its parcel number</b><div class="small muted">${imported.uniqueRegistryNumber} — the exact shape will be drawn on the map after saving.</div></div></div>
+              </div>
+            </aside>
+            <section class="panel form">
+              <h2>The plot</h2>
+              <p class="hint">Price and area are used by the automatic checks.</p>
+              <div class="grid2">
+                <label class="f">Price (€)<input id="price" inputmode="decimal" value="${imported.priceEur}" /></label>
+                <label class="f">Area (ares)<input id="area" inputmode="decimal" value="${imported.areaAres}" /></label>
+              </div>
+              <label class="f" style="margin-top:14px">Land purpose<input id="purpose" value="${imported.purposeText}" /></label>
+              <label class="f" style="margin-top:14px">Our notes <span class="muted" style="font-weight:400">(optional)</span><textarea id="notes" placeholder="Why this one caught your eye"></textarea></label>
+              <p class="small" id="err" style="color:var(--fail);font-weight:700;margin:10px 0 0"></p>
+              <div class="rowline" style="margin-top:18px"><button class="btn" onclick="save()">Save plot</button><a class="linkbtn" href="${fromInbox ? 'inbox.html' : 'plots.html'}">Cancel</a></div>
+              <p class="small muted" style="margin-top:12px">After saving we look up the location and run the 13 checks automatically.</p>
+            </section>
+          </div>`
+      }
+      const num = (v, label) => { if (!v.trim()) return null; const n = Number(v.replace(',', '.')); if (!Number.isFinite(n)) throw new Error(`${label} must be a number.`); return n }
+      function save() {
+        try {
+          const price = num(document.getElementById('price').value, 'Price'), area = num(document.getElementById('area').value, 'Area')
+          const id = 'l' + Date.now()
+          S.listings.unshift({ id, sourceId: imported.sourceId, url: imported.url, title: imported.title, address: imported.address, description: imported.description, photos: [imported.photo], visitedAt: null, updatedAt: Date.now(), utilities: imported.utilities,
+            areas: [{ id: 'a' + Date.now(), name: null, priceEur: price, areaAres: area, purpose: document.getElementById('purpose').value.trim() || null, notes: document.getElementById('notes').value.trim() || null,
+              clue: { kind: 'parcel', parcel: imported.uniqueRegistryNumber, lat: null, lng: null, precision: 'exact', address: imported.address },
+              resolved: { state: 'missing', lat: null, lng: null, address: null, parcel: null, cadastral: null, boundary: null, precision: null, dataset: null, diagnostic: null },
+              ratings: { road: null, feeling: null, view: null }, checks: P.CHECKS.map(([key, label]) => ({ key, label, status: 'unknown', value: 'Not checked', detail: null })) }] })
+          const ix = S.inbox.findIndex((x) => x.sourceId === imported.sourceId); if (ix >= 0) S.inbox.splice(ix, 1)
+          S.household.lastChange = Date.now(); P.save()
+          location.href = fromInbox ? 'inbox.html' : 'plot.html?id=' + id
+        } catch (e) { document.getElementById('err').textContent = e.message }
+      }
+      P.mount('review')
+      render()
+    </script>
+  </body>
+</html>

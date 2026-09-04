@@ -3,76 +3,58 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Design prototypes — Find Me Home</title>
+    <title>Prototype — Find Me Home, "Field notebook"</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="notebook.css" />
     <style>
-      /* PROTOTYPE gallery. Deliberately plain so it doesn't compete with the
-         five designs it links to. */
-      :root { --ink: #1a1a1a; --mute: #666; --rule: #e2e2e2; }
-      * { box-sizing: border-box; }
-      body { margin: 0; background: #fafafa; color: var(--ink); font: 16px/1.5 ui-sans-serif, system-ui, sans-serif; }
-      .wrap { max-width: 860px; margin: 0 auto; padding: 40px 20px 80px; }
-      h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.02em; }
-      .lead { color: var(--mute); margin: 0 0 30px; max-width: 60ch; }
-      .lead code { background: #eee; padding: 1px 5px; border-radius: 4px; font-size: 14px; }
-      ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
-      li a { display: grid; grid-template-columns: 120px 1fr; gap: 18px; align-items: stretch; text-decoration: none; color: inherit; background: #fff; border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
-      li a:hover { border-color: #999; }
-      .swatch { display: grid; grid-template-rows: 1fr 1fr 1fr; }
-      .swatch i { display: block; }
-      .body { padding: 14px 18px 14px 0; }
-      .body h2 { margin: 0; font-size: 19px; }
-      .body p { margin: 4px 0 0; color: var(--mute); font-size: 15px; }
-      .body .words { margin-top: 8px; font-size: 13px; color: #444; }
-      .body .words b { font-weight: 600; }
-      .note { margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--rule); color: var(--mute); font-size: 14px; }
-      .note ul { padding-left: 18px; margin: 6px 0; }
-      @media (max-width: 560px) { li a { grid-template-columns: 1fr; } .swatch { grid-template-rows: none; grid-template-columns: 1fr 1fr 1fr; height: 16px; } .body { padding: 12px 16px 14px; } }
+      .wrap { max-width: 860px; }
+      h1 { font-size: clamp(34px, 6vw, 52px); line-height: 1; }
+      .lead { color: var(--ink-soft); margin: 12px 0 26px; max-width: 62ch; }
+      .pages { display: grid; gap: 12px; }
+      .page { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; align-items: center; text-decoration: none; }
+      .page h2 { font-size: 22px; }
+      .page p { margin: 2px 0 0; color: var(--ink-soft); font-size: 15px; grid-column: 1; }
+      .page .btn { grid-row: 1 / span 2; }
+      .words { margin-top: 30px; }
+      .words table { width: 100%; border-collapse: collapse; font-size: 15px; margin-top: 8px; }
+      .words td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+      .words td:first-child { color: var(--ink-soft); width: 40%; }
+      @media (max-width: 560px) { .page { grid-template-columns: 1fr; } .page .btn { grid-row: auto; justify-self: start; } }
     </style>
   </head>
   <body>
     <div class="wrap">
-      <h1>Five designs for the saved-plots page</h1>
-      <p class="lead">
-        Static prototypes with example data. Same functionality on every one: household name, sync state, rename, invite, switch device,
-        Aruodas import setup, the inbox, the visit plan, and the list itself with add / remove from the plan. Each design also changes the
-        <em>words</em> used in the interface. Flip between them with the black pill at the edge of each page or the <code>←</code> <code>→</code> keys.
-      </p>
-      <ol>
-        <li><a href="notebook.html">
-          <span class="swatch"><i style="background:#eef3ec"></i><i style="background:#2a5d9f"></i><i style="background:#e8641b"></i></span>
-          <span class="body"><h2>1 · Field notebook</h2><p>A surveyor's field book on graph paper. The real parcel outline from the land registry is drawn beside every plot; checks are counted as symbols; orange is spent only on "going to see".</p>
-          <span class="words"><b>Words:</b> Plots · Going to see · New from Aruodas · Our search · marked areas</span></span>
-        </a></li>
-        <li><a href="roadside.html">
-          <span class="swatch"><i style="background:#12301f"></i><i style="background:#f3d36b"></i><i style="background:#f7f3e8"></i></span>
-          <span class="body"><h2>2 · Roadside sign</h2><p>Phone-first. Each plot is a "for sale" board nailed to a post, price loudest. The 13 checks collapse into one traffic light, the visit toggle is a thumb switch, navigation is a bottom tab bar.</p>
-          <span class="words"><b>Words:</b> Land · Trip · Fresh · Go see it? · On the trip</span></span>
-        </a></li>
-        <li><a href="ledger.html">
-          <span class="swatch"><i style="background:#ffffff"></i><i style="background:#22303c"></i><i style="background:#1f5eff"></i></span>
-          <span class="body"><h2>3 · Ledger</h2><p>The comparison sheet. Dense sortable table, every check visible as a strip of 13 cells, €/are computed, quick filters, totals row. Best on a laptop; stacks on a phone.</p>
-          <span class="words"><b>Words:</b> Listings · Visit list · Inbox · Household</span></span>
-        </a></li>
-        <li><a href="postcards.html">
-          <span class="swatch"><i style="background:#e8eff4"></i><i style="background:#1e3d2f"></i><i style="background:#f5c542"></i></span>
-          <span class="body"><h2>4 · Postcards</h2><p>The fridge door. Photo-first postcards, a pushpin when a place is on the weekend plan, a rubber stamp once visited, handwritten margin notes. Checks become weather: sunny, cloudy, stormy.</p>
-          <span class="words"><b>Words:</b> Places · Weekend plan · New postcards · Pin for the weekend</span></span>
-        </a></li>
-        <li><a href="mapdesk.html">
-          <span class="swatch"><i style="background:#f5f7f5"></i><i style="background:#0e5a66"></i><i style="background:#ff6a4d"></i></span>
-          <span class="body"><h2>5 · Map desk</h2><p>The map is the page. A live map of every located plot beside a margin of notes; click either side and the other answers. Coral marks the route. Plots without a location gather at the bottom.</p>
-          <span class="words"><b>Words:</b> Saved plots · Route · Unsorted · Add to route</span></span>
-        </a></li>
-      </ol>
-      <div class="note">
-        Things worth reacting to when you look:
-        <ul>
-          <li>Which vocabulary reads best to someone who has never seen the app.</li>
-          <li>Indicators instead of text: parcel outlines (1), traffic light (2), 13-cell strip (3), weather (4), chips + map colour (5).</li>
-          <li>Where the household controls live: inline settings link (1, 4, 5), gear icon (2), "Manage" in a top bar (3).</li>
-          <li>Import setup as a 3-step sheet everywhere; the wording differs slightly per design.</li>
-        </ul>
-        Nothing here touches real data. Tell me which parts to keep and we'll build the real page from them.
+      <span class="tag blue">Prototype · example data</span>
+      <h1 style="margin-top:12px">Find Me Home, redrawn as a field notebook</h1>
+      <p class="lead">Every screen of the app in the chosen design. Buttons work on example data (kept only in this tab), so you can walk the real flows: pick plots to see, reorder the trip, mark one visited, save an import. Use the black pill at the bottom of each page to step through, or <code>←</code> <code>→</code>.</p>
+
+      <div class="pages">
+        <a class="panel page" href="plots.html"><h2>Plots</h2><p>The saved list. Each row: a live map with the plot outlined and its surroundings, the 13 checks as a strip, price / area / per-are, sort, and the "Go see it" flag.</p><span class="btn">Open</span></a>
+        <a class="panel page" href="plot.html?id=l1"><h2>Plot detail</h2><p>Map of all marked areas, then one editor per area: where it is (registry data, retry, what went wrong), the 13 checks in full, price/area/purpose/notes, the location hint, our ratings, save. Sidebar: photos, description, utilities, mark visited, remove.</p><span class="btn">Open</span></a>
+        <a class="panel page" href="trip.html"><h2>Going to see</h2><p>The visit plan as numbered stops. Reorder with arrows, remove, list or map, open the whole route in Google Maps. Empty state included.</p><span class="btn">Open</span></a>
+        <a class="panel page" href="inbox.html?captured=1"><h2>New from Aruodas</h2><p>Favourites brought over in bulk, with the "what happened" summary right after an import. Open advert / not interested.</p><span class="btn">Open</span></a>
+        <a class="panel page" href="review.html"><h2>Review before saving</h2><p>What the bookmark shows after reading an advert: what we found, how we'll locate it, fix price/area, save. Also the <a href="review.html?broken=1">unreadable import</a> state.</p><span class="btn">Open</span></a>
+        <a class="panel page" href="start.html"><h2>First run</h2><p>No search on this device yet: start one or join with an invitation link. Also waiting / copying / storage-blocked states.</p><span class="btn">Open</span></a>
+      </div>
+
+      <p class="small muted" style="margin-top:14px">Everywhere: "Our search settings" (rename, invite with QR, switch or remove searches on this device) and "+ Add a plot" (3-step bookmark setup) open as dialogs from the header.</p>
+
+      <div class="panel soft words">
+        <h2>Words changed in the interface</h2>
+        <table>
+          <tr><td>Household</td><td>Our search / the search</td></tr>
+          <tr><td>Source Listing</td><td>Plot</td></tr>
+          <tr><td>Candidate Plot</td><td>Marked area (the whole plot, or a part / combination you'd buy)</td></tr>
+          <tr><td>Visit Plan</td><td>Going to see (stops)</td></tr>
+          <tr><td>Import Inbox</td><td>New from Aruodas</td></tr>
+          <tr><td>Resolved Location Data</td><td>Where it is</td></tr>
+          <tr><td>Recorded Location Clue</td><td>Location hint (find it by parcel number / coordinates / address)</td></tr>
+          <tr><td>Automatic Checks (pass / warning / fail / unknown)</td><td>Automatic checks (fine / look / problem / not checked)</td></tr>
+          <tr><td>Manual Ratings</td><td>Our ratings (stars)</td></tr>
+          <tr><td>Mark Source Listing visited</td><td>We went to see it → Mark as visited</td></tr>
+          <tr><td>Bookmarklet</td><td>The Find Me Home bookmark</td></tr>
+        </table>
       </div>
     </div>
   </body>
