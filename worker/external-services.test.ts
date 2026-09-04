@@ -159,6 +159,40 @@ describe('retained external-service Worker operations', () => {
     )
   })
 
+  it('treats the IRD "Results not found" envelope as an empty result', async () => {
+    const response = await handleWorkerRequest(
+      request(
+        '/crime/density?latitude=54.613589&longitude=25.453212&radiusMeters=1000&years=3',
+      ),
+      options(
+        vi.fn<typeof fetch>(async () =>
+          Response.json(
+            {
+              error: {
+                code: 404,
+                message: 'Results not found',
+                details: ['Unable to find results'],
+              },
+            },
+            { status: 209 },
+          ),
+        ),
+      ),
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      rawCount: 0,
+      weightedCount: 0,
+      violentCount: 0,
+      radiusMeters: 1000,
+      years: 3,
+      dateFrom: '2023-09-03',
+      dateTo: '2026-09-03',
+      emptyResponse: true,
+    })
+  })
+
   it('explains why the IRD crime query failed in the 502 body', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const path =
@@ -191,6 +225,16 @@ describe('retained external-service Worker operations', () => {
         }),
       ),
     )
+    const irdError = await handleWorkerRequest(
+      request(path),
+      options(
+        vi.fn<typeof fetch>(async () =>
+          Response.json({
+            error: { code: 500, message: 'Internal error' },
+          }),
+        ),
+      ),
+    )
 
     expect(upstreamDown.status).toBe(502)
     expect(await upstreamDown.json()).toEqual({
@@ -206,6 +250,9 @@ describe('retained external-service Worker operations', () => {
     expect(await networkFailure.json()).toMatchObject({
       reason:
         'POST https://maps.ird.lt/nvzr-services/query failed: fetch failed',
+    })
+    expect(await irdError.json()).toMatchObject({
+      reason: 'IRD returned error: {"code":500,"message":"Internal error"}',
     })
   })
 

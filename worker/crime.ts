@@ -103,14 +103,25 @@ export const handleCrimeRequest = async (
         `IRD returned a non-object JSON body: ${text.slice(0, 120)}`,
       )
     const value = parsed as Record<string, unknown>
-    if (!Array.isArray(value.bare))
+    // IRD signals "no crimes in this area/period" with HTTP 209 and an error
+    // envelope `{ error: { code: 404, message: 'Results not found' } }`
+    // instead of an empty `bare` array. Treat that as a valid empty result.
+    const irdError = value.error
+    const noResults =
+      irdError !== null &&
+      typeof irdError === 'object' &&
+      (irdError as Record<string, unknown>).code === 404
+    const bare = noResults && value.bare === undefined ? [] : value.bare
+    if (!Array.isArray(bare))
       throw new Error(
-        `IRD response has no "bare" array; keys: ${Object.keys(value).join(', ') || 'none'}`,
+        irdError === undefined
+          ? `IRD response has no "bare" array; keys: ${Object.keys(value).join(', ') || 'none'}`
+          : `IRD returned error: ${JSON.stringify(irdError).slice(0, 200)}`,
       )
     let rawCount = 0
     let weightedCount = 0
     let violentCount = 0
-    for (const row of value.bare) {
+    for (const row of bare) {
       if (!Array.isArray(row) || row.length < 4)
         throw new Error(
           `IRD row has unexpected shape: ${JSON.stringify(row).slice(0, 120)}`,
@@ -138,7 +149,7 @@ export const handleCrimeRequest = async (
         years,
         dateFrom,
         dateTo,
-        emptyResponse: value.bare.length === 0,
+        emptyResponse: bare.length === 0,
       },
       { headers: cors },
     )
