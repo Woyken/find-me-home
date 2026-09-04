@@ -44,6 +44,9 @@ window.PROTO = (() => {
     inbox: [
       { id: 'i1', sourceId: '1-4130044', title: 'Sklypas Skaidiškėse', description: 'Namų valdos sklypas ramioje vietoje, šalia miško. Elektra prie sklypo.', priceEur: 36500, areaAres: 11.2, photo: 2 },
       { id: 'i2', sourceId: '1-4128870', title: null, description: null, priceEur: 58000, areaAres: 15, photo: null },
+      { id: 'i3', sourceId: '1-4131502', title: 'Sklypas Didžiojoje Riešėje', description: 'Lygus sklypas, greta naujų namų kvartalo. Miesto vandentiekis ir nuotekos gatvėje.', priceEur: 47900, areaAres: 9.6, photo: 8 },
+      { id: 'i4', sourceId: '1-4127711', title: 'Namų valda Kalvelėse', description: 'Sklypas su vaizdu į slėnį. Privažiavimas žvyrkeliu.', priceEur: 29000, areaAres: 20, photo: 6 },
+      { id: 'i5', sourceId: '1-4132009', title: 'Sklypas Zujūnuose', description: null, priceEur: 74000, areaAres: 12, photo: 7 },
     ],
     listings: [
       {
@@ -158,7 +161,7 @@ window.PROTO = (() => {
   })
 
   /* ---------- state (sessionStorage so actions carry across pages) ---------- */
-  const KEY = 'fmh-proto-state'
+  const KEY = 'fmh-proto-state-v2'
   let state
   try { state = JSON.parse(sessionStorage.getItem(KEY)) } catch (e) { state = null }
   if (!state || !state.listings) state = seed()
@@ -267,7 +270,7 @@ window.PROTO = (() => {
       </div>
       <nav class="nav">
         <a class="pill" href="plots.html" ${active === 'plots' ? 'aria-current="page"' : ''}>Plots <span class="n">${state.listings.length}</span></a>
-        <a class="pill blue ${state.inbox.length ? '' : 'hidden'}" href="inbox.html" ${active === 'inbox' ? 'aria-current="page"' : ''}>New from Aruodas <span class="n">${state.inbox.length}</span></a>
+        <a class="pill blue ${state.inbox.length ? '' : 'hidden'}" href="inbox.html" ${active === 'inbox' ? 'aria-current="page"' : ''}>Clippings <span class="n">${state.inbox.length}</span></a>
         <a class="pill stake" href="trip.html" ${active === 'trip' ? 'aria-current="page"' : ''}>Going to see <span class="n">${state.plan.length}</span></a>
         <button class="pill primary" onclick="document.getElementById('imp').showModal()">+ Add a plot</button>
       </nav>
@@ -307,7 +310,7 @@ window.PROTO = (() => {
 
   const PAGES = [
     ['plots.html', 'Plots'], ['plot.html', 'Plot detail'], ['trip.html', 'Going to see'],
-    ['inbox.html', 'New from Aruodas'], ['review.html', 'Review import'], ['start.html', 'First run'],
+    ['inbox.html', 'Clippings deck'], ['review.html', 'Review import'], ['start.html', 'First run'],
   ]
   const mountSwitcher = () => {
     const file = location.pathname.split('/').pop()

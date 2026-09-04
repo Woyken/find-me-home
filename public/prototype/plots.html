@@ -27,6 +27,26 @@
       .marks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; }
       .side { display: grid; gap: 10px; justify-items: end; text-align: right; }
       .plots, .updated { font-size: 13px; color: var(--ink-soft); }
+
+      /* the pocket: loose clippings tucked inside the notebook cover */
+      .pocket { position: relative; margin: 6px 0 22px; padding: 16px 18px 18px; background: #e4e9e2; border: 0; border-top: 2px solid var(--ink); border-bottom: 2px dashed var(--ink-faint);
+        background-image: repeating-linear-gradient(-45deg, transparent 0 9px, rgba(27, 39, 51, 0.045) 9px 10px); }
+      .pocket-h { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+      .pocket-h h2 { font-size: 22px; }
+      .pocket-h p { margin: 0; color: var(--ink-soft); font-size: 15px; }
+      .clips { display: flex; gap: 14px; overflow-x: auto; padding: 16px 6px 8px; scroll-snap-type: x proximity; }
+      .clip { flex: none; width: 190px; scroll-snap-align: start; text-decoration: none; background: #fbfaf5; padding: 8px 8px 10px; transform: rotate(var(--r, 0deg)); box-shadow: 2px 3px 0 rgba(27, 39, 51, 0.18); position: relative;
+        clip-path: polygon(0 3%, 6% 0, 14% 2%, 25% 0, 36% 3%, 48% 0, 60% 2%, 72% 0, 85% 3%, 94% 0, 100% 2%, 100% 97%, 92% 100%, 80% 98%, 66% 100%, 52% 98%, 40% 100%, 26% 98%, 12% 100%, 0 98%); }
+      .clip:nth-child(odd) { --r: -1.4deg; } .clip:nth-child(even) { --r: 1.1deg; } .clip:nth-child(3n) { --r: 0.4deg; }
+      .clip:hover { transform: rotate(0) translateY(-2px); }
+      .clip img, .clip .ph { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; filter: grayscale(1) contrast(0.95); background: #d7dfd9; }
+      .clip .ph { display: grid; place-items: center; color: var(--ink-faint); font-size: 12px; }
+      .clip .t { font-family: 'Bricolage Grotesque'; font-weight: 600; font-size: 15px; line-height: 1.2; margin-top: 8px; color: var(--ink); }
+      .clip .m { font-size: 13px; color: var(--ink-soft); margin-top: 2px; }
+      .clip .x { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.9); font-size: 15px; line-height: 1; }
+      .clip.more { display: grid; place-items: center; text-align: center; background: transparent; box-shadow: none; clip-path: none; border: 2px dashed var(--ink-faint); color: var(--blue); font-weight: 700; }
+      .captured { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 14px; margin-top: 8px; color: var(--ink-soft); }
+      .captured b { color: var(--ink); }
       @media (max-width: 640px) {
         .row { grid-template-columns: 84px 1fr; }
         .side { grid-column: 1 / -1; justify-items: start; text-align: left; }
@@ -38,6 +58,8 @@
   <body>
     <div class="wrap">
       <div id="header"></div>
+
+      <section class="pocket" id="pocket" aria-label="Clippings from Aruodas"></section>
 
       <div class="legend">
         <span><b>Each plot:</b> a map of where it is, its 13 automatic checks, and whether we're going to see it.</span>
@@ -72,7 +94,21 @@
         else a.sort((x, y) => y.updatedAt - x.updatedAt)
         return a
       }
+      const captured = new URLSearchParams(location.search).has('captured')
+      function renderPocket() {
+        const el = document.getElementById('pocket'), n = S.inbox.length
+        if (!n) { el.classList.add('hidden'); return }
+        el.classList.remove('hidden')
+        const shown = S.inbox.slice(0, 4)
+        el.innerHTML = `<div class="pocket-h"><div><h2>${n} clipping${n === 1 ? '' : 's'} from Aruodas</h2><p>Favourites you brought over. They're not plots yet — open one and click the bookmark to glue it in.</p>
+          ${captured ? `<div class="captured"><span><b>2</b> new</span><span><b>1</b> refreshed</span><span><b>3</b> already saved</span><span><b>1</b> skipped, not land</span><span><b>1</b> skipped, sold</span></div>` : ''}</div>
+          <a class="btn blue" href="inbox.html">Sort them one by one</a></div>
+          <div class="clips">${shown.map((it) => `<a class="clip" href="inbox.html?item=${it.id}"><button class="x" aria-label="Not interested" onclick="event.preventDefault();dropClip('${it.id}')">×</button>${it.photo !== null ? `<img src="${P.scene(it.photo)}" alt="" />` : '<div class="ph">no photo</div>'}<div class="t">${P.escape(it.title || 'Land advert ' + it.sourceId)}</div><div class="m">${[P.eur(it.priceEur), P.ares(it.areaAres)].filter(Boolean).join(' · ') || 'no details yet'}</div></a>`).join('')}
+          ${n > shown.length ? `<a class="clip more" href="inbox.html">+${n - shown.length} more</a>` : ''}</div>`
+      }
+      function dropClip(id) { S.inbox.splice(S.inbox.findIndex((x) => x.id === id), 1); P.save(); P.refreshHeader('plots'); renderPocket() }
       function render() {
+        renderPocket()
         document.getElementById('count').textContent = `${S.listings.length} plots · ${S.plan.length} going to see`
         document.getElementById('list').innerHTML = sorted().map((l) => {
           const a = P.primary(l), going = P.planned(l.id), loc = P.locState(a)

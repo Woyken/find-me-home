@@ -35,7 +35,8 @@
       const q = new URLSearchParams(location.search)
       const broken = q.has('broken')
       const fromInbox = q.get('from') === 'inbox'
-      const imported = { sourceId: '1-4130044', url: 'https://www.aruodas.lt/1-4130044/', title: 'Sklypas Skaidiškėse', address: 'Skaidiškės, Vilniaus r.', priceEur: 36500, areaAres: 11.2, purposeText: 'Namų valda', uniqueRegistryNumber: '4400-7777-1234', photo: 2,
+      const clip = S.inbox.find((x) => x.id === q.get('item'))
+      const imported = clip ? { sourceId: clip.sourceId, url: `https://www.aruodas.lt/${clip.sourceId}/`, title: clip.title || 'Sklypas', address: 'Vilniaus r.', priceEur: clip.priceEur, areaAres: clip.areaAres, purposeText: 'Namų valda', uniqueRegistryNumber: '4400-' + clip.sourceId.slice(-4) + '-0001', photo: clip.photo, description: clip.description || '', utilities: {} } : { sourceId: '1-4130044', url: 'https://www.aruodas.lt/1-4130044/', title: 'Sklypas Skaidiškėse', address: 'Skaidiškės, Vilniaus r.', priceEur: 36500, areaAres: 11.2, purposeText: 'Namų valda', uniqueRegistryNumber: '4400-7777-1234', photo: 2,
         description: 'Namų valdos sklypas ramioje vietoje, šalia miško. Elektra prie sklypo.', utilities: { electricity: 'nearby' } }
       function render() {
         const page = document.getElementById('page')
@@ -47,14 +48,14 @@
           <header class="head">
             <span class="tag blue">Aruodas ${imported.sourceId}</span>
             <h1 style="margin-top:10px">Check what we found, then save</h1>
-            <p>We read this from the advert. Fix anything that looks wrong; you can change all of it later.</p>
+            <p>We read this from the advert. Fix anything that looks wrong; you can change all of it later.${fromInbox ? ' After saving you go back to your clippings.' : ''}</p>
           </header>
           <div class="cols">
             <aside class="panel advert">
-              <img src="${P.scene(imported.photo)}" alt="" />
+              ${imported.photo !== null ? `<img src="${P.scene(imported.photo)}" alt="" />` : ''}
               <h2>${imported.title}</h2>
               <div class="p">${imported.address}</div>
-              <p class="small" style="margin-top:10px">${imported.description}</p>
+              ${imported.description ? `<p class="small" style="margin-top:10px">${imported.description}</p>` : ''}
               <a class="linkbtn" style="display:inline-block;margin-top:10px" href="${imported.url}" target="_blank" rel="noreferrer">Open the original advert ↗</a>
               <div class="panel blue found">
                 <div class="loc">${P.PIN}<div><b>We'll find it by its parcel number</b><div class="small muted">${imported.uniqueRegistryNumber} — the exact shape will be drawn on the map after saving.</div></div></div>
@@ -64,8 +65,8 @@
               <h2>The plot</h2>
               <p class="hint">Price and area are used by the automatic checks.</p>
               <div class="grid2">
-                <label class="f">Price (€)<input id="price" inputmode="decimal" value="${imported.priceEur}" /></label>
-                <label class="f">Area (ares)<input id="area" inputmode="decimal" value="${imported.areaAres}" /></label>
+                <label class="f">Price (€)<input id="price" inputmode="decimal" value="${imported.priceEur ?? ''}" /></label>
+                <label class="f">Area (ares)<input id="area" inputmode="decimal" value="${imported.areaAres ?? ''}" /></label>
               </div>
               <label class="f" style="margin-top:14px">Land purpose<input id="purpose" value="${imported.purposeText}" /></label>
               <label class="f" style="margin-top:14px">Our notes <span class="muted" style="font-weight:400">(optional)</span><textarea id="notes" placeholder="Why this one caught your eye"></textarea></label>
@@ -80,7 +81,7 @@
         try {
           const price = num(document.getElementById('price').value, 'Price'), area = num(document.getElementById('area').value, 'Area')
           const id = 'l' + Date.now()
-          S.listings.unshift({ id, sourceId: imported.sourceId, url: imported.url, title: imported.title, address: imported.address, description: imported.description, photos: [imported.photo], visitedAt: null, updatedAt: Date.now(), utilities: imported.utilities,
+          S.listings.unshift({ id, sourceId: imported.sourceId, url: imported.url, title: imported.title, address: imported.address, description: imported.description, photos: imported.photo !== null ? [imported.photo] : [], visitedAt: null, updatedAt: Date.now(), utilities: imported.utilities,
             areas: [{ id: 'a' + Date.now(), name: null, priceEur: price, areaAres: area, purpose: document.getElementById('purpose').value.trim() || null, notes: document.getElementById('notes').value.trim() || null,
               clue: { kind: 'parcel', parcel: imported.uniqueRegistryNumber, lat: null, lng: null, precision: 'exact', address: imported.address },
               resolved: { state: 'missing', lat: null, lng: null, address: null, parcel: null, cadastral: null, boundary: null, precision: null, dataset: null, diagnostic: null },
