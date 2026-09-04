@@ -116,7 +116,7 @@ export const createExternalServiceClient = (
   const invalidShape = (path: string, value: unknown) =>
     new ExternalServiceError(
       `${base}${path}`,
-      `response did not match the expected schema: ${JSON.stringify(value)?.slice(0, 200) ?? String(value)}`,
+      `response did not match the expected schema: ${String(JSON.stringify(value)).slice(0, 200)}`,
     )
   const queryPoint = (latitude: number, longitude: number) =>
     new URLSearchParams({

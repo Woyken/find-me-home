@@ -128,7 +128,7 @@ describe('Automatic Checks', () => {
   })
 
   it('reports the actual failure reason so it can be investigated', async () => {
-    const services: AutomaticCheckServices = {
+    const explaining: AutomaticCheckServices = {
       estimateEsoCost: async () => {
         throw new Error('ESO grid lookup timed out')
       },
@@ -144,7 +144,10 @@ describe('Automatic Checks', () => {
       },
     }
 
-    const results = await runAutomaticChecks({ plot, sourceListing }, services)
+    const results = await runAutomaticChecks(
+      { plot, sourceListing },
+      explaining,
+    )
     const byKey = Object.fromEntries(
       results.map((result) => [result.key, result]),
     )

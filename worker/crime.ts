@@ -90,17 +90,22 @@ export const handleCrimeRequest = async (
         `IRD responded HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
       )
     const text = await response.text()
-    let value: Record<string, unknown>
+    let parsed: unknown
     try {
-      value = JSON.parse(text) as Record<string, unknown>
+      parsed = JSON.parse(text)
     } catch {
       throw new Error(
         `IRD returned non-JSON body (${text.length} bytes): ${text.slice(0, 120)}`,
       )
     }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))
+      throw new Error(
+        `IRD returned a non-object JSON body: ${text.slice(0, 120)}`,
+      )
+    const value = parsed as Record<string, unknown>
     if (!Array.isArray(value.bare))
       throw new Error(
-        `IRD response has no "bare" array; keys: ${Object.keys(value ?? {}).join(', ') || 'none'}`,
+        `IRD response has no "bare" array; keys: ${Object.keys(value).join(', ') || 'none'}`,
       )
     let rawCount = 0
     let weightedCount = 0
