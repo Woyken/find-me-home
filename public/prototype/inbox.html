@@ -12,6 +12,9 @@
          a desk blotter, a single card, three decisions. */
       body { background-color: #dfe5dd; }
       .wrap { max-width: 720px; }
+      .captured { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-bottom: 14px; }
+      .captured .nums { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; color: var(--ink-soft); }
+      .captured .nums b { color: var(--ink); font-family: 'Bricolage Grotesque'; font-size: 18px; margin-right: 3px; }
       .deck-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 6px 0 14px; }
       .deck-h h2 { font-size: 30px; }
       .deck-h p { margin: 4px 0 0; color: var(--ink-soft); }
@@ -59,6 +62,7 @@
     <script>
       const P = PROTO, S = P.state
       const want = new URLSearchParams(location.search).get('item')
+      let captured = new URLSearchParams(location.search).has('captured')
       if (want) { const i = S.inbox.findIndex((x) => x.id === want); if (i > 0) S.inbox.unshift(S.inbox.splice(i, 1)[0]) }
       // how many were in the pile when we started sorting (for the progress bar)
       let total = Number(sessionStorage.getItem('fmh-deck-total')) || 0
@@ -70,6 +74,7 @@
         const it = S.inbox[0], done = total - n
         const missing = [it.title ? null : 'no title', it.priceEur === null ? 'no price' : null, it.areaAres === null ? 'no area' : null, it.photo === null ? 'no photo' : null].filter(Boolean)
         el.innerHTML = `
+          ${captured ? `<div class="panel blue captured"><div><b style="font-family:'Bricolage Grotesque'">Brought over from your Aruodas favourites just now</b><div class="nums"><span><b>2</b>new</span><span><b>1</b>refreshed</span><span><b>3</b>already saved</span><span><b>1</b>skipped, not land</span><span><b>1</b>skipped, sold</span></div></div><button class="btn ghost sm" onclick="captured=false;render()">OK</button></div>` : ''}
           <div class="deck-h"><div><h2>Clippings from Aruodas</h2><p>${n === 1 ? 'Last one.' : `${n} to go — one at a time.`}</p></div><span class="tag blue">${done + 1} of ${total}</span></div>
           <div class="progress" aria-hidden="true">${Array.from({ length: total }, (_, i) => `<i class="${i < done ? 'done' : i === done ? 'now' : ''}"></i>`).join('')}</div>
           <div class="stack">

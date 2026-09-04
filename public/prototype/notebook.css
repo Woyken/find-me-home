@@ -182,6 +182,21 @@ dialog input { font: inherit; width: 100%; padding: 10px 12px; border: 1.5px sol
 .close { position: absolute; top: 12px; right: 12px; border: 0; background: none; font-size: 26px; line-height: 1; }
 .toast { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 999px; font-weight: 700; z-index: 9000; }
 
+/* ---------- fanned stack of clippings (floating, right edge) ---------- */
+.stack-fan { position: fixed; right: 18px; top: 34vh; z-index: 800; width: 76px; height: 96px; display: block; text-decoration: none; filter: drop-shadow(2px 4px 0 rgba(27, 39, 51, 0.22)); }
+.fan-card { position: absolute; left: 10px; top: 14px; width: 56px; height: 68px; background: #fbfaf5; transform-origin: 50% 110%; transition: transform 0.25s;
+  clip-path: polygon(0 3%, 10% 0, 24% 3%, 40% 0, 56% 3%, 72% 0, 88% 3%, 100% 0, 100% 97%, 86% 100%, 70% 97%, 54% 100%, 38% 97%, 22% 100%, 8% 97%, 0 100%); }
+.fan-card img { width: 100%; height: 42px; object-fit: cover; display: block; filter: grayscale(1); margin-top: 4px; }
+.fan-card::after { content: ''; position: absolute; left: 6px; right: 6px; bottom: 8px; height: 3px; background: var(--line); box-shadow: 0 6px 0 var(--line); }
+.fan-card.c0 { transform: rotate(4deg); }
+.fan-card.c1 { transform: rotate(-6deg) translateX(-3px); }
+.fan-card.c2 { transform: rotate(-16deg) translateX(-6px); }
+.stack-fan:hover .fan-card.c0, .stack-fan:focus-visible .fan-card.c0 { transform: rotate(10deg) translateX(4px); }
+.stack-fan:hover .fan-card.c1, .stack-fan:focus-visible .fan-card.c1 { transform: rotate(-6deg) translateX(-6px); }
+.stack-fan:hover .fan-card.c2, .stack-fan:focus-visible .fan-card.c2 { transform: rotate(-22deg) translateX(-14px); }
+.fan-n { position: absolute; right: 0; top: 0; min-width: 28px; height: 28px; padding: 0 7px; border-radius: 999px; background: var(--blue); color: #fff; display: grid; place-items: center; font: 700 15px 'Bricolage Grotesque', sans-serif; border: 2px solid var(--paper); }
+@media (max-width: 640px) { .stack-fan { right: 8px; top: auto; bottom: 84px; transform: scale(0.85); } }
+
 /* ---------- prototype page switcher ---------- */
 #proto-switcher { position: fixed; left: 50%; transform: translateX(-50%); bottom: 12px; z-index: 9999; display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 6px; border-radius: 999px; background: #111; color: #fff; font: 600 12px/1 ui-sans-serif, system-ui, sans-serif; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); }
 #proto-switcher a { color: #fff; text-decoration: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #333; font-size: 16px; }

@@ -270,7 +270,6 @@ window.PROTO = (() => {
       </div>
       <nav class="nav">
         <a class="pill" href="plots.html" ${active === 'plots' ? 'aria-current="page"' : ''}>Plots <span class="n">${state.listings.length}</span></a>
-        <a class="pill blue ${state.inbox.length ? '' : 'hidden'}" href="inbox.html" ${active === 'inbox' ? 'aria-current="page"' : ''}>Clippings <span class="n">${state.inbox.length}</span></a>
         <a class="pill stake" href="trip.html" ${active === 'trip' ? 'aria-current="page"' : ''}>Going to see <span class="n">${state.plan.length}</span></a>
         <button class="pill primary" onclick="document.getElementById('imp').showModal()">+ Add a plot</button>
       </nav>
@@ -333,9 +332,24 @@ window.PROTO = (() => {
     document.body.insertAdjacentHTML('beforeend', dialogs())
     const slot = document.getElementById('header')
     if (slot) slot.outerHTML = header(active)
+    mountStack(active)
     mountSwitcher()
   }
-  const refreshHeader = (active) => { const h = document.querySelector('header.top'); if (h) h.outerHTML = header(active) }
+  // Fanned stack of clippings, floating on the right edge. Click → the deck.
+  const stackHtml = () => {
+    const n = state.inbox.length
+    if (!n) return ''
+    const top = state.inbox.slice(0, 3)
+    return `<a class="stack-fan" href="inbox.html" aria-label="${n} clipping${n === 1 ? '' : 's'} from Aruodas waiting to be saved" title="${n} clippings from Aruodas — open to sort them">
+      ${top.map((it, i) => `<span class="fan-card c${i}">${it.photo !== null && it.photo !== undefined ? `<img src="${scene(it.photo, 160, 120)}" alt="" />` : ''}</span>`).reverse().join('')}
+      <span class="fan-n">${n}</span></a>`
+  }
+  const mountStack = (active) => {
+    document.querySelector('.stack-fan')?.remove()
+    if (active === 'inbox' || active === 'review' || active === 'start') return
+    document.body.insertAdjacentHTML('beforeend', stackHtml())
+  }
+  const refreshHeader = (active) => { const h = document.querySelector('header.top'); if (h) h.outerHTML = header(active); mountStack(active) }
 
   return {
     refreshHeader,
