@@ -2,14 +2,23 @@ import type {
   CandidatePlotRecord,
   SourceListingRecord,
 } from './source-listings/model'
+import type { CrimeDensity } from './external-service-client'
+import type { LivabilityResult } from './livability-service'
+import type { NoiseResult } from './noise-service'
 
 export const AUTOMATIC_CHECK_KEYS = [
   'price',
   'area',
   'radius',
   'purpose',
+  'walk_to_stop',
+  'commute',
   'eso_cost',
+  'budget',
+  'crime',
   'legal_flags',
+  'noise',
+  'livability',
   'water_sewage',
 ] as const
 
@@ -37,6 +46,29 @@ export type AutomaticCheckServices = {
     latitude: number,
     longitude: number,
   ) => Promise<Array<{ name: string; flag: boolean | null; detail: string }>>
+  walkToStop?: (
+    latitude: number,
+    longitude: number,
+  ) => Promise<{
+    stopName: string | null
+    durationSeconds: number | null
+    distanceMeters: number | null
+  }>
+  cityCentreCommute?: (
+    latitude: number,
+    longitude: number,
+  ) => Promise<{
+    durationSeconds: number | null
+    routesFound: number
+    summary: string | null
+    arriveBy: string
+  }>
+  crimeDensity?: (latitude: number, longitude: number) => Promise<CrimeDensity>
+  noise?: (latitude: number, longitude: number) => Promise<NoiseResult>
+  livability?: (
+    latitude: number,
+    longitude: number,
+  ) => Promise<LivabilityResult>
 }
 
 type Input = {
@@ -65,6 +97,7 @@ const distanceKm = (
 
 export const automaticCheckRevision = ({ plot, sourceListing }: Input) =>
   JSON.stringify([
+    2,
     plot.priceEur,
     plot.areaAres,
     plot.purposeText,
@@ -171,9 +204,13 @@ export const runAutomaticChecks = async (
     detail:
       'Source advertisement text only; verify water and sewage independently.',
   }
-  const eso: Promise<AutomaticCheck> = location
-    ? services
-        .estimateEsoCost(location.latitude, location.longitude)
+  const unavailable = (key: AutomaticCheckKey, subject: string) =>
+    unknown(key, 'Unavailable', `${subject} unavailable. Retry when online.`)
+  const esoEstimate = location
+    ? services.estimateEsoCost(location.latitude, location.longitude)
+    : null
+  const eso: Promise<AutomaticCheck> = esoEstimate
+    ? esoEstimate
         .then<AutomaticCheck>((estimate) => ({
           key: 'eso_cost',
           status:
@@ -190,16 +227,207 @@ export const runAutomaticChecks = async (
               : `€${estimate.feeInclVat.toLocaleString('en-US')} · Group ${estimate.group}`,
           detail: estimate.note,
         }))
-        .catch(() =>
-          unknown(
-            'eso_cost',
-            'Unavailable',
-            'ESO service unavailable. Retry when online.',
-          ),
-        )
+        .catch(() => unavailable('eso_cost', 'ESO service'))
     : Promise.resolve(
         unknown(
           'eso_cost',
+          'Not available',
+          'Resolve the Candidate Plot location.',
+        ),
+      )
+  const budget: Promise<AutomaticCheck> =
+    plot.priceEur === null
+      ? Promise.resolve(
+          unknown('budget', 'Not available', 'Enter a Candidate Plot price.'),
+        )
+      : !location || !esoEstimate
+        ? Promise.resolve(
+            unknown(
+              'budget',
+              'Not available',
+              'Resolve the Candidate Plot location.',
+            ),
+          )
+        : esoEstimate
+            .then<AutomaticCheck>((estimate) => {
+              if (estimate.feeInclVat === null)
+                return unknown(
+                  'budget',
+                  `€${plot.priceEur!.toLocaleString('en-US')} + ESO quote`,
+                  'A combined budget cannot be calculated without an ESO quote.',
+                )
+              const technicalConditions = 41.89
+              const internalWiring = 1_500
+              const total = Math.round(
+                plot.priceEur! +
+                  estimate.feeInclVat +
+                  technicalConditions +
+                  internalWiring,
+              )
+              return {
+                key: 'budget',
+                status: total <= 65_000 ? 'pass' : 'fail',
+                value: `€${total.toLocaleString('en-US')}`,
+                detail: `Plot €${plot.priceEur!.toLocaleString('en-US')} + ESO €${estimate.feeInclVat.toLocaleString('en-US')} + technical conditions €41.89 + internal wiring €1,500; household limit €65,000.`,
+              }
+            })
+            .catch(() => unavailable('budget', 'ESO budget service'))
+  const walkToStop: Promise<AutomaticCheck> = location
+    ? services.walkToStop
+      ? services
+          .walkToStop(location.latitude, location.longitude)
+          .then<AutomaticCheck>((result) =>
+            result.durationSeconds === null
+              ? {
+                  key: 'walk_to_stop',
+                  status: 'fail',
+                  value: 'No stops nearby',
+                  detail:
+                    'No public-transport stops found within the Trafi search area.',
+                }
+              : {
+                  key: 'walk_to_stop',
+                  status: result.durationSeconds <= 17 * 60 ? 'pass' : 'fail',
+                  value: `${Math.round(result.durationSeconds / 60)} min${result.stopName ? ` → ${result.stopName}` : ''}`,
+                  detail: `${(result.durationSeconds / 60).toFixed(1)} min${result.distanceMeters === null ? '' : ` / ${Math.round(result.distanceMeters)} m`}; household limit 17 min.`,
+                },
+          )
+          .catch(() => unavailable('walk_to_stop', 'Trafi walking service'))
+      : Promise.resolve(unavailable('walk_to_stop', 'Trafi walking service'))
+    : Promise.resolve(
+        unknown(
+          'walk_to_stop',
+          'Not available',
+          'Resolve the Candidate Plot location.',
+        ),
+      )
+  const commute: Promise<AutomaticCheck> = location
+    ? services.cityCentreCommute
+      ? services
+          .cityCentreCommute(location.latitude, location.longitude)
+          .then<AutomaticCheck>((result) =>
+            result.durationSeconds === null
+              ? {
+                  key: 'commute',
+                  status: 'fail',
+                  value: 'No routes found',
+                  detail: `No public-transport route found to the city centre arriving by ${result.arriveBy}.`,
+                }
+              : {
+                  key: 'commute',
+                  status: result.durationSeconds <= 70 * 60 ? 'pass' : 'fail',
+                  value: `${Math.round(result.durationSeconds / 60)} min`,
+                  detail: `Best of ${result.routesFound} route(s) to the city centre${result.summary ? `: ${result.summary}` : ''}; arrive by ${result.arriveBy}; household limit 70 min.`,
+                },
+          )
+          .catch(() => unavailable('commute', 'Trafi route service'))
+      : Promise.resolve(unavailable('commute', 'Trafi route service'))
+    : Promise.resolve(
+        unknown(
+          'commute',
+          'Not available',
+          'Resolve the Candidate Plot location.',
+        ),
+      )
+  const crime: Promise<AutomaticCheck> = location
+    ? services.crimeDensity
+      ? services
+          .crimeDensity(location.latitude, location.longitude)
+          .then<AutomaticCheck>((result) => ({
+            key: 'crime',
+            status: result.weightedCount <= 15 ? 'pass' : 'warning',
+            value: `${result.rawCount} crimes (weighted ${result.weightedCount}) / ${result.years} yr / ${result.radiusMeters / 1000} km`,
+            detail: result.emptyResponse
+              ? 'The API returned no data; rural coverage may be incomplete.'
+              : result.weightedCount > 60
+                ? 'Elevated crime density for a rural plot; review the source map.'
+                : result.weightedCount > 15
+                  ? 'Moderate crime density; review the source map.'
+                  : 'No elevated crime-density signal; rural coverage may under-report.',
+          }))
+          .catch(() => unavailable('crime', 'Crime-density service'))
+      : Promise.resolve(unavailable('crime', 'Crime-density service'))
+    : Promise.resolve(
+        unknown(
+          'crime',
+          'Not available',
+          'Resolve the Candidate Plot location.',
+        ),
+      )
+  const noise: Promise<AutomaticCheck> = location
+    ? services.noise
+      ? services
+          .noise(location.latitude, location.longitude)
+          .then<AutomaticCheck>((result) => {
+            if (result.mode === 'city-band') {
+              const loudest = result.bands.find(
+                (band) => band.ldenLow === result.ldenLow,
+              )
+              return {
+                key: 'noise',
+                status: result.ldenLow < 55 ? 'pass' : 'warning',
+                value: `${result.ldenLow}+ dB${loudest ? ` (${loudest.kind})` : ''}`,
+                detail:
+                  result.ldenLow >= 65
+                    ? 'Loud official Lden noise band (65 dB or higher).'
+                    : result.ldenLow >= 55
+                      ? 'Moderate official Lden noise band (55-64 dB).'
+                      : 'Official Lden noise band below 55 dB.',
+              }
+            }
+            if (result.mode === 'proxy-warn')
+              return {
+                key: 'noise',
+                status: 'warning',
+                value: result.sources
+                  .map(
+                    (source) =>
+                      `${source.kind} ${Math.round(source.distanceMeters)} m`,
+                  )
+                  .join(' · '),
+                detail:
+                  'Transport proximity is a noise proxy, not a measured noise level.',
+              }
+            return {
+              key: 'noise',
+              status: 'pass',
+              value: 'Quiet',
+              detail:
+                result.mode === 'city-quiet'
+                  ? 'No official Vilnius noise band mapped at this point.'
+                  : 'No nearby major transport-noise proxy found.',
+            }
+          })
+          .catch(() => unavailable('noise', 'Noise service'))
+      : Promise.resolve(unavailable('noise', 'Noise service'))
+    : Promise.resolve(
+        unknown(
+          'noise',
+          'Not available',
+          'Resolve the Candidate Plot location.',
+        ),
+      )
+  const livability: Promise<AutomaticCheck> = location
+    ? services.livability
+      ? services
+          .livability(location.latitude, location.longitude)
+          .then<AutomaticCheck>((result) => {
+            const nearbyBad = result.badNeighbours.filter(
+              (item) => item.distanceMeters <= 500,
+            )
+            const remote = result.shop === null && result.school === null
+            return {
+              key: 'livability',
+              status: nearbyBad.length || remote ? 'warning' : 'pass',
+              value: `shop ${result.shop ? `${result.shop.distanceKm.toFixed(1)} km` : '>5 km'} · school ${result.school ? `${result.school.distanceKm.toFixed(1)} km` : '>5 km'}${nearbyBad[0] ? ` · ${nearbyBad[0].kind} ${nearbyBad[0].distanceMeters} m` : ''}`,
+              detail: `${nearbyBad.length ? `Nearby concerns: ${nearbyBad.map((item) => `${item.kind} ${item.distanceMeters} m`).join(', ')}. ` : ''}Fiber and 5G availability must be verified separately.`,
+            }
+          })
+          .catch(() => unavailable('livability', 'Livability service'))
+      : Promise.resolve(unavailable('livability', 'Livability service'))
+    : Promise.resolve(
+        unknown(
+          'livability',
           'Not available',
           'Resolve the Candidate Plot location.',
         ),
@@ -242,5 +470,38 @@ export const runAutomaticChecks = async (
         ),
       )
 
-  return [price, area, radius, purpose, await eso, await legal, waterSewage]
+  const [
+    walk,
+    transit,
+    esoCost,
+    combinedBudget,
+    crimeResult,
+    legalResult,
+    noiseResult,
+    livabilityResult,
+  ] = await Promise.all([
+    walkToStop,
+    commute,
+    eso,
+    budget,
+    crime,
+    legal,
+    noise,
+    livability,
+  ])
+  return [
+    price,
+    area,
+    radius,
+    purpose,
+    walk,
+    transit,
+    esoCost,
+    combinedBudget,
+    crimeResult,
+    legalResult,
+    noiseResult,
+    livabilityResult,
+    waterSewage,
+  ]
 }

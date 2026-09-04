@@ -89,6 +89,8 @@ export const createHouseholdRuntime = (dependencies: {
   const listeners = new Set<() => void>()
   const runningLocationResolutions = new Set<string>()
   const runningAutomaticChecks = new Set<string>()
+  const queuedLocationResolutions = new Map<string, string>()
+  const queuedAutomaticChecks = new Map<string, string>()
   const setState = (next: HouseholdRuntimeState) => {
     state = next
     for (const listener of listeners) listener()
@@ -298,6 +300,107 @@ export const createHouseholdRuntime = (dependencies: {
     }
     await refreshLocalHouseholds()
     connect(openedAccess, credentials.roomPassword)
+  }
+
+  const resolveCandidatePlotLocation = async (
+    sourceListingId: string,
+    candidatePlotId: string,
+  ): Promise<void> => {
+    if (!dependencies.locationResolver) return
+    if (runningLocationResolutions.has(candidatePlotId)) {
+      queuedLocationResolutions.set(candidatePlotId, sourceListingId)
+      return
+    }
+    const plot = dependencies.sourceListings
+      .get(sourceListingId)
+      ?.candidatePlots.find((candidate) => candidate.id === candidatePlotId)
+    if (!plot) throw new Error('Candidate Plot not found')
+    const expectedClues = recordedLocationClues(plot)
+    const hasClue =
+      Boolean(expectedClues.parcelNumberClue?.trim()) ||
+      (expectedClues.latitudeClue !== null &&
+        expectedClues.longitudeClue !== null) ||
+      Boolean(expectedClues.addressClue?.trim())
+    if (!hasClue) return
+    runningLocationResolutions.add(candidatePlotId)
+    for (const listener of listeners) listener()
+    try {
+      const resolution = await dependencies.locationResolver.resolve(plot)
+      const updatedAt = mutationTime()
+      await serializeWrite(() =>
+        dependencies.sourceListings.applyCandidatePlotResolution(
+          sourceListingId,
+          candidatePlotId,
+          expectedClues,
+          resolution,
+          updatedAt,
+        ),
+      )
+    } finally {
+      runningLocationResolutions.delete(candidatePlotId)
+      for (const listener of listeners) listener()
+      const queuedSourceListingId =
+        queuedLocationResolutions.get(candidatePlotId)
+      if (queuedSourceListingId) {
+        queuedLocationResolutions.delete(candidatePlotId)
+        queueMicrotask(
+          () =>
+            void resolveCandidatePlotLocation(
+              queuedSourceListingId,
+              candidatePlotId,
+            ).catch(() => undefined),
+        )
+      }
+    }
+  }
+
+  const runCandidatePlotAutomaticChecks = async (
+    sourceListingId: string,
+    candidatePlotId: string,
+  ): Promise<void> => {
+    if (!dependencies.automaticCheckServices) return
+    if (runningAutomaticChecks.has(candidatePlotId)) {
+      queuedAutomaticChecks.set(candidatePlotId, sourceListingId)
+      return
+    }
+    const sourceListing = dependencies.sourceListings.get(sourceListingId)
+    const plot = sourceListing?.candidatePlots.find(
+      (candidate) => candidate.id === candidatePlotId,
+    )
+    if (!sourceListing || !plot) throw new Error('Candidate Plot not found')
+    const expectedRevision = automaticCheckRevision({ plot, sourceListing })
+    runningAutomaticChecks.add(candidatePlotId)
+    for (const listener of listeners) listener()
+    try {
+      const checks = await runAutomaticChecks(
+        { plot, sourceListing },
+        dependencies.automaticCheckServices,
+      )
+      const updatedAt = mutationTime()
+      await serializeWrite(() =>
+        dependencies.sourceListings.applyCandidatePlotAutomaticChecks(
+          sourceListingId,
+          candidatePlotId,
+          expectedRevision,
+          checks,
+          updatedAt,
+        ),
+      )
+    } finally {
+      runningAutomaticChecks.delete(candidatePlotId)
+      for (const listener of listeners) listener()
+      const queuedSourceListingId = queuedAutomaticChecks.get(candidatePlotId)
+      if (queuedSourceListingId) {
+        queuedAutomaticChecks.delete(candidatePlotId)
+        queueMicrotask(
+          () =>
+            void runCandidatePlotAutomaticChecks(
+              queuedSourceListingId,
+              candidatePlotId,
+            ).catch(() => undefined),
+        )
+      }
+    }
   }
 
   return {
@@ -525,10 +628,30 @@ export const createHouseholdRuntime = (dependencies: {
           mutationTime(),
         ),
       ),
-    updateCandidatePlot: (sourceListingId, candidatePlotId, update) => {
+    updateCandidatePlot: async (sourceListingId, candidatePlotId, update) => {
       validateCandidatePlotUpdate(update)
+      const sourceListingBefore =
+        dependencies.sourceListings.get(sourceListingId)
+      const plotBefore = sourceListingBefore?.candidatePlots.find(
+        (candidate) => candidate.id === candidatePlotId,
+      )
+      const revisionBefore =
+        sourceListingBefore && plotBefore
+          ? automaticCheckRevision({
+              plot: plotBefore,
+              sourceListing: sourceListingBefore,
+            })
+          : null
+      const locationClueChanged =
+        plotBefore !== undefined &&
+        (plotBefore.parcelNumberClue !== update.parcelNumberClue ||
+          plotBefore.latitudeClue !== update.latitudeClue ||
+          plotBefore.longitudeClue !== update.longitudeClue ||
+          plotBefore.coordinateCluePrecision !==
+            update.coordinateCluePrecision ||
+          plotBefore.addressClue !== update.addressClue)
       const updatedAt = mutationTime()
-      return serializeWrite(() =>
+      await serializeWrite(() =>
         dependencies.sourceListings.updateCandidatePlot(
           sourceListingId,
           candidatePlotId,
@@ -536,76 +659,41 @@ export const createHouseholdRuntime = (dependencies: {
           updatedAt,
         ),
       )
-    },
-    async resolveCandidatePlotLocation(sourceListingId, candidatePlotId) {
-      if (!dependencies.locationResolver) return
-      if (runningLocationResolutions.has(candidatePlotId)) return
-      const plot = dependencies.sourceListings
-        .get(sourceListingId)
-        ?.candidatePlots.find((candidate) => candidate.id === candidatePlotId)
-      if (!plot) throw new Error('Candidate Plot not found')
-      const expectedClues = recordedLocationClues(plot)
-      const hasClue =
-        Boolean(expectedClues.parcelNumberClue?.trim()) ||
-        (expectedClues.latitudeClue !== null &&
-          expectedClues.longitudeClue !== null) ||
-        Boolean(expectedClues.addressClue?.trim())
-      if (!hasClue) return
-      runningLocationResolutions.add(candidatePlotId)
-      for (const listener of listeners) listener()
-      try {
-        const resolution = await dependencies.locationResolver.resolve(plot)
-        const updatedAt = mutationTime()
-        await serializeWrite(() =>
-          dependencies.sourceListings.applyCandidatePlotResolution(
-            sourceListingId,
-            candidatePlotId,
-            expectedClues,
-            resolution,
-            updatedAt,
-          ),
-        )
-      } finally {
-        runningLocationResolutions.delete(candidatePlotId)
-        for (const listener of listeners) listener()
-      }
-    },
-    isCandidatePlotLocationRunning: (candidatePlotId) =>
-      runningLocationResolutions.has(candidatePlotId),
-    async runCandidatePlotAutomaticChecks(sourceListingId, candidatePlotId) {
-      if (!dependencies.automaticCheckServices) return
-      if (runningAutomaticChecks.has(candidatePlotId)) return
-      const sourceListing = dependencies.sourceListings.get(sourceListingId)
-      const plot = sourceListing?.candidatePlots.find(
+      const sourceListingAfter =
+        dependencies.sourceListings.get(sourceListingId)
+      const plotAfter = sourceListingAfter?.candidatePlots.find(
         (candidate) => candidate.id === candidatePlotId,
       )
-      if (!sourceListing || !plot) throw new Error('Candidate Plot not found')
-      const expectedRevision = automaticCheckRevision({
-        plot,
-        sourceListing,
-      })
-      runningAutomaticChecks.add(candidatePlotId)
-      for (const listener of listeners) listener()
-      try {
-        const checks = await runAutomaticChecks(
-          { plot, sourceListing },
-          dependencies.automaticCheckServices,
-        )
-        const updatedAt = mutationTime()
-        await serializeWrite(() =>
-          dependencies.sourceListings.applyCandidatePlotAutomaticChecks(
-            sourceListingId,
-            candidatePlotId,
-            expectedRevision,
-            checks,
-            updatedAt,
-          ),
-        )
-      } finally {
-        runningAutomaticChecks.delete(candidatePlotId)
-        for (const listener of listeners) listener()
+      const revisionChanged =
+        revisionBefore !== null &&
+        sourceListingAfter !== undefined &&
+        plotAfter !== undefined &&
+        automaticCheckRevision({
+          plot: plotAfter,
+          sourceListing: sourceListingAfter,
+        }) !== revisionBefore
+      const shouldReevaluate =
+        revisionChanged &&
+        (plotBefore?.automaticChecks !== null ||
+          runningAutomaticChecks.has(candidatePlotId))
+      if (!shouldReevaluate) return
+      if (locationClueChanged) {
+        void resolveCandidatePlotLocation(sourceListingId, candidatePlotId)
+          .then(() =>
+            runCandidatePlotAutomaticChecks(sourceListingId, candidatePlotId),
+          )
+          .catch(() => undefined)
+      } else {
+        void runCandidatePlotAutomaticChecks(
+          sourceListingId,
+          candidatePlotId,
+        ).catch(() => undefined)
       }
     },
+    resolveCandidatePlotLocation,
+    isCandidatePlotLocationRunning: (candidatePlotId) =>
+      runningLocationResolutions.has(candidatePlotId),
+    runCandidatePlotAutomaticChecks,
     isCandidatePlotAutomaticChecksRunning: (candidatePlotId) =>
       runningAutomaticChecks.has(candidatePlotId),
     getVisitPlan: () => dependencies.sourceListings.getVisitPlan(),
@@ -655,6 +743,8 @@ export const createHouseholdRuntime = (dependencies: {
       listeners.clear()
       runningLocationResolutions.clear()
       runningAutomaticChecks.clear()
+      queuedLocationResolutions.clear()
+      queuedAutomaticChecks.clear()
       dependencies.accessStore.close()
       dependencies.households.close()
       dependencies.sourceListings.close()

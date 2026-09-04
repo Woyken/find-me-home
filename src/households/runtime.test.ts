@@ -98,8 +98,14 @@ describe('Household runtime', () => {
         { key: 'area', status: 'pass' },
         { key: 'radius', status: 'pass' },
         { key: 'purpose', status: 'pass' },
+        { key: 'walk_to_stop', status: 'unknown' },
+        { key: 'commute', status: 'unknown' },
         { key: 'eso_cost', status: 'pass', value: '€1,552 · Group I' },
+        { key: 'budget', status: 'pass', value: '€58,094' },
+        { key: 'crime', status: 'unknown' },
         { key: 'legal_flags', status: 'warning', value: '1 flag · heritage' },
+        { key: 'noise', status: 'unknown' },
+        { key: 'livability', status: 'unknown' },
         { key: 'water_sewage', status: 'pass' },
       ])
       expect(runtime.isCandidatePlotAutomaticChecksRunning(plot.id)).toBe(false)
@@ -108,7 +114,7 @@ describe('Household runtime', () => {
     }
   })
 
-  it('rejects stale Automatic Checks and maps an unavailable service on retry', async () => {
+  it('rejects stale Automatic Checks and automatically evaluates the edited revision', async () => {
     const prefix = `automatic-check-revision-${crypto.randomUUID()}`
     databasePrefixes.push(prefix)
     let finishEso:
@@ -119,19 +125,26 @@ describe('Household runtime', () => {
           note: string
         }) => void)
       | undefined
-    let firstRun = true
+    let esoRuns = 0
     const runtime = createBrowserHouseholdRuntime({
       accessDatabaseName: `${prefix}-access`,
       sharedDatabasePrefix: prefix,
       crypto,
       now: () => 20_000,
       automaticCheckServices: {
-        estimateEsoCost: () =>
-          firstRun
+        estimateEsoCost: () => {
+          esoRuns += 1
+          return esoRuns === 1
             ? new Promise((resolve) => {
                 finishEso = resolve
               })
-            : Promise.reject(new Error('ESO unavailable')),
+            : Promise.resolve({
+                distanceM: 50,
+                group: 'I',
+                feeInclVat: 1_000,
+                note: 'fresh fixture',
+              })
+        },
         legalFlags: async () => [],
       },
     })
@@ -182,15 +195,10 @@ describe('Household runtime', () => {
         note: 'stale fixture',
       })
       await running
-      expect(
-        runtime.getSourceListing(saved.sourceListingId)!.candidatePlots[0]
-          .automaticChecks,
-      ).toBeNull()
-
-      firstRun = false
-      await runtime.runCandidatePlotAutomaticChecks(
-        saved.sourceListingId,
-        saved.candidatePlotId,
+      await waitFor(
+        () =>
+          runtime.getSourceListing(saved.sourceListingId)!.candidatePlots[0]
+            .automaticChecks !== null,
       )
       expect(
         runtime
@@ -198,7 +206,7 @@ describe('Household runtime', () => {
           .candidatePlots[0].automaticChecks?.find(
             (check) => check.key === 'eso_cost',
           ),
-      ).toMatchObject({ status: 'unknown', value: 'Unavailable' })
+      ).toMatchObject({ status: 'pass', value: '€1,000 · Group I' })
       expect(
         runtime
           .getSourceListing(saved.sourceListingId)!
@@ -206,6 +214,7 @@ describe('Household runtime', () => {
             (check) => check.key === 'price',
           ),
       ).toMatchObject({ status: 'fail' })
+      expect(esoRuns).toBe(2)
     } finally {
       runtime.dispose()
     }
@@ -343,12 +352,12 @@ describe('Household runtime', () => {
       await waitFor(
         () =>
           invited.getSourceListing(saved.sourceListingId)?.candidatePlots[0]
-            .automaticChecks?.length === 7,
+            .automaticChecks?.length === 13,
       )
       expect(
         invited.getSourceListing(saved.sourceListingId)?.candidatePlots[0]
           .automaticChecks,
-      ).toHaveLength(7)
+      ).toHaveLength(13)
     } finally {
       existing.dispose()
       invited.dispose()

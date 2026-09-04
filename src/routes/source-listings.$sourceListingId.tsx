@@ -1,17 +1,21 @@
-import { For, Show, createMemo, createSignal } from 'solid-js'
+import { For, Show, createEffect, createMemo, createSignal } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { CandidatePlotsMap } from '../components/CandidatePlotsMap'
 import { useHousehold } from '../households/context'
 import { paths } from '../paths'
-import type { CandidatePlotRecord } from '../source-listings/model'
+import type {
+  CandidatePlotRecord,
+  SourceListingRecord,
+} from '../source-listings/model'
 import { candidatePlotMapItem } from '../source-listings/map'
 import { formatDate } from './index'
-import { AUTOMATIC_CHECK_KEYS } from '../automatic-checks'
+import {
+  AUTOMATIC_CHECK_KEYS,
+  automaticCheckRevision,
+} from '../automatic-checks'
 import type { AutomaticCheckKey } from '../automatic-checks'
 
 export const preloadSourceListing = () => undefined
-
-const automaticallyStartedPlots = new Set<string>()
 
 export default function SourceListingPage(props: {
   params: Record<string, string | undefined>
@@ -174,6 +178,7 @@ export default function SourceListingPage(props: {
                   {(plot, index) => (
                     <CandidatePlotEditor
                       plot={plot}
+                      sourceListing={item()}
                       importedAddress={item().address}
                       number={index() + 1}
                       selected={selectedPlotId() === plot.id}
@@ -257,6 +262,7 @@ export default function SourceListingPage(props: {
 
 function CandidatePlotEditor(props: {
   plot: CandidatePlotRecord
+  sourceListing: SourceListingRecord
   importedAddress: string | null
   number: number
   selected: boolean
@@ -331,15 +337,32 @@ function CandidatePlotEditor(props: {
       props.plot.id,
     )
 
-  const automaticStartKey = `${props.plot.householdId}:${props.plot.id}`
-  if (!automaticallyStartedPlots.has(automaticStartKey)) {
-    automaticallyStartedPlots.add(automaticStartKey)
-    queueMicrotask(async () => {
-      if (props.plot.locationResolutionState === 'missing')
-        await resolveLocation()
-      if (!props.plot.automaticChecks) await runAutomaticChecks()
-    })
-  }
+  createEffect(
+    () => {
+      const revision = automaticCheckRevision({
+        plot: props.plot,
+        sourceListing: props.sourceListing,
+      })
+      return {
+        key: `${props.plot.locationResolutionState}:${revision}:${props.plot.automaticChecksRevision ?? 'unchecked'}`,
+        revision,
+      }
+    },
+    ({ revision }) => {
+      queueMicrotask(() => {
+        void (async () => {
+          if (props.plot.locationResolutionState === 'missing')
+            await resolveLocation()
+          if (
+            !props.plot.automaticChecks ||
+            props.plot.automaticChecks.length !== AUTOMATIC_CHECK_KEYS.length ||
+            props.plot.automaticChecksRevision !== revision
+          )
+            await runAutomaticChecks()
+        })().catch(() => undefined)
+      })
+    },
+  )
 
   const save = async () => {
     setStatus('Saving...')
@@ -583,8 +606,14 @@ const automaticCheckLabel = (key: AutomaticCheckKey) =>
     area: 'Area',
     radius: 'Radius',
     purpose: 'Purpose',
+    walk_to_stop: 'Walk to transit stop',
+    commute: 'Transit to city centre',
     eso_cost: 'ESO cost',
+    budget: 'Plot + ESO budget',
+    crime: 'Crime density',
     legal_flags: 'Legal flags',
+    noise: 'Noise',
+    livability: 'Livability',
     water_sewage: 'Water / sewage',
   })[key]
 
