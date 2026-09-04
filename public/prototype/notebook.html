@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prototype 1 · Field notebook — Find Me Home</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* PROTOTYPE 1 — "Field notebook": a surveyor's field book. The parcel
+         outline is the hero; graph paper is the ground; orange is spent only
+         on the one thing that matters on this page — "we're going to see it". */
+      :root {
+        --paper: #eef3ec;
+        --line: #d4ded3;
+        --ink: #1b2733;
+        --ink-soft: #55636b;
+        --blue: #2a5d9f;
+        --stake: #e8641b;
+        --pass: #2f8a5b;
+        --warn: #d18f00;
+        --fail: #c0392b;
+        --card: #f8faf6;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; }
+      body {
+        background-color: var(--paper);
+        background-image:
+          linear-gradient(var(--line) 1px, transparent 1px),
+          linear-gradient(90deg, var(--line) 1px, transparent 1px);
+        background-size: 28px 28px;
+        color: var(--ink);
+        font-family: 'Atkinson Hyperlegible', system-ui, sans-serif;
+        font-size: 17px;
+        line-height: 1.45;
+      }
+      h1, h2, h3, .display {
+        font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+        font-variation-settings: 'opsz' 96;
+        letter-spacing: -0.01em;
+        margin: 0;
+      }
+      a { color: inherit; }
+      button { font: inherit; cursor: pointer; }
+      .wrap { max-width: 1040px; margin: 0 auto; padding: 24px 20px 120px; }
+
+      /* header */
+      .top {
+        display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+        gap: 16px 24px; padding-bottom: 20px; margin-bottom: 8px;
+      }
+      .top h1 { font-size: clamp(34px, 6vw, 56px); font-weight: 600; line-height: 1; }
+      .top .sub { display: flex; align-items: center; gap: 10px; color: var(--ink-soft); font-size: 15px; margin-top: 6px; }
+      .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--pass); box-shadow: 0 0 0 3px #cfe8d8; }
+      .dot.syncing { background: var(--warn); box-shadow: 0 0 0 3px #f5e4b5; animation: pulse 1.2s infinite; }
+      .dot.alone { background: #9aa4a8; box-shadow: 0 0 0 3px #e0e5e6; }
+      @keyframes pulse { 50% { opacity: .4; } }
+      .linkbtn { background: none; border: 0; padding: 0; color: var(--blue); text-decoration: underline; text-underline-offset: 3px; }
+      .nav { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+      .pill {
+        display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px;
+        text-decoration: none; font-weight: 700; font-size: 15px; border: 2px solid var(--ink); background: var(--card); color: var(--ink);
+      }
+      .pill .n { background: var(--ink); color: #fff; border-radius: 999px; padding: 1px 8px; font-size: 13px; }
+      .pill.stake { border-color: var(--stake); color: var(--stake); }
+      .pill.stake .n { background: var(--stake); }
+      .pill.primary { background: var(--ink); color: #fff; }
+
+      /* legend */
+      .legend { display: flex; flex-wrap: wrap; gap: 16px 22px; color: var(--ink-soft); font-size: 14px; padding: 10px 0 18px; border-top: 2px solid var(--ink); }
+      .legend b { font-weight: 700; color: var(--ink); }
+      .sym { display: inline-block; width: 11px; height: 11px; vertical-align: -1px; margin-right: 5px; }
+      .sym.pass { background: var(--pass); border-radius: 50%; }
+      .sym.warn { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 11px solid var(--warn); }
+      .sym.fail { background: var(--fail); }
+      .sym.unk { border: 2px solid #9aa4a8; border-radius: 50%; width: 9px; height: 9px; }
+
+      /* rows */
+      .list { display: grid; gap: 14px; }
+      .row {
+        display: grid; grid-template-columns: 104px 1fr auto; gap: 18px; align-items: start;
+        background: var(--card); border: 1.5px solid var(--ink); padding: 18px;
+        box-shadow: 4px 4px 0 var(--line);
+      }
+      .row.going { border-color: var(--stake); box-shadow: 4px 4px 0 #f5cdb3; }
+      .shape { color: var(--blue); display: grid; place-items: center; }
+      .shape svg { display: block; }
+      .shape small { display: block; margin-top: 4px; font-size: 12px; color: var(--ink-soft); text-align: center; }
+      .row.going .shape { color: var(--stake); }
+      .title { font-size: 24px; font-weight: 600; line-height: 1.15; text-decoration: none; }
+      .title:hover { text-decoration: underline; text-decoration-color: var(--blue); }
+      .place { color: var(--ink-soft); margin-top: 2px; }
+      .figs { display: flex; flex-wrap: wrap; gap: 6px 26px; margin-top: 12px; }
+      .fig .v { font-family: 'Bricolage Grotesque'; font-size: 24px; font-weight: 700; line-height: 1; }
+      .fig .l { font-size: 13px; color: var(--ink-soft); }
+      .marks { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 12px; font-size: 14px; }
+      .mark { display: inline-flex; align-items: center; gap: 4px; }
+      .mark.muted { color: var(--ink-soft); }
+      .visited { color: var(--ink-soft); font-style: italic; }
+      .side { display: grid; gap: 10px; justify-items: end; text-align: right; }
+      .go {
+        border: 2px solid var(--ink); background: #fff; color: var(--ink); border-radius: 999px;
+        padding: 10px 16px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; min-height: 44px;
+      }
+      .go svg { width: 18px; height: 18px; }
+      .go[aria-pressed='true'] { background: var(--stake); border-color: var(--stake); color: #fff; }
+      .go:hover { transform: translateY(-1px); }
+      .plots { font-size: 13px; color: var(--ink-soft); }
+      .updated { font-size: 13px; color: var(--ink-soft); }
+
+      /* dialogs */
+      dialog { border: 2px solid var(--ink); background: var(--card); color: var(--ink); padding: 24px; max-width: 520px; width: calc(100% - 32px); }
+      dialog::backdrop { background: rgba(27, 39, 51, 0.45); }
+      dialog h2 { font-size: 28px; font-weight: 600; margin-bottom: 6px; }
+      dialog h3 { font-size: 18px; font-weight: 700; margin: 22px 0 6px; }
+      dialog p { margin: 4px 0; color: var(--ink-soft); font-size: 15px; }
+      dialog input { font: inherit; width: 100%; padding: 10px 12px; border: 1.5px solid var(--ink); background: #fff; }
+      .btn { border: 2px solid var(--ink); background: var(--ink); color: #fff; padding: 10px 16px; font-weight: 700; border-radius: 999px; }
+      .btn.ghost { background: transparent; color: var(--ink); }
+      .btn.danger { border-color: var(--fail); color: var(--fail); background: transparent; }
+      .rowline { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+      .qr { width: 160px; height: 160px; background: repeating-conic-gradient(var(--ink) 0 25%, #fff 0 50%) 0 0/16px 16px; margin: 12px 0; }
+      .steps { counter-reset: s; list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 14px; }
+      .steps li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; }
+      .steps li::before { counter-increment: s; content: counter(s); width: 34px; height: 34px; border-radius: 50%; background: var(--blue); color: #fff; display: grid; place-items: center; font-weight: 700; font-family: 'Bricolage Grotesque'; }
+      .drag { display: inline-block; padding: 10px 14px; border: 2px dashed var(--blue); color: var(--blue); font-weight: 700; text-decoration: none; background: #fff; cursor: grab; }
+      .device { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border: 1.5px solid var(--line); background: #fff; margin-top: 6px; }
+      .device .tag { font-size: 12px; background: var(--pass); color: #fff; padding: 2px 8px; border-radius: 999px; }
+      .close { position: absolute; top: 12px; right: 12px; border: 0; background: none; font-size: 24px; line-height: 1; }
+
+      @media (max-width: 640px) {
+        .row { grid-template-columns: 72px 1fr; }
+        .side { grid-column: 1 / -1; justify-items: start; text-align: left; }
+        .title { font-size: 21px; }
+        .fig .v { font-size: 21px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="top">
+        <div>
+          <h1 id="hh-name">Rūta &amp; Tomas</h1>
+          <div class="sub">
+            <span class="dot" id="sync-dot" title="Connected"></span>
+            <span id="sync-text">Both devices connected</span>
+            <span>·</span>
+            <span id="last-change"></span>
+            <button class="linkbtn" onclick="document.getElementById('hh').showModal()">Our search settings</button>
+          </div>
+        </div>
+        <nav class="nav">
+          <a class="pill" href="#" id="inbox-link">New from Aruodas <span class="n" id="inbox-n"></span></a>
+          <a class="pill stake" href="#">Going to see <span class="n" id="plan-n"></span></a>
+          <button class="pill primary" onclick="document.getElementById('imp').showModal()">+ Add a plot</button>
+        </nav>
+      </header>
+
+      <div class="legend">
+        <span><b>How to read a row:</b></span>
+        <span><span class="sym pass"></span>check passed</span>
+        <span><span class="sym warn"></span>worth a look</span>
+        <span><span class="sym fail"></span>problem</span>
+        <span><span class="sym unk"></span>not checked yet</span>
+        <span>Outline = the real plot shape from the land registry. Dashed circle = roughly here. Dotted box = we don't know where it is yet.</span>
+      </div>
+
+      <section class="list" id="list" aria-label="Saved plots"></section>
+    </div>
+
+    <!-- Household settings -->
+    <dialog id="hh">
+      <button class="close" aria-label="Close" onclick="this.closest('dialog').close()">×</button>
+      <h2>Our search</h2>
+      <p>Everyone in this search sees the same plots, on every device.</p>
+      <h3>Name</h3>
+      <div class="rowline">
+        <input id="hh-input" value="Rūta &amp; Tomas" aria-label="Search name" />
+        <button class="btn" onclick="renameHousehold()">Save</button>
+      </div>
+      <h3>Invite someone</h3>
+      <p>Show this to a partner or open the link on another device. Anyone with it can edit — it can't be taken back.</p>
+      <div class="qr" role="img" aria-label="QR code placeholder"></div>
+      <div class="rowline">
+        <input readonly value="https://woyken.github.io/find-me-home/#household=…" aria-label="Invitation link" />
+        <button class="btn ghost">Copy</button>
+      </div>
+      <h3>Searches on this device</h3>
+      <div class="device"><span>Rūta &amp; Tomas</span><span class="tag">This one</span></div>
+      <div class="device"><span>Sodyba prie ežero</span><button class="linkbtn">Switch</button></div>
+      <div class="rowline"><button class="btn danger">Remove this search from this device</button></div>
+      <p>It stays on other devices.</p>
+    </dialog>
+
+    <!-- Import helper -->
+    <dialog id="imp">
+      <button class="close" aria-label="Close" onclick="this.closest('dialog').close()">×</button>
+      <h2>Add a plot from Aruodas</h2>
+      <p>Set this up once; after that it's one click per plot.</p>
+      <ol class="steps">
+        <li><div>Drag this button to your browser's bookmarks bar.<br /><a class="drag" href="javascript:void(0)" onclick="return false">Save to Find Me Home</a><br /><small>On a phone: <button class="linkbtn">copy the link</button> and add it as a bookmark manually.</small></div></li>
+        <li><div>Open a land advert on aruodas.lt (or your favourites page).</div></li>
+        <li><div>Click the bookmark. The plot appears here, ready to review.</div></li>
+      </ol>
+    </dialog>
+
+    <script src="shared.js"></script>
+    <script>
+      const P = window.PROTO
+      const S = P.state
+      const flag = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg>`
+      const check = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>`
+
+      const symbols = (l) => {
+        const c = P.summary(l)
+        if (c.pass + c.warning + c.fail === 0) return `<span class="mark muted"><span class="sym unk"></span>Not checked yet</span>`
+        const out = []
+        if (c.pass) out.push(`<span class="mark"><span class="sym pass"></span>${c.pass}</span>`)
+        if (c.warning) out.push(`<span class="mark"><span class="sym warn"></span>${c.warning}</span>`)
+        if (c.fail) out.push(`<span class="mark" title="${l.checks.filter(x => x.status === 'fail').map(x => x.label + ': ' + x.value).join(', ')}"><span class="sym fail"></span>${c.fail}</span>`)
+        if (c.unknown) out.push(`<span class="mark muted"><span class="sym unk"></span>${c.unknown}</span>`)
+        return out.join('')
+      }
+      const fails = (l) => l.checks.filter((x) => x.status === 'fail').map((x) => `<span class="mark" style="color:var(--fail)">${x.label}: ${x.value}</span>`).join('')
+
+      const locationNote = (l) => ({ exact: 'exact shape', approx: 'roughly here', problem: 'location failed', unknown: 'no location yet' })[l.location]
+
+      function render() {
+        document.getElementById('plan-n').textContent = S.plan.length
+        document.getElementById('inbox-n').textContent = S.inbox
+        document.getElementById('inbox-link').style.display = S.inbox ? '' : 'none'
+        document.getElementById('last-change').textContent = 'Last change ' + P.ago(S.household.lastChange)
+        document.getElementById('list').innerHTML = S.listings
+          .map((l) => {
+            const going = P.planned(l.id)
+            return `<article class="row ${going ? 'going' : ''}">
+              <div class="shape">${P.silhouette(l, 96, { width: 2.5, fill: going ? 'rgba(232,100,27,.12)' : 'rgba(42,93,159,.08)' })}<small>${locationNote(l)}</small></div>
+              <div>
+                <a class="title" href="#">${l.title}</a>
+                <div class="place">${l.address ?? 'Location not recorded yet'}</div>
+                <div class="figs">
+                  <div class="fig"><div class="v">${P.eur(l.priceEur) ?? '—'}</div><div class="l">price</div></div>
+                  <div class="fig"><div class="v">${P.ares(l.areaAres) ?? '—'}</div><div class="l">area (ares)</div></div>
+                  <div class="fig"><div class="v">${P.perAre(l) ?? '—'}</div><div class="l">per are</div></div>
+                </div>
+                <div class="marks">${symbols(l)} ${fails(l)}
+                  ${l.visitedAt ? `<span class="visited">${check.replace('<svg', '<svg width="14" height="14" style="vertical-align:-2px"')} visited ${P.dateShort(l.visitedAt)}</span>` : ''}
+                </div>
+              </div>
+              <div class="side">
+                <button class="go" aria-pressed="${going}" onclick="toggle('${l.id}')">${flag}${going ? 'Going to see' : 'Go see it'}</button>
+                <span class="plots">${l.plots > 1 ? `${l.plots} marked areas` : '1 marked area'}</span>
+                <span class="updated">changed ${P.ago(l.updatedAt)}</span>
+              </div>
+            </article>`
+          })
+          .join('')
+      }
+      function toggle(id) { P.togglePlan(id); render() }
+      function renameHousehold() {
+        S.household.name = document.getElementById('hh-input').value
+        document.getElementById('hh-name').textContent = S.household.name
+        document.getElementById('hh').close()
+      }
+      render()
+      P.mountSwitcher('bottom')
+    </script>
+  </body>
+</html>

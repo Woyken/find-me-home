@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prototype 2 · Roadside sign — Find Me Home</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=Manrope:wght@500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* PROTOTYPE 2 — "Roadside sign": the hand-painted PARDUODAMA board nailed
+         to a post at the edge of a field. Phone-first. One board per plot, price
+         is the loudest thing, a single traffic light replaces the 13 checks,
+         and a thumb-sized switch says whether we're going. */
+      :root {
+        --forest: #12301f;
+        --forest-2: #1a3d29;
+        --straw: #f3d36b;
+        --chalk: #f7f3e8;
+        --chalk-dim: #c9c7bd;
+        --board: #f7f3e8;
+        --board-ink: #12301f;
+        --ok: #3aa267;
+        --look: #e8a622;
+        --bad: #d94f3d;
+        --grey: #8f9a92;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; }
+      body {
+        background: var(--forest);
+        color: var(--chalk);
+        font-family: 'Manrope', system-ui, sans-serif;
+        font-weight: 500;
+        font-size: 17px;
+        line-height: 1.4;
+        padding-bottom: 96px;
+      }
+      .display { font-family: 'Unbounded', system-ui, sans-serif; }
+      a { color: inherit; }
+      button { font: inherit; cursor: pointer; }
+      .wrap { max-width: 720px; margin: 0 auto; padding: 18px 16px 24px; }
+
+      header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+      .who { display: flex; align-items: center; gap: 10px; }
+      .who .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--straw); color: var(--forest); display: grid; place-items: center; font-family: 'Unbounded'; font-weight: 700; font-size: 14px; position: relative; }
+      .who .avatar::after { content: ''; position: absolute; right: -2px; bottom: -2px; width: 12px; height: 12px; border-radius: 50%; background: var(--ok); border: 3px solid var(--forest); }
+      .who .name { font-weight: 800; }
+      .who .meta { font-size: 13px; color: var(--chalk-dim); }
+      .icon-btn { width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(247, 243, 232, 0.25); background: transparent; color: var(--chalk); display: grid; place-items: center; }
+      .icon-btn svg { width: 22px; height: 22px; }
+
+      .headline { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+      .headline h1 { margin: 0; font-family: 'Unbounded'; font-size: clamp(30px, 8vw, 44px); font-weight: 900; color: var(--straw); letter-spacing: -0.02em; line-height: 1; }
+      .headline .count { font-size: 15px; color: var(--chalk-dim); }
+      .sort { display: flex; gap: 6px; margin-bottom: 18px; overflow-x: auto; padding-bottom: 2px; }
+      .sort button { white-space: nowrap; border-radius: 999px; padding: 8px 14px; border: 2px solid rgba(247, 243, 232, 0.25); background: transparent; color: var(--chalk); font-weight: 700; font-size: 14px; }
+      .sort button[aria-pressed='true'] { background: var(--chalk); color: var(--forest); border-color: var(--chalk); }
+
+      /* the boards */
+      .boards { display: grid; gap: 22px; }
+      .board {
+        position: relative; background: var(--board); color: var(--board-ink); border-radius: 6px;
+        padding: 18px 18px 16px; box-shadow: 0 10px 0 -4px #0c2216, 0 14px 30px rgba(0, 0, 0, 0.35);
+      }
+      /* the two nails */
+      .board::before, .board::after { content: ''; position: absolute; top: 10px; width: 9px; height: 9px; border-radius: 50%; background: #6d6a60; box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35); }
+      .board::before { left: 12px; } .board::after { right: 12px; }
+      .board.going { outline: 4px solid var(--straw); outline-offset: -4px; }
+      .price { font-family: 'Unbounded'; font-weight: 900; font-size: clamp(38px, 11vw, 60px); letter-spacing: -0.03em; line-height: 0.95; margin: 6px 0 4px; }
+      .price.unknown { font-size: clamp(22px, 6vw, 30px); color: #6b7570; }
+      .area { font-family: 'Unbounded'; font-weight: 700; font-size: 18px; margin-bottom: 8px; }
+      .area small { font-family: 'Manrope'; font-weight: 700; color: #4d5b53; font-size: 14px; }
+      .title { font-weight: 800; font-size: 19px; text-decoration: none; display: block; line-height: 1.25; }
+      .place { color: #4d5b53; font-weight: 700; }
+
+      .light { display: flex; align-items: center; gap: 12px; margin: 14px 0 0; padding-top: 14px; border-top: 2px dashed #d8d3c4; }
+      .lamp { width: 26px; height: 26px; border-radius: 50%; flex: none; box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.18); }
+      .lamp.ok { background: var(--ok); } .lamp.look { background: var(--look); } .lamp.bad { background: var(--bad); } .lamp.grey { background: var(--grey); }
+      .light .t { font-weight: 800; }
+      .light .d { font-size: 14px; color: #4d5b53; }
+
+      .foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+      .stamps { display: flex; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 800; }
+      .stamp { border: 2px solid var(--board-ink); border-radius: 4px; padding: 3px 8px; }
+      .stamp.soft { border-color: #b9b5a7; color: #4d5b53; }
+      .stamp.pin { border-color: var(--ok); color: var(--ok); }
+      .stamp.pin.approx { border-style: dashed; }
+      .stamp.pin.bad { border-color: var(--bad); color: var(--bad); }
+      /* the thumb switch */
+      .go { display: inline-flex; align-items: center; gap: 10px; border: 0; background: transparent; font-weight: 800; font-size: 16px; padding: 4px 0; color: var(--board-ink); min-height: 44px; }
+      .go .track { width: 58px; height: 32px; border-radius: 999px; background: #cfcab9; position: relative; transition: background 0.2s; }
+      .go .track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25); transition: transform 0.2s; }
+      .go[aria-pressed='true'] .track { background: var(--forest); }
+      .go[aria-pressed='true'] .track::after { transform: translateX(26px); background: var(--straw); }
+
+      /* bottom tab bar */
+      .tabs { position: fixed; left: 0; right: 0; bottom: 0; background: var(--forest-2); border-top: 1px solid rgba(247, 243, 232, 0.12); display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px 6px calc(8px + env(safe-area-inset-bottom)); z-index: 50; }
+      .tab { display: grid; justify-items: center; gap: 3px; padding: 8px 4px; border: 0; background: none; color: var(--chalk-dim); text-decoration: none; font-size: 12px; font-weight: 800; border-radius: 12px; position: relative; }
+      .tab svg { width: 24px; height: 24px; }
+      .tab.active { color: var(--straw); }
+      .tab .badge { position: absolute; top: 4px; right: calc(50% - 22px); background: var(--straw); color: var(--forest); font-size: 11px; border-radius: 999px; padding: 1px 6px; }
+      .tab.add { color: var(--forest); }
+      .tab.add span { color: var(--chalk-dim); }
+      .tab.add .plus { width: 34px; height: 34px; border-radius: 50%; background: var(--straw); display: grid; place-items: center; margin-top: -5px; }
+      .tab.add .plus svg { width: 22px; height: 22px; }
+
+      /* sheets */
+      dialog { border: 0; border-radius: 22px 22px 0 0; background: var(--chalk); color: var(--forest); padding: 20px 20px 32px; width: 100%; max-width: 720px; margin: auto auto 0; }
+      dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+      dialog h2 { font-family: 'Unbounded'; font-size: 22px; margin: 6px 0 4px; }
+      dialog h3 { font-size: 16px; font-weight: 800; margin: 20px 0 6px; }
+      dialog p { margin: 4px 0; color: #4d5b53; font-size: 15px; }
+      .grab { width: 44px; height: 5px; border-radius: 3px; background: #cfcab9; margin: 0 auto 8px; }
+      dialog input { font: inherit; width: 100%; padding: 12px 14px; border: 2px solid #cfcab9; border-radius: 12px; background: #fff; }
+      .btn { border: 0; background: var(--forest); color: var(--straw); padding: 12px 18px; font-weight: 800; border-radius: 999px; min-height: 44px; }
+      .btn.ghost { background: #e6e1d2; color: var(--forest); }
+      .btn.danger { background: transparent; color: var(--bad); }
+      .rowline { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+      .qr { width: 150px; height: 150px; background: repeating-conic-gradient(var(--forest) 0 25%, #fff 0 50%) 0 0/15px 15px; margin: 12px 0; border-radius: 8px; }
+      .steps { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 14px; counter-reset: s; }
+      .steps li { display: grid; grid-template-columns: 36px 1fr; gap: 12px; }
+      .steps li::before { counter-increment: s; content: counter(s); width: 36px; height: 36px; border-radius: 50%; background: var(--straw); color: var(--forest); display: grid; place-items: center; font-family: 'Unbounded'; font-weight: 700; }
+      .drag { display: inline-block; margin-top: 6px; padding: 10px 14px; background: var(--forest); color: var(--straw); border-radius: 999px; font-weight: 800; text-decoration: none; cursor: grab; }
+      .device { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-radius: 12px; background: #fff; margin-top: 6px; }
+      .device .tag { font-size: 12px; font-weight: 800; color: var(--ok); }
+      .linkbtn { border: 0; background: none; padding: 0; color: var(--forest); font-weight: 800; text-decoration: underline; }
+
+      @media (min-width: 720px) {
+        .boards { grid-template-columns: 1fr 1fr; }
+        .tabs { max-width: 720px; margin: 0 auto; left: 50%; transform: translateX(-50%); border-radius: 18px 18px 0 0; }
+        dialog { border-radius: 22px; margin: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="who">
+          <div class="avatar">RT</div>
+          <div>
+            <div class="name" id="hh-name">Rūta &amp; Tomas</div>
+            <div class="meta">Both here · <span id="last-change"></span></div>
+          </div>
+        </div>
+        <button class="icon-btn" aria-label="Search settings" onclick="document.getElementById('hh').showModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </button>
+      </header>
+
+      <div class="headline">
+        <h1>Land for sale</h1>
+        <span class="count"><span id="count"></span> plots saved</span>
+      </div>
+      <div class="sort" role="group" aria-label="Sort">
+        <button aria-pressed="true" onclick="sortBy('new', this)">Newest first</button>
+        <button aria-pressed="false" onclick="sortBy('cheap', this)">Cheapest</button>
+        <button aria-pressed="false" onclick="sortBy('big', this)">Biggest</button>
+        <button aria-pressed="false" onclick="sortBy('going', this)">Going to see</button>
+      </div>
+
+      <section class="boards" id="boards" aria-label="Saved land"></section>
+    </div>
+
+    <nav class="tabs">
+      <a class="tab active" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M3 10l9-6 9 6v10H3z"/><path d="M3 10h18"/></svg>Land</a>
+      <a class="tab" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-3 6 3 6-3V5l-6 3-6-3-6 3z"/><path d="M9 4v10M15 7v10"/></svg>Trip<span class="badge" id="plan-n"></span></a>
+      <a class="tab" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 4h6l2-4h4"/><path d="M5 12V6h14v6"/><path d="M3 12v6h18v-6"/></svg>Fresh<span class="badge" id="inbox-n"></span></a>
+      <button class="tab add" onclick="document.getElementById('imp').showModal()"><span class="plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span><span>Add</span></button>
+    </nav>
+
+    <dialog id="hh">
+      <div class="grab"></div>
+      <h2>Our search</h2>
+      <p>Everyone in this search sees the same plots, on every device.</p>
+      <h3>Name</h3>
+      <div class="rowline"><input id="hh-input" value="Rūta &amp; Tomas" aria-label="Search name" /><button class="btn" onclick="renameHousehold()">Save</button></div>
+      <h3>Invite someone</h3>
+      <p>Scan or send the link. Anyone with it can edit — it can't be taken back.</p>
+      <div class="qr" role="img" aria-label="QR code placeholder"></div>
+      <div class="rowline"><input readonly value="https://woyken.github.io/find-me-home/#household=…" aria-label="Invitation link" /><button class="btn ghost">Copy</button></div>
+      <h3>Searches on this phone</h3>
+      <div class="device"><span>Rūta &amp; Tomas</span><span class="tag">Open now</span></div>
+      <div class="device"><span>Sodyba prie ežero</span><button class="linkbtn">Open</button></div>
+      <div class="rowline"><button class="btn danger">Remove from this phone</button></div>
+      <div class="rowline"><button class="btn ghost" onclick="this.closest('dialog').close()">Done</button></div>
+    </dialog>
+
+    <dialog id="imp">
+      <div class="grab"></div>
+      <h2>Add land from Aruodas</h2>
+      <p>Set up once, then it's one tap per advert.</p>
+      <ol class="steps">
+        <li><div>Add this bookmark to your browser.<br /><a class="drag" href="javascript:void(0)" onclick="return false">Save to Find Me Home</a><br /><small>On a phone: <button class="linkbtn">copy the link</button>, then create a bookmark and paste it as the address.</small></div></li>
+        <li><div>Open a land advert on aruodas.lt, or your favourites page.</div></li>
+        <li><div>Tap the bookmark. The plot shows up here.</div></li>
+      </ol>
+      <div class="rowline"><button class="btn ghost" onclick="this.closest('dialog').close()">Done</button></div>
+    </dialog>
+
+    <script src="shared.js"></script>
+    <script>
+      const P = window.PROTO
+      const S = P.state
+      let sort = 'new'
+
+      const light = (l) => {
+        const c = P.summary(l)
+        if (c.pass + c.warning + c.fail === 0) return ['grey', 'Not checked yet', 'Checks run once we know where it is']
+        if (c.fail) { const f = l.checks.filter((x) => x.status === 'fail'); return ['bad', f.length === 1 ? `Problem: ${f[0].label.toLowerCase()}` : `${f.length} problems`, f.map((x) => x.value).join(' · ')] }
+        if (c.warning) { const w = l.checks.filter((x) => x.status === 'warning'); return ['look', `${w.length} thing${w.length > 1 ? 's' : ''} to look at`, w.map((x) => x.label.toLowerCase()).join(', ')] }
+        return ['ok', 'All checks fine', `${c.pass} of ${l.checks.length} passed`]
+      }
+      const pin = (l) => ({
+        exact: `<span class="stamp pin">On the map</span>`,
+        approx: `<span class="stamp pin approx">Roughly on the map</span>`,
+        problem: `<span class="stamp pin bad">Couldn't find it</span>`,
+        unknown: `<span class="stamp soft">No location yet</span>`,
+      })[l.location]
+
+      const sorted = () => {
+        const a = [...S.listings]
+        if (sort === 'cheap') a.sort((x, y) => (x.priceEur ?? 1e12) - (y.priceEur ?? 1e12))
+        else if (sort === 'big') a.sort((x, y) => (y.areaAres ?? 0) - (x.areaAres ?? 0))
+        else if (sort === 'going') a.sort((x, y) => P.planned(y.id) - P.planned(x.id))
+        else a.sort((x, y) => y.updatedAt - x.updatedAt)
+        return a
+      }
+
+      function render() {
+        document.getElementById('plan-n').textContent = S.plan.length
+        document.getElementById('inbox-n').textContent = S.inbox
+        document.getElementById('inbox-n').style.display = S.inbox ? '' : 'none'
+        document.getElementById('count').textContent = S.listings.length
+        document.getElementById('last-change').textContent = 'changed ' + P.ago(S.household.lastChange)
+        document.getElementById('boards').innerHTML = sorted()
+          .map((l) => {
+            const going = P.planned(l.id)
+            const [cls, t, d] = light(l)
+            return `<article class="board ${going ? 'going' : ''}">
+              <a class="title" href="#">${l.title}</a>
+              <div class="place">${l.address ?? 'Location not recorded yet'}</div>
+              <div class="price ${l.priceEur === null ? 'unknown' : ''}">${P.eur(l.priceEur) ?? 'Price not listed'}</div>
+              <div class="area">${P.ares(l.areaAres) ?? '—'} <small>${P.perAre(l) ? '· ' + P.perAre(l) : ''}</small></div>
+              <div class="light"><span class="lamp ${cls}"></span><div><div class="t">${t}</div><div class="d">${d}</div></div></div>
+              <div class="foot">
+                <div class="stamps">
+                  ${pin(l)}
+                  ${l.visitedAt ? `<span class="stamp">Visited ${P.dateShort(l.visitedAt)}</span>` : ''}
+                  ${l.plots > 1 ? `<span class="stamp soft">${l.plots} areas marked</span>` : ''}
+                </div>
+                <button class="go" aria-pressed="${going}" onclick="toggle('${l.id}')"><span class="track"></span>${going ? 'On the trip' : 'Go see it?'}</button>
+              </div>
+            </article>`
+          })
+          .join('')
+      }
+      function toggle(id) { P.togglePlan(id); render() }
+      function sortBy(key, btn) {
+        sort = key
+        document.querySelectorAll('.sort button').forEach((b) => b.setAttribute('aria-pressed', b === btn))
+        render()
+      }
+      function renameHousehold() {
+        S.household.name = document.getElementById('hh-input').value
+        document.getElementById('hh-name').textContent = S.household.name
+        document.getElementById('hh').close()
+      }
+      render()
+      P.mountSwitcher('top')
+    </script>
+  </body>
+</html>

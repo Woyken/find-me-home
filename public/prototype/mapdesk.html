@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prototype 5 · Map desk — Find Me Home</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:ital,wght@0,400..700;1,400&family=Literata:opsz,wght@7..72,400..700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+      /* PROTOTYPE 5 — "Map desk": the planning table with the map unrolled on
+         it. The map is not a feature, it's the page. The list is a margin of
+         notes pinned to it; click either side and the other answers. Coral
+         is only for plots on the route. */
+      :root {
+        --chalk: #f5f7f5;
+        --paper: #ffffff;
+        --char: #24292b;
+        --mute: #66706e;
+        --rule: #dfe5e2;
+        --teal: #0e5a66;
+        --teal-soft: #d7e8ea;
+        --coral: #ff6a4d;
+        --coral-soft: #ffe1da;
+        --pass: #2f8a5b;
+        --warn: #d18f00;
+        --fail: #c0392b;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body { background: var(--chalk); color: var(--char); font-family: 'Familjen Grotesk', system-ui, sans-serif; font-size: 15px; line-height: 1.45; display: flex; flex-direction: column; min-height: 100vh; }
+      .serif { font-family: 'Literata', Georgia, serif; font-variation-settings: 'opsz' 72; }
+      a { color: inherit; }
+      button { font: inherit; cursor: pointer; }
+
+      header { display: flex; align-items: center; gap: 16px; padding: 12px 18px; background: var(--paper); border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
+      header h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+      header h1 small { font-family: 'Familjen Grotesk'; font-weight: 400; color: var(--mute); font-size: 14px; margin-left: 10px; }
+      header .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--pass); margin-right: 6px; }
+      header .spacer { flex: 1; }
+      .tab { text-decoration: none; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--rule); font-weight: 600; display: inline-flex; align-items: center; gap: 8px; background: var(--paper); }
+      .tab .n { min-width: 22px; text-align: center; border-radius: 999px; background: var(--char); color: #fff; font-size: 12px; line-height: 20px; padding: 0 6px; }
+      .tab.route { border-color: var(--coral); color: #b6412a; }
+      .tab.route .n { background: var(--coral); }
+      .tab.fill { background: var(--teal); color: #fff; border-color: var(--teal); }
+      .ghost { border: 0; background: none; color: var(--teal); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+      .desk { flex: 1; display: grid; grid-template-columns: 440px 1fr; min-height: 0; }
+      .notes { overflow: auto; border-right: 1px solid var(--rule); background: var(--paper); padding-bottom: 110px; }
+      .notes-head { position: sticky; top: 0; background: var(--paper); border-bottom: 1px solid var(--rule); padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; z-index: 2; }
+      .notes-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+      .notes-head .sub { color: var(--mute); font-size: 13px; }
+      .group { padding: 10px 18px 4px; color: var(--mute); font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--rule); }
+      .item { width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--rule); background: none; padding: 14px 18px; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; position: relative; }
+      .item:hover { background: var(--chalk); }
+      .item[aria-current='true'] { background: var(--teal-soft); }
+      .item.route::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--coral); }
+      .item .t { font-family: 'Literata', Georgia, serif; font-size: 17px; font-weight: 600; line-height: 1.25; }
+      .item .p { color: var(--mute); font-size: 13px; grid-column: 1; }
+      .item .price { font-weight: 700; text-align: right; font-feature-settings: 'tnum'; grid-row: 1; grid-column: 2; }
+      .item .area { color: var(--mute); font-size: 13px; text-align: right; grid-row: 2; grid-column: 2; }
+      .item .chips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
+      .chip { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--chalk); border: 1px solid var(--rule); color: var(--mute); }
+      .chip.ok { color: var(--pass); border-color: #bfe0cc; background: #ecf7f0; }
+      .chip.warn { color: #8a5e00; border-color: #efd28f; background: #fff6df; }
+      .chip.bad { color: var(--fail); border-color: #f0bdb4; background: #fdeeeb; }
+      .chip.visited { color: var(--teal); border-color: #b9d6da; background: var(--teal-soft); }
+      .route-btn { margin-left: auto; border: 1px solid var(--rule); background: #fff; border-radius: 999px; padding: 6px 12px; font-weight: 600; font-size: 13px; display: inline-flex; gap: 6px; align-items: center; min-height: 34px; }
+      .route-btn[aria-pressed='true'] { background: var(--coral); border-color: var(--coral); color: #fff; }
+      .route-btn svg { width: 14px; height: 14px; }
+
+      .mapwrap { position: relative; min-height: 0; }
+      #map { position: absolute; inset: 0; background: #e8ecea; }
+      .mapkey { position: absolute; left: 12px; bottom: 12px; z-index: 500; background: rgba(255, 255, 255, 0.95); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 10px; font-size: 12px; display: grid; gap: 4px; }
+      .mapkey i { display: inline-block; width: 14px; height: 10px; border: 2px solid var(--teal); background: rgba(14, 90, 102, 0.15); margin-right: 6px; vertical-align: -1px; }
+      .mapkey i.route { border-color: var(--coral); background: rgba(255, 106, 77, 0.2); }
+      .mapkey i.approx { border-style: dashed; border-radius: 50%; width: 12px; }
+      .mapempty { position: absolute; right: 12px; top: 12px; z-index: 500; background: rgba(255, 255, 255, 0.95); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 12px; font-size: 13px; color: var(--mute); }
+      .leaflet-tooltip.plotlabel { background: #fff; border: 1px solid var(--rule); border-radius: 6px; padding: 3px 8px; font: 600 12px 'Familjen Grotesk', sans-serif; color: var(--char); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15); }
+      .leaflet-tooltip.plotlabel::before { display: none; }
+
+      dialog { border: 1px solid var(--rule); border-radius: 10px; padding: 22px; max-width: 520px; width: calc(100% - 32px); color: var(--char); }
+      dialog::backdrop { background: rgba(36, 41, 43, 0.4); }
+      dialog h2 { margin: 0 0 4px; font-size: 22px; }
+      dialog h3 { font-size: 14px; margin: 18px 0 6px; }
+      dialog p { margin: 4px 0; color: var(--mute); font-size: 14px; }
+      dialog input { font: inherit; width: 100%; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 8px; }
+      .btn { border: 1px solid var(--rule); background: #fff; border-radius: 8px; padding: 9px 13px; font-weight: 600; }
+      .btn.fill { background: var(--teal); color: #fff; border-color: var(--teal); }
+      .btn.danger { color: var(--fail); }
+      .rowline { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+      .qr { width: 140px; height: 140px; background: repeating-conic-gradient(var(--char) 0 25%, #fff 0 50%) 0 0/14px 14px; margin: 10px 0; border-radius: 6px; }
+      .steps { list-style: decimal; padding-left: 22px; margin: 10px 0 0; display: grid; gap: 10px; }
+      .drag { display: inline-block; margin-top: 6px; padding: 8px 12px; border: 1px dashed var(--teal); color: var(--teal); border-radius: 8px; font-weight: 600; text-decoration: none; cursor: grab; }
+      .device { display: flex; justify-content: space-between; align-items: center; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 8px; margin-top: 6px; }
+      .device .tag { font-size: 12px; color: var(--pass); font-weight: 600; }
+
+      @media (max-width: 860px) {
+        .desk { grid-template-columns: 1fr; grid-template-rows: 42vh 1fr; }
+        .notes { border-right: 0; border-top: 1px solid var(--rule); order: 2; }
+        .mapwrap { order: 1; }
+        header h1 small { display: block; margin: 2px 0 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1 class="serif"><span id="hh-name">Rūta &amp; Tomas</span><small><span class="dot" title="Connected"></span>connected · <span id="last-change"></span> · <button class="ghost" onclick="document.getElementById('hh').showModal()">household</button></small></h1>
+      <span class="spacer"></span>
+      <a class="tab" href="#" id="inbox-link">Unsorted <span class="n" id="inbox-n"></span></a>
+      <a class="tab route" href="#">Route <span class="n" id="plan-n"></span></a>
+      <button class="tab fill" onclick="document.getElementById('imp').showModal()">Add plot</button>
+    </header>
+
+    <div class="desk">
+      <aside class="notes" aria-label="Saved plots">
+        <div class="notes-head"><h2>Saved plots</h2><span class="sub" id="count"></span></div>
+        <div id="list"></div>
+      </aside>
+      <div class="mapwrap">
+        <div id="map" role="application" aria-label="Map of saved plots"></div>
+        <div class="mapkey"><span><i></i>plot outline</span><span><i class="approx"></i>roughly here</span><span><i class="route"></i>on the route</span></div>
+        <div class="mapempty" id="mapempty"></div>
+      </div>
+    </div>
+
+    <dialog id="hh">
+      <h2 class="serif">Household</h2>
+      <p>Everyone in the household sees the same plots on every device.</p>
+      <h3>Name</h3>
+      <div class="rowline"><input id="hh-input" value="Rūta &amp; Tomas" aria-label="Household name" /><button class="btn fill" onclick="renameHousehold()">Save</button></div>
+      <h3>Invite a device</h3>
+      <p>Anyone with this link can edit. It cannot be revoked.</p>
+      <div class="qr" role="img" aria-label="QR code placeholder"></div>
+      <div class="rowline"><input readonly value="https://woyken.github.io/find-me-home/#household=…" aria-label="Invitation link" /><button class="btn">Copy</button></div>
+      <h3>Households on this device</h3>
+      <div class="device"><span>Rūta &amp; Tomas</span><span class="tag">Active</span></div>
+      <div class="device"><span>Sodyba prie ežero</span><button class="ghost">Switch</button></div>
+      <div class="rowline"><button class="btn danger">Remove from this device</button><span class="spacer" style="flex:1"></span><button class="btn" onclick="this.closest('dialog').close()">Close</button></div>
+    </dialog>
+
+    <dialog id="imp">
+      <h2 class="serif">Add a plot from Aruodas</h2>
+      <p>One-time setup. Afterwards each plot is one click.</p>
+      <ol class="steps">
+        <li>Drag this to your bookmarks bar:<br /><a class="drag" href="javascript:void(0)" onclick="return false">Save to Find Me Home</a><br /><small>On mobile, <button class="ghost">copy the link</button> and add it as a bookmark.</small></li>
+        <li>Open a land advert on aruodas.lt, or your favourites page.</li>
+        <li>Click the bookmark. The plot lands on this map.</li>
+      </ol>
+      <div class="rowline"><span style="flex:1"></span><button class="btn" onclick="this.closest('dialog').close()">Close</button></div>
+    </dialog>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="shared.js"></script>
+    <script>
+      const P = window.PROTO
+      const S = P.state
+      let selected = null
+      const layers = {}
+      const FLAG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg>`
+
+      const map = L.map('map', { zoomControl: true }).setView([54.72, 25.2], 10)
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map)
+      const plotLayer = L.layerGroup().addTo(map)
+
+      const located = () => S.listings.filter((l) => l.lat !== null)
+      const unlocated = () => S.listings.filter((l) => l.lat === null)
+
+      function drawMap(fit) {
+        plotLayer.clearLayers()
+        const bounds = L.latLngBounds([])
+        located().forEach((l) => {
+          const route = P.planned(l.id), sel = l.id === selected
+          const color = route ? '#ff6a4d' : '#0e5a66'
+          const style = { color, weight: sel ? 4 : 2, fillColor: color, fillOpacity: sel ? 0.35 : 0.15 }
+          let layer
+          if (l.boundary) layer = L.geoJSON({ type: 'Feature', geometry: l.boundary }, { style })
+          else layer = L.circle([l.lat, l.lng], { radius: 220, dashArray: '6 5', ...style })
+          layer.on('click', () => select(l.id, false))
+          layer.bindTooltip(`${l.title.split(',')[0]} · ${P.eur(l.priceEur) ?? '—'}`, { permanent: sel, direction: 'top', className: 'plotlabel', offset: [0, -6] })
+          layer.addTo(plotLayer)
+          layers[l.id] = layer
+          bounds.extend(layer.getBounds ? layer.getBounds() : [l.lat, l.lng])
+        })
+        if (fit && bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40] })
+        const n = unlocated().length
+        document.getElementById('mapempty').textContent = n ? `${n} plot${n > 1 ? 's' : ''} not on the map yet` : ''
+        document.getElementById('mapempty').style.display = n ? '' : 'none'
+      }
+
+      const chips = (l) => {
+        const c = P.summary(l), out = []
+        if (c.fail) out.push(`<span class="chip bad">${c.fail} problem${c.fail > 1 ? 's' : ''}: ${l.checks.filter((x) => x.status === 'fail').map((x) => x.label.toLowerCase()).join(', ')}</span>`)
+        else if (c.warning) out.push(`<span class="chip warn">${c.warning} to look at</span>`)
+        else if (c.pass) out.push(`<span class="chip ok">all ${c.pass} checks fine</span>`)
+        else out.push(`<span class="chip">not checked yet</span>`)
+        if (l.location === 'approx') out.push(`<span class="chip">roughly located</span>`)
+        if (l.location === 'problem') out.push(`<span class="chip bad">location not found</span>`)
+        if (l.location === 'unknown') out.push(`<span class="chip">no location yet</span>`)
+        if (l.visitedAt) out.push(`<span class="chip visited">visited ${P.dateShort(l.visitedAt)}</span>`)
+        if (l.plots > 1) out.push(`<span class="chip">${l.plots} areas marked</span>`)
+        return out.join('')
+      }
+      const item = (l) => {
+        const route = P.planned(l.id)
+        return `<div class="item ${route ? 'route' : ''}" role="button" tabindex="0" aria-current="${l.id === selected}" id="item-${l.id}" onclick="select('${l.id}', true)" onkeydown="if(event.key==='Enter')select('${l.id}',true)">
+          <a class="t" href="#" onclick="event.stopPropagation()">${l.title}</a>
+          <span class="price">${P.eur(l.priceEur) ?? '—'}</span>
+          <span class="p">${l.address ?? 'Location not recorded yet'}</span>
+          <span class="area">${P.ares(l.areaAres) ?? '—'}${P.perAre(l) ? ' · ' + P.perAre(l) : ''}</span>
+          <div class="chips">${chips(l)}<button class="route-btn" aria-pressed="${route}" onclick="event.stopPropagation(); toggle('${l.id}')">${FLAG}${route ? 'On the route' : 'Add to route'}</button></div>
+        </div>`
+      }
+
+      function render(fit) {
+        document.getElementById('plan-n').textContent = S.plan.length
+        document.getElementById('inbox-n').textContent = S.inbox
+        document.getElementById('inbox-link').style.display = S.inbox ? '' : 'none'
+        document.getElementById('last-change').textContent = 'changed ' + P.ago(S.household.lastChange)
+        document.getElementById('count').textContent = `${S.listings.length} saved · ${located().length} on the map`
+        const un = unlocated()
+        document.getElementById('list').innerHTML =
+          located().sort((a, b) => b.updatedAt - a.updatedAt).map(item).join('') +
+          (un.length ? `<div class="group">Not on the map yet</div>` + un.map(item).join('') : '')
+        drawMap(fit)
+      }
+      function select(id, pan) {
+        selected = id
+        render(false)
+        const layer = layers[id]
+        if (layer && pan) map.flyToBounds(layer.getBounds ? layer.getBounds() : L.latLng(layer.getLatLng()).toBounds(600), { padding: [60, 60], maxZoom: 16, duration: 0.6 })
+        document.getElementById('item-' + id)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
+      function toggle(id) { P.togglePlan(id); render(false) }
+      function renameHousehold() { S.household.name = document.getElementById('hh-input').value; document.getElementById('hh-name').textContent = S.household.name; document.getElementById('hh').close() }
+      render(true)
+      P.mountSwitcher('bottom')
+    </script>
+  </body>
+</html>

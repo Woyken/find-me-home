@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prototype 3 · Ledger — Find Me Home</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* PROTOTYPE 3 — "Ledger": the comparison sheet. One family (Instrument
+         Sans, tabular figures), white paper, cool rules. Density is the point:
+         every plot on one screen, every check visible as a strip of 13 cells,
+         and any column sorts with a click. */
+      :root {
+        --paper: #ffffff;
+        --panel: #f4f6f8;
+        --rule: #d9dfe4;
+        --slate: #22303c;
+        --muted: #6b7680;
+        --blue: #1f5eff;
+        --pass: #1f8a57;
+        --warn: #d08700;
+        --fail: #c8402a;
+        --unk: #d5dbe0;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; }
+      body {
+        background: var(--panel);
+        color: var(--slate);
+        font-family: 'Instrument Sans', system-ui, sans-serif;
+        font-size: 15px;
+        line-height: 1.45;
+        font-feature-settings: 'tnum' 1;
+      }
+      a { color: inherit; }
+      button { font: inherit; cursor: pointer; }
+
+      .bar { background: var(--paper); border-bottom: 1px solid var(--rule); }
+      .bar-in { max-width: 1240px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+      .brand { font-weight: 700; letter-spacing: -0.01em; display: flex; align-items: center; gap: 10px; }
+      .brand i { width: 22px; height: 22px; border-radius: 6px; background: var(--slate); display: inline-block; position: relative; }
+      .brand i::after { content: ''; position: absolute; inset: 6px 6px 5px; border: 2px solid #fff; border-top-width: 3px; border-radius: 2px 2px 0 0; }
+      .hh { display: flex; align-items: center; gap: 10px; padding: 6px 10px 6px 8px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; }
+      .hh .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pass); }
+      .hh .meta { color: var(--muted); font-size: 13px; }
+      .hh button { border: 0; background: none; color: var(--blue); font-weight: 600; padding: 0 2px; }
+      .spacer { flex: 1; }
+      .navlink { text-decoration: none; font-weight: 600; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--rule); background: #fff; display: inline-flex; gap: 8px; align-items: center; }
+      .navlink .n { background: var(--slate); color: #fff; border-radius: 6px; padding: 0 7px; font-size: 13px; line-height: 20px; }
+      .navlink.inbox .n { background: var(--blue); }
+      .primary { background: var(--blue); color: #fff; border: 0; border-radius: 8px; padding: 9px 14px; font-weight: 600; }
+
+      .page { max-width: 1240px; margin: 0 auto; padding: 22px 20px 110px; }
+      .head { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+      .head h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+      .head p { margin: 4px 0 0; color: var(--muted); }
+      .filters { display: flex; gap: 6px; flex-wrap: wrap; }
+      .chip { border: 1px solid var(--rule); background: #fff; border-radius: 999px; padding: 6px 12px; font-weight: 600; font-size: 13px; }
+      .chip[aria-pressed='true'] { background: var(--slate); color: #fff; border-color: var(--slate); }
+
+      .sheet { background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+      table { width: 100%; border-collapse: collapse; }
+      thead th { position: sticky; top: 0; background: #fff; z-index: 1; text-align: left; font-weight: 600; font-size: 13px; color: var(--muted); padding: 10px 12px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+      thead th button { border: 0; background: none; padding: 0; font: inherit; color: inherit; display: inline-flex; align-items: center; gap: 4px; }
+      thead th button[data-active='true'] { color: var(--slate); }
+      thead th button[data-active='true']::after { content: '▾'; font-size: 11px; }
+      thead th button[data-active='true'][data-dir='asc']::after { content: '▴'; }
+      th.num, td.num { text-align: right; }
+      tbody td { padding: 12px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+      tbody tr:last-child td { border-bottom: 0; }
+      tbody tr:hover td { background: #fafbfc; }
+      tbody tr.planned td:first-child { box-shadow: inset 3px 0 0 var(--blue); }
+      .name a { font-weight: 600; text-decoration: none; display: block; }
+      .name a:hover { text-decoration: underline; }
+      .name .sub { color: var(--muted); font-size: 13px; }
+      .num b { font-weight: 600; }
+      .muted { color: var(--muted); }
+
+      /* check strip */
+      .strip { display: inline-grid; grid-template-columns: repeat(13, 10px); gap: 2px; vertical-align: middle; }
+      .strip i { width: 10px; height: 16px; border-radius: 2px; background: var(--unk); display: block; }
+      .strip i.pass { background: var(--pass); } .strip i.warning { background: var(--warn); } .strip i.fail { background: var(--fail); }
+      .strip-sum { font-size: 13px; color: var(--muted); margin-left: 8px; white-space: nowrap; }
+      .strip-sum b { color: var(--fail); font-weight: 700; }
+
+      .loc { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; }
+      .loc i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+      .loc.exact i { background: var(--pass); }
+      .loc.approx i { background: transparent; border: 2px dashed var(--pass); width: 8px; height: 8px; }
+      .loc.problem i { background: var(--fail); }
+      .loc.unknown i { background: var(--unk); }
+
+      .cb { width: 22px; height: 22px; accent-color: var(--blue); cursor: pointer; }
+      .visited { font-size: 13px; }
+      .visited::before { content: '✓ '; color: var(--pass); font-weight: 700; }
+
+      .totals td { background: var(--panel); font-weight: 600; font-size: 13px; color: var(--muted); }
+      .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); padding: 12px 2px 0; }
+      .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
+
+      dialog { border: 1px solid var(--rule); border-radius: 12px; padding: 22px; max-width: 520px; width: calc(100% - 32px); color: var(--slate); box-shadow: 0 30px 60px rgba(34, 48, 60, 0.25); }
+      dialog::backdrop { background: rgba(34, 48, 60, 0.35); }
+      dialog h2 { margin: 0 0 4px; font-size: 20px; }
+      dialog h3 { font-size: 14px; color: var(--muted); font-weight: 600; margin: 18px 0 6px; }
+      dialog p { margin: 4px 0; color: var(--muted); font-size: 14px; }
+      dialog input { font: inherit; width: 100%; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 8px; }
+      .btn { border: 1px solid var(--rule); background: #fff; border-radius: 8px; padding: 9px 13px; font-weight: 600; }
+      .btn.fill { background: var(--slate); color: #fff; border-color: var(--slate); }
+      .btn.danger { color: var(--fail); }
+      .rowline { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+      .qr { width: 140px; height: 140px; background: repeating-conic-gradient(var(--slate) 0 25%, #fff 0 50%) 0 0/14px 14px; margin: 10px 0; border-radius: 6px; }
+      .steps { list-style: decimal; padding-left: 22px; margin: 10px 0 0; display: grid; gap: 10px; }
+      .drag { display: inline-block; margin-top: 6px; padding: 8px 12px; border: 1px dashed var(--blue); color: var(--blue); border-radius: 8px; font-weight: 600; text-decoration: none; cursor: grab; }
+      .device { display: flex; justify-content: space-between; align-items: center; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 8px; margin-top: 6px; }
+      .device .tag { font-size: 12px; color: var(--pass); font-weight: 600; }
+      .linkbtn { border: 0; background: none; color: var(--blue); font-weight: 600; padding: 0; }
+
+      @media (max-width: 900px) {
+        thead { display: none; }
+        table, tbody, tr, td { display: block; }
+        tr { border-bottom: 1px solid var(--rule); padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
+        td { padding: 0 !important; border: 0 !important; }
+        td.name { grid-column: 1; }
+        td.pick { grid-column: 2; grid-row: 1 / span 2; align-self: start; }
+        td.num { text-align: left; }
+        td.num::before { content: attr(data-l) ' '; color: var(--muted); }
+        tr.totals { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <div class="bar-in">
+        <span class="brand"><i></i>Find Me Home</span>
+        <div class="hh">
+          <span class="dot" title="Connected"></span>
+          <strong id="hh-name">Rūta &amp; Tomas</strong>
+          <span class="meta" id="last-change"></span>
+          <button onclick="document.getElementById('hh').showModal()">Manage</button>
+        </div>
+        <span class="spacer"></span>
+        <a class="navlink inbox" href="#" id="inbox-link">Inbox <span class="n" id="inbox-n"></span></a>
+        <a class="navlink" href="#">Visit list <span class="n" id="plan-n"></span></a>
+        <button class="primary" onclick="document.getElementById('imp').showModal()">Add from Aruodas</button>
+      </div>
+    </div>
+
+    <main class="page">
+      <div class="head">
+        <div>
+          <h1>Listings</h1>
+          <p id="summary"></p>
+        </div>
+        <div class="filters" role="group" aria-label="Show">
+          <button class="chip" aria-pressed="true" onclick="filter('all', this)">All</button>
+          <button class="chip" aria-pressed="false" onclick="filter('planned', this)">On the visit list</button>
+          <button class="chip" aria-pressed="false" onclick="filter('unvisited', this)">Not visited yet</button>
+          <button class="chip" aria-pressed="false" onclick="filter('clean', this)">No problems</button>
+        </div>
+      </div>
+
+      <div class="sheet">
+        <table>
+          <thead>
+            <tr>
+              <th><button data-key="title" onclick="sortBy('title')">Listing</button></th>
+              <th><button data-key="address" onclick="sortBy('address')">Place</button></th>
+              <th class="num"><button data-key="priceEur" onclick="sortBy('priceEur')">Price</button></th>
+              <th class="num"><button data-key="areaAres" onclick="sortBy('areaAres')">Area</button></th>
+              <th class="num"><button data-key="perAre" onclick="sortBy('perAre')">€ / are</button></th>
+              <th><button data-key="checks" onclick="sortBy('checks')">13 checks</button></th>
+              <th>Location</th>
+              <th><button data-key="visitedAt" onclick="sortBy('visitedAt')">Visited</button></th>
+              <th><button data-key="updatedAt" onclick="sortBy('updatedAt')">Changed</button></th>
+              <th>Visit list</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="legend">
+        <span>Checks, left to right:</span>
+        <span id="check-legend"></span>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--pass)"></i>passed</span>
+        <span><i style="background:var(--warn)"></i>worth a look</span>
+        <span><i style="background:var(--fail)"></i>problem</span>
+        <span><i style="background:var(--unk)"></i>not checked</span>
+      </div>
+    </main>
+
+    <dialog id="hh">
+      <h2>Household</h2>
+      <p>Everyone in the household sees the same listings on every device.</p>
+      <h3>Name</h3>
+      <div class="rowline"><input id="hh-input" value="Rūta &amp; Tomas" aria-label="Household name" /><button class="btn fill" onclick="renameHousehold()">Save</button></div>
+      <h3>Invite a device</h3>
+      <p>Anyone with this link can edit. It cannot be revoked.</p>
+      <div class="qr" role="img" aria-label="QR code placeholder"></div>
+      <div class="rowline"><input readonly value="https://woyken.github.io/find-me-home/#household=…" aria-label="Invitation link" /><button class="btn">Copy</button></div>
+      <h3>Households on this device</h3>
+      <div class="device"><span>Rūta &amp; Tomas</span><span class="tag">Active</span></div>
+      <div class="device"><span>Sodyba prie ežero</span><button class="linkbtn">Switch</button></div>
+      <div class="rowline"><button class="btn danger">Remove from this device</button><span class="spacer"></span><button class="btn" onclick="this.closest('dialog').close()">Close</button></div>
+    </dialog>
+
+    <dialog id="imp">
+      <h2>Add listings from Aruodas</h2>
+      <p>One-time setup. Afterwards each listing is one click.</p>
+      <ol class="steps">
+        <li>Drag this to your bookmarks bar: <br /><a class="drag" href="javascript:void(0)" onclick="return false">Save to Find Me Home</a> <br /><small class="muted">On mobile, <button class="linkbtn">copy the link</button> and add it as a bookmark.</small></li>
+        <li>Open a land listing on aruodas.lt, or your favourites page.</li>
+        <li>Click the bookmark. The listing appears in this table.</li>
+      </ol>
+      <div class="rowline"><span class="spacer"></span><button class="btn" onclick="this.closest('dialog').close()">Close</button></div>
+    </dialog>
+
+    <script src="shared.js"></script>
+    <script>
+      const P = window.PROTO
+      const S = P.state
+      let sortKey = 'updatedAt', dir = 'desc', view = 'all'
+
+      const val = (l, k) => k === 'perAre' ? (l.priceEur && l.areaAres ? l.priceEur / l.areaAres : null)
+        : k === 'checks' ? P.summary(l).fail * 100 + P.summary(l).warning : l[k]
+      const cmp = (a, b) => {
+        const x = val(a, sortKey), y = val(b, sortKey)
+        if (x === null || x === undefined) return 1
+        if (y === null || y === undefined) return -1
+        const r = typeof x === 'string' ? x.localeCompare(y) : x - y
+        return dir === 'asc' ? r : -r
+      }
+      const visible = () => S.listings.filter((l) =>
+        view === 'planned' ? P.planned(l.id) : view === 'unvisited' ? !l.visitedAt : view === 'clean' ? P.summary(l).fail === 0 : true)
+
+      const locText = { exact: 'Exact', approx: 'Approximate', problem: 'Not found', unknown: 'Unknown' }
+
+      function render() {
+        document.getElementById('plan-n').textContent = S.plan.length
+        document.getElementById('inbox-n').textContent = S.inbox
+        document.getElementById('inbox-link').style.display = S.inbox ? '' : 'none'
+        document.getElementById('last-change').textContent = 'changed ' + P.ago(S.household.lastChange)
+        const problems = S.listings.filter((l) => P.summary(l).fail).length
+        document.getElementById('summary').textContent = `${S.listings.length} saved · ${S.plan.length} on the visit list · ${problems} with a problem`
+        document.getElementById('check-legend').textContent = P.CHECKS.map((c) => c[1]).join(' · ')
+        document.querySelectorAll('thead button').forEach((b) => { b.dataset.active = b.dataset.key === sortKey; b.dataset.dir = dir })
+        const rows = visible().sort(cmp)
+        const sum = (k) => rows.reduce((a, l) => a + (l[k] ?? 0), 0)
+        document.getElementById('rows').innerHTML = rows.map((l) => {
+          const c = P.summary(l), planned = P.planned(l.id)
+          return `<tr class="${planned ? 'planned' : ''}">
+            <td class="name"><a href="#">${l.title}</a><span class="sub">${l.plots > 1 ? l.plots + ' plots marked' : 'Aruodas ' + l.sourceId}</span></td>
+            <td>${l.address ?? '<span class="muted">—</span>'}</td>
+            <td class="num" data-l="Price"><b>${P.eur(l.priceEur) ?? '<span class="muted">—</span>'}</b></td>
+            <td class="num" data-l="Area">${P.ares(l.areaAres) ?? '—'}</td>
+            <td class="num" data-l="Per are">${P.perAre(l) ?? '—'}</td>
+            <td><span class="strip">${l.checks.map((x) => `<i class="${x.status}" title="${x.label}: ${x.value}"></i>`).join('')}</span><span class="strip-sum">${c.fail ? `<b>${c.fail} problem${c.fail > 1 ? 's' : ''}</b>` : c.warning ? `${c.warning} to look at` : c.pass ? 'all fine' : 'not run'}</span></td>
+            <td><span class="loc ${l.location}"><i></i>${locText[l.location]}</span></td>
+            <td>${l.visitedAt ? `<span class="visited">${P.dateShort(l.visitedAt)}</span>` : '<span class="muted">not yet</span>'}</td>
+            <td class="muted">${P.ago(l.updatedAt)}</td>
+            <td class="pick"><input class="cb" type="checkbox" aria-label="On the visit list" ${planned ? 'checked' : ''} onchange="toggle('${l.id}')" /></td>
+          </tr>`
+        }).join('') + `<tr class="totals"><td colspan="2">${rows.length} listings</td><td class="num">${P.eur(sum('priceEur'))} total</td><td class="num">${P.ares(sum('areaAres'))}</td><td colspan="6"></td></tr>`
+      }
+      function sortBy(k) { if (sortKey === k) dir = dir === 'asc' ? 'desc' : 'asc'; else { sortKey = k; dir = k === 'title' || k === 'address' ? 'asc' : 'desc' } render() }
+      function filter(v, btn) { view = v; document.querySelectorAll('.chip').forEach((b) => b.setAttribute('aria-pressed', b === btn)); render() }
+      function toggle(id) { P.togglePlan(id); render() }
+      function renameHousehold() { S.household.name = document.getElementById('hh-input').value; document.getElementById('hh-name').textContent = S.household.name; document.getElementById('hh').close() }
+      render()
+      P.mountSwitcher('bottom')
+    </script>
+  </body>
+</html>
