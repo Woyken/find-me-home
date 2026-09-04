@@ -324,13 +324,19 @@ function CandidatePlotEditor(props: {
       ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`
       : null
   }
+  const needsLocationRetry = () =>
+    props.plot.locationResolutionState !== 'resolved' ||
+    ((props.plot.latitudeClue !== null || props.plot.longitudeClue !== null) &&
+      (props.plot.resolvedParcelNumber === null ||
+        props.plot.resolvedCadastralNumber === null ||
+        props.plot.resolvedBoundary === null))
   const resolveLocation = () =>
-    props.plot.locationResolutionState === 'resolved'
-      ? undefined
-      : household.resolveCandidatePlotLocation(
+    needsLocationRetry()
+      ? household.resolveCandidatePlotLocation(
           props.plot.sourceListingId,
           props.plot.id,
         )
+      : undefined
   const runAutomaticChecks = () =>
     household.runCandidatePlotAutomaticChecks(
       props.plot.sourceListingId,
@@ -411,7 +417,7 @@ function CandidatePlotEditor(props: {
       <section class="mt-4 border border-[#315f73]/20 bg-[#e7edf0] p-4">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <h3 class="font-serif text-xl">Resolved Location Data</h3>
-          <Show when={props.plot.locationResolutionState !== 'resolved'}>
+          <Show when={needsLocationRetry()}>
             <button
               class="border border-[#315f73] px-3 py-2 text-xs font-bold text-[#315f73] disabled:opacity-50"
               disabled={household.isCandidatePlotLocationRunning(props.plot.id)}

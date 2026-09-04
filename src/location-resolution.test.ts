@@ -96,7 +96,7 @@ describe('Candidate Plot location resolution', () => {
     expect(searchAddress).toHaveBeenCalledOnce()
   })
 
-  it('keeps known coordinates resolved when parcel lookup is unavailable', async () => {
+  it('keeps known coordinates retryable when parcel lookup is unavailable', async () => {
     const resolver = createLocationResolver({
       parcels: {
         findByNumber: async () => [],
@@ -126,7 +126,7 @@ describe('Candidate Plot location resolution', () => {
       resolvedParcelNumber: null,
       resolvedPrecision: 'exact',
       effectiveLocationSource: 'coordinates',
-      locationResolutionState: 'resolved',
+      locationResolutionState: 'unavailable',
       parcelDatasetVersion: null,
     })
   })

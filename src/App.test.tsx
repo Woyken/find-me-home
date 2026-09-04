@@ -241,6 +241,14 @@ describe('App Household boundary', () => {
       expect(runtime.runCandidatePlotAutomaticChecks).toHaveBeenCalledTimes(1)
     })
 
+    listing.candidatePlots[0].locationResolutionState = 'resolved'
+    await runtime.renameActiveHousehold('Parcel retry')
+    await waitFor(() => expect(findButton('Retry location')).toBeTruthy())
+    findButton('Retry location')?.click()
+    await waitFor(() =>
+      expect(runtime.resolveCandidatePlotLocation).toHaveBeenCalledTimes(2),
+    )
+
     const updateCandidatePlot = vi.spyOn(runtime, 'updateCandidatePlot')
     const clueKind =
       document.querySelector<HTMLSelectElement>('fieldset select')

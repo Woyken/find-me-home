@@ -144,9 +144,13 @@ export const createLocationResolver = (dependencies: {
           longitude: plot.longitudeClue,
         }
         const lks94 = toLks94(coordinates.latitude, coordinates.longitude)
-        const parcel = await dependencies.parcels
-          .findAtLks94(lks94.x, lks94.y)
-          .catch(() => null)
+        let parcel: RegisteredParcel | null = null
+        let parcelLookupUnavailable = false
+        try {
+          parcel = await dependencies.parcels.findAtLks94(lks94.x, lks94.y)
+        } catch {
+          parcelLookupUnavailable = true
+        }
         const address = await dependencies
           .reverseAddress(coordinates.latitude, coordinates.longitude)
           .catch(() => null)
@@ -166,7 +170,9 @@ export const createLocationResolver = (dependencies: {
           resolvedAddress: address,
           resolvedPrecision: plot.coordinateCluePrecision ?? 'exact',
           effectiveLocationSource: 'coordinates',
-          locationResolutionState: 'resolved',
+          locationResolutionState: parcelLookupUnavailable
+            ? 'unavailable'
+            : 'resolved',
           parcelDatasetVersion: dependencies.parcels.datasetVersion,
         }
       }
