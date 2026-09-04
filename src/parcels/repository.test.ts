@@ -151,6 +151,60 @@ describe('ParcelRepository', () => {
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
 
+  it('resolves from the network when Cache Storage is unavailable', async () => {
+    const files = buildParcelAssetsInMemory(sources())
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input instanceof Request ? input.url : String(input)
+      const file = new URL(url).pathname.replace('/parcels/', '')
+      return new Response(files.get(file) as BodyInit)
+    })
+    const cacheStorage = {
+      open: vi.fn(async () => {
+        throw new Error('Cache Storage unavailable')
+      }),
+      keys: vi.fn(async () => {
+        throw new Error('Cache Storage unavailable')
+      }),
+    } as unknown as CacheStorage
+    const repository = new ParcelRepository('/parcels/', {
+      fetch: fetcher,
+      cacheStorage,
+    })
+
+    await expect(
+      repository.findAtLks94(500_010, 6_000_010),
+    ).resolves.toMatchObject({ uniqueNumber: '130012345678' })
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps a network result when cache persistence fails', async () => {
+    const files = buildParcelAssetsInMemory(sources())
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input instanceof Request ? input.url : String(input)
+      const file = new URL(url).pathname.replace('/parcels/', '')
+      return new Response(files.get(file) as BodyInit)
+    })
+    const cacheStorage = {
+      open: vi.fn(async () => ({
+        match: async () => undefined,
+        put: async () => {
+          throw new Error('Cache write unavailable')
+        },
+      })),
+      keys: vi.fn(async () => {
+        throw new Error('Cache cleanup unavailable')
+      }),
+    } as unknown as CacheStorage
+    const repository = new ParcelRepository('/parcels/', {
+      fetch: fetcher,
+      cacheStorage,
+    })
+
+    await expect(
+      repository.findAtLks94(500_010, 6_000_010),
+    ).resolves.toMatchObject({ uniqueNumber: '130012345678' })
+  })
+
   it('resolves a containing parcel whose registered area is unknown', async () => {
     const files = buildParcelAssetsInMemory([
       {

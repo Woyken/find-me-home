@@ -114,28 +114,29 @@ export class ParcelRepository {
     if (existing) return existing as Promise<T>
     const loading = (async () => {
       const request = new Request(new URL(assetPath, this.#absoluteBase()))
-      const cache = await this.#cacheStorage?.open(
-        `registered-parcels-${manifest.datasetVersion}`,
-      )
-      const cached = await cache?.match(request)
+      const cache = await this.#cacheStorage
+        ?.open(`registered-parcels-${manifest.datasetVersion}`)
+        .catch(() => undefined)
+      const cached = await cache?.match(request).catch(() => undefined)
       if (cached) {
         try {
           return await decompressJson<T>(
             new Uint8Array(await cached.arrayBuffer()),
           )
         } catch {
-          await cache?.delete(request)
+          await cache?.delete(request).catch(() => undefined)
         }
       }
       const response = await this.#fetch(request)
       if (!response.ok) throw new Error(`${assetPath}: HTTP ${response.status}`)
       const bytes = new Uint8Array(await response.clone().arrayBuffer())
       const parsed = await decompressJson<T>(bytes)
-      await cache?.put(request, response.clone())
+      await cache?.put(request, response.clone()).catch(() => undefined)
       if (this.#cacheStorage) {
         const current = `registered-parcels-${manifest.datasetVersion}`
-        await Promise.all(
-          (await this.#cacheStorage.keys())
+        const names = await this.#cacheStorage.keys().catch(() => [])
+        await Promise.allSettled(
+          names
             .filter(
               (name) =>
                 name.startsWith('registered-parcels-') && name !== current,
