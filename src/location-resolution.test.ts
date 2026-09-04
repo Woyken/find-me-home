@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createLocationResolver } from './location-resolution'
+import {
+  createLocationResolver,
+  isLocationResolutionError,
+} from './location-resolution'
+import type { LocationResolutionError } from './location-resolution'
 import type { CandidatePlotRecord } from './source-listings/model'
 import type { RegisteredParcel } from './parcels/repository'
 import parcelFixture from './test-fixtures/registered-parcel.json'
@@ -87,13 +91,20 @@ describe('Candidate Plot location resolution', () => {
         throw new Error('must not be called')
       },
     })
-    await expect(
-      resolver.resolve(plot({ addressClue: 'Upės g. 7' })),
-    ).resolves.toMatchObject({
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const failure = await resolver
+      .resolve(plot({ addressClue: 'Upės g. 7' }))
+      .catch((caught: unknown) => caught)
+    expect(isLocationResolutionError(failure)).toBe(true)
+    expect((failure as LocationResolutionError).data).toMatchObject({
       locationResolutionState: 'unavailable',
       effectiveLocationSource: null,
     })
+    expect((failure as LocationResolutionError).diagnostic).toContain(
+      'Failed: Worker unavailable',
+    )
     expect(searchAddress).toHaveBeenCalledOnce()
+    error.mockRestore()
   })
 
   it('keeps known coordinates retryable when parcel lookup is unavailable', async () => {
@@ -112,15 +123,18 @@ describe('Candidate Plot location resolution', () => {
       },
     })
 
-    await expect(
-      resolver.resolve(
+    const failure = await resolver
+      .resolve(
         plot({
           latitudeClue: 54.80511,
           longitudeClue: 25.206326,
           coordinateCluePrecision: 'exact',
         }),
-      ),
-    ).resolves.toMatchObject({
+      )
+      .catch((caught: unknown) => caught)
+    expect(isLocationResolutionError(failure)).toBe(true)
+    const { data, diagnostic } = failure as LocationResolutionError
+    expect(data).toMatchObject({
       resolvedLatitude: 54.80511,
       resolvedLongitude: 25.206326,
       resolvedAddress: null,
@@ -130,6 +144,8 @@ describe('Candidate Plot location resolution', () => {
       locationResolutionState: 'unavailable',
       parcelDatasetVersion: null,
     })
+    expect(diagnostic).toContain('LKS94 x=')
+    expect(diagnostic).toContain('Failed: Parcel assets unavailable')
     expect(error).toHaveBeenCalledWith(
       '[location] parcel coordinate lookup failed',
       expect.objectContaining({ candidatePlotId: 'plot' }),

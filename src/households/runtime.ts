@@ -8,7 +8,10 @@ import type {
   CandidatePlotUpdate,
   ReviewedImport,
 } from '../source-listings/model'
-import { recordedLocationClues } from '../location-resolution'
+import {
+  isLocationResolutionError,
+  recordedLocationClues,
+} from '../location-resolution'
 import type { LocationResolver } from '../location-resolution'
 import { automaticCheckRevision, runAutomaticChecks } from '../automatic-checks'
 import type { AutomaticCheckServices } from '../automatic-checks'
@@ -44,6 +47,10 @@ export type HouseholdRuntime = {
     candidatePlotId: string,
   ) => Promise<void>
   isCandidatePlotLocationRunning: (candidatePlotId: string) => boolean
+  /** Human-readable trace of the latest location resolution attempt in this session. */
+  getCandidatePlotLocationDiagnostic: (
+    candidatePlotId: string,
+  ) => string | undefined
   runCandidatePlotAutomaticChecks: (
     sourceListingId: string,
     candidatePlotId: string,
@@ -88,6 +95,7 @@ export const createHouseholdRuntime = (dependencies: {
   let localHouseholds: LocalHousehold[] = []
   const listeners = new Set<() => void>()
   const runningLocationResolutions = new Set<string>()
+  const locationDiagnostics = new Map<string, string>()
   const runningAutomaticChecks = new Set<string>()
   const queuedLocationResolutions = new Map<string, string>()
   const queuedAutomaticChecks = new Map<string, string>()
@@ -328,9 +336,22 @@ export const createHouseholdRuntime = (dependencies: {
       clues: expectedClues,
     })
     runningLocationResolutions.add(candidatePlotId)
+    locationDiagnostics.delete(candidatePlotId)
     for (const listener of listeners) listener()
     try {
-      const resolution = await dependencies.locationResolver.resolve(plot)
+      const resolution = await dependencies.locationResolver
+        .resolve(plot)
+        .catch((error: unknown) => {
+          if (!isLocationResolutionError(error)) {
+            locationDiagnostics.set(
+              candidatePlotId,
+              `Unexpected failure: ${error instanceof Error ? error.message : String(error)}`,
+            )
+            throw error
+          }
+          locationDiagnostics.set(candidatePlotId, error.diagnostic)
+          return error.data
+        })
       const updatedAt = mutationTime()
       const applied = await serializeWrite(() =>
         dependencies.sourceListings.applyCandidatePlotResolution(
@@ -705,6 +726,8 @@ export const createHouseholdRuntime = (dependencies: {
     resolveCandidatePlotLocation,
     isCandidatePlotLocationRunning: (candidatePlotId) =>
       runningLocationResolutions.has(candidatePlotId),
+    getCandidatePlotLocationDiagnostic: (candidatePlotId) =>
+      locationDiagnostics.get(candidatePlotId),
     runCandidatePlotAutomaticChecks,
     isCandidatePlotAutomaticChecksRunning: (candidatePlotId) =>
       runningAutomaticChecks.has(candidatePlotId),
@@ -754,6 +777,7 @@ export const createHouseholdRuntime = (dependencies: {
       unsubscribeHouseholds()
       listeners.clear()
       runningLocationResolutions.clear()
+      locationDiagnostics.clear()
       runningAutomaticChecks.clear()
       queuedLocationResolutions.clear()
       queuedAutomaticChecks.clear()

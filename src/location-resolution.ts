@@ -19,10 +19,51 @@ export type AddressResult = {
 }
 
 export type LocationResolver = {
+  /**
+   * Resolves the Recorded Location Clue. Rejects with
+   * `LocationResolutionError` when a service failed; the error carries the
+   * partial data that is still safe to store plus a human-readable diagnostic.
+   */
   resolve: (plot: CandidatePlotRecord) => Promise<ResolvedLocationData>
 }
 
+export class LocationResolutionError extends Error {
+  readonly data: ResolvedLocationData
+  readonly diagnostic: string
+
+  constructor(
+    data: ResolvedLocationData,
+    steps: readonly string[],
+    cause: unknown,
+  ) {
+    const reason = describeError(cause)
+    super(reason)
+    this.name = 'LocationResolutionError'
+    this.data = data
+    this.diagnostic = [...steps, `Failed: ${reason}`].join('\n')
+  }
+}
+
+export const isLocationResolutionError = (
+  error: unknown,
+): error is LocationResolutionError => error instanceof LocationResolutionError
+
+const describeError = (error: unknown): string => {
+  if (error instanceof Error) {
+    const name = error.name && error.name !== 'Error' ? `${error.name}: ` : ''
+    const cause =
+      error.cause !== undefined ? ` (cause: ${describeError(error.cause)})` : ''
+    return `${name}${error.message || 'no message'}${cause}`
+  }
+  return String(error)
+}
+
 export type LocationResolutionState = 'idle' | 'running'
+
+export const describeLks94 = (latitude: number, longitude: number) => {
+  const { x, y } = toLks94(latitude, longitude)
+  return `LKS94 x=${x.toFixed(1)} y=${y.toFixed(1)}`
+}
 
 const cluesOf = (plot: CandidatePlotRecord): RecordedLocationClues => ({
   parcelNumberClue: plot.parcelNumberClue,
@@ -118,8 +159,11 @@ export const createLocationResolver = (dependencies: {
   ) => Promise<string | null>
 }): LocationResolver => ({
   async resolve(plot) {
+    const steps: string[] = []
+    let partial: ResolvedLocationData = emptyResult('unavailable')
     try {
       if (plot.parcelNumberClue?.trim()) {
+        steps.push(`Looking up unique parcel number ${plot.parcelNumberClue}`)
         const parcel = (
           await dependencies.parcels.findByNumber(plot.parcelNumberClue)
         ).at(0)
@@ -136,6 +180,7 @@ export const createLocationResolver = (dependencies: {
             dependencies.parcels.datasetVersion,
           )
         }
+        steps.push('Unique parcel number not found in the parcel dataset')
       }
 
       if (plot.latitudeClue !== null && plot.longitudeClue !== null) {
@@ -144,25 +189,44 @@ export const createLocationResolver = (dependencies: {
           longitude: plot.longitudeClue,
         }
         const lks94 = toLks94(coordinates.latitude, coordinates.longitude)
+        steps.push(
+          `Coordinates ${coordinates.latitude}, ${coordinates.longitude} → ${describeLks94(coordinates.latitude, coordinates.longitude)}`,
+        )
+        partial = {
+          ...emptyResult('unavailable'),
+          resolvedLatitude: coordinates.latitude,
+          resolvedLongitude: coordinates.longitude,
+          resolvedPrecision: plot.coordinateCluePrecision ?? 'exact',
+          effectiveLocationSource: 'coordinates',
+          parcelDatasetVersion: dependencies.parcels.datasetVersion,
+        }
         console.info('[location] resolving Candidate Plot coordinates', {
           candidatePlotId: plot.id,
           coordinates,
           lks94,
         })
-        let parcel: RegisteredParcel | null = null
-        let parcelLookupUnavailable = false
+        const address = await dependencies
+          .reverseAddress(coordinates.latitude, coordinates.longitude)
+          .catch(() => null)
+        partial = { ...partial, resolvedAddress: address }
+        steps.push(
+          address
+            ? `Reverse address: ${address}`
+            : 'Reverse address lookup returned nothing',
+        )
+        let parcel: RegisteredParcel | null
         try {
           parcel = await dependencies.parcels.findAtLks94(lks94.x, lks94.y)
         } catch (error) {
-          parcelLookupUnavailable = true
           console.error('[location] parcel coordinate lookup failed', {
             candidatePlotId: plot.id,
             error,
           })
+          steps.push(
+            `Parcel dataset ${dependencies.parcels.datasetVersion ?? '(manifest not loaded)'} lookup at those coordinates failed`,
+          )
+          throw new LocationResolutionError(partial, steps, error)
         }
-        const address = await dependencies
-          .reverseAddress(coordinates.latitude, coordinates.longitude)
-          .catch(() => null)
         if (parcel) {
           console.info('[location] Candidate Plot parcel resolved', {
             candidatePlotId: plot.id,
@@ -180,25 +244,30 @@ export const createLocationResolver = (dependencies: {
         }
         console.info('[location] Candidate Plot parcel not resolved', {
           candidatePlotId: plot.id,
-          parcelLookupUnavailable,
         })
         return {
-          ...emptyResult('no-result'),
-          resolvedLatitude: coordinates.latitude,
-          resolvedLongitude: coordinates.longitude,
-          resolvedAddress: address,
-          resolvedPrecision: plot.coordinateCluePrecision ?? 'exact',
-          effectiveLocationSource: 'coordinates',
-          locationResolutionState: parcelLookupUnavailable
-            ? 'unavailable'
-            : 'resolved',
+          ...partial,
+          locationResolutionState: 'resolved',
           parcelDatasetVersion: dependencies.parcels.datasetVersion,
         }
       }
 
       if (plot.addressClue?.trim()) {
+        steps.push(`Searching Regia for address "${plot.addressClue}"`)
         const address = await dependencies.searchAddress(plot.addressClue)
         if (!address) return emptyResult('no-result')
+        steps.push(
+          `Regia found ${address.address} at ${address.latitude}, ${address.longitude}`,
+        )
+        partial = {
+          ...emptyResult('unavailable'),
+          resolvedLatitude: address.latitude,
+          resolvedLongitude: address.longitude,
+          resolvedAddress: address.address,
+          resolvedPrecision: 'exact',
+          effectiveLocationSource: 'address',
+          parcelDatasetVersion: dependencies.parcels.datasetVersion,
+        }
         const lks94 = toLks94(address.latitude, address.longitude)
         const parcel = await dependencies.parcels.findAtLks94(lks94.x, lks94.y)
         if (parcel)
@@ -210,23 +279,23 @@ export const createLocationResolver = (dependencies: {
             dependencies.parcels.datasetVersion,
           )
         return {
-          ...emptyResult('no-result'),
-          resolvedLatitude: address.latitude,
-          resolvedLongitude: address.longitude,
-          resolvedAddress: address.address,
-          resolvedPrecision: 'exact',
-          effectiveLocationSource: 'address',
+          ...partial,
           locationResolutionState: 'resolved',
           parcelDatasetVersion: dependencies.parcels.datasetVersion,
         }
       }
       return emptyResult('no-result')
     } catch (error) {
+      if (isLocationResolutionError(error)) throw error
       console.error('[location] Candidate Plot location resolution failed', {
         candidatePlotId: plot.id,
         error,
       })
-      return emptyResult('unavailable')
+      throw new LocationResolutionError(
+        { ...partial, locationResolutionState: 'unavailable' },
+        steps,
+        error,
+      )
     }
   },
 })

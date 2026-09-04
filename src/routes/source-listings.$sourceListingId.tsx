@@ -14,6 +14,7 @@ import {
   automaticCheckRevision,
 } from '../automatic-checks'
 import type { AutomaticCheckKey } from '../automatic-checks'
+import { describeLks94 } from '../location-resolution'
 
 export const preloadSourceListing = () => undefined
 
@@ -330,6 +331,21 @@ function CandidatePlotEditor(props: {
       (props.plot.resolvedParcelNumber === null ||
         props.plot.resolvedCadastralNumber === null ||
         props.plot.resolvedBoundary === null))
+  const locationDiagnostic = () =>
+    household.getCandidatePlotLocationDiagnostic(props.plot.id)
+  const clueLks94 = () => {
+    if (props.plot.latitudeClue === null || props.plot.longitudeClue === null)
+      return null
+    try {
+      return describeLks94(props.plot.latitudeClue, props.plot.longitudeClue)
+    } catch (caught) {
+      return `LKS94 projection failed: ${errorMessage(caught)}`
+    }
+  }
+  const hasPartialLocation = () =>
+    props.plot.resolvedLatitude !== null ||
+    props.plot.resolvedAddress !== null ||
+    props.plot.resolvedParcelNumber !== null
   const resolveLocation = () => {
     console.info('[location] Retry location requested', {
       candidatePlotId: props.plot.id,
@@ -435,28 +451,33 @@ function CandidatePlotEditor(props: {
             </button>
           </Show>
         </div>
+        <Show when={props.plot.locationResolutionState !== 'resolved'}>
+          <p class="mt-2 text-sm" role="status">
+            {props.plot.locationResolutionState === 'unavailable'
+              ? 'Location service unavailable. Retry when online.'
+              : props.plot.locationResolutionState === 'no-result'
+                ? 'No location found. Check the Recorded Location Clue and retry.'
+                : 'Waiting to resolve the Recorded Location Clue.'}
+          </p>
+        </Show>
         <Show
-          when={props.plot.locationResolutionState === 'resolved'}
-          fallback={
-            <p class="mt-2 text-sm">
-              {props.plot.locationResolutionState === 'unavailable'
-                ? 'Location service unavailable. Retry when online.'
-                : props.plot.locationResolutionState === 'no-result'
-                  ? 'No location found. Check the Recorded Location Clue and retry.'
-                  : 'Waiting to resolve the Recorded Location Clue.'}
-            </p>
+          when={
+            props.plot.locationResolutionState === 'resolved' ||
+            hasPartialLocation()
           }
         >
           <dl class="mt-3 grid gap-2 text-sm sm:grid-cols-2">
             <div>
               <dt class="font-bold">Coordinates</dt>
               <dd>
-                {props.plot.resolvedLatitude}, {props.plot.resolvedLongitude}
+                {props.plot.resolvedLatitude !== null
+                  ? `${props.plot.resolvedLatitude}, ${props.plot.resolvedLongitude}`
+                  : 'Unavailable'}
               </dd>
             </div>
             <div>
               <dt class="font-bold">Precision</dt>
-              <dd>{props.plot.resolvedPrecision}</dd>
+              <dd>{props.plot.resolvedPrecision ?? 'Unavailable'}</dd>
             </div>
             <div>
               <dt class="font-bold">Address</dt>
@@ -475,6 +496,26 @@ function CandidatePlotEditor(props: {
               <dd>{props.plot.parcelDatasetVersion ?? 'Not loaded'}</dd>
             </div>
           </dl>
+        </Show>
+        <Show when={clueLks94()}>
+          {(lks94) => (
+            <p class="mt-3 font-mono text-xs text-[#526058]">
+              Clue {props.plot.latitudeClue}, {props.plot.longitudeClue} →{' '}
+              {lks94()}
+            </p>
+          )}
+        </Show>
+        <Show when={locationDiagnostic()}>
+          {(diagnostic) => (
+            <details class="mt-3 text-xs" open>
+              <summary class="cursor-pointer font-bold text-[#a13d22]">
+                Last attempt details
+              </summary>
+              <pre class="mt-2 overflow-x-auto whitespace-pre-wrap break-words border border-[#a13d22]/30 bg-white p-3 font-mono text-[#6f3525]">
+                {diagnostic()}
+              </pre>
+            </details>
+          )}
         </Show>
       </section>
       <section class="mt-4 border border-[#24483a]/20 bg-[#e4efe7] p-4">

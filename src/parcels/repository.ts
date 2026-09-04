@@ -54,11 +54,30 @@ function containsPoint(
   )
 }
 
-async function decompressJson<T>(bytes: Uint8Array): Promise<T> {
+async function decompressJson<T>(bytes: Uint8Array, label: string): Promise<T> {
+  if (typeof DecompressionStream === 'undefined')
+    throw new Error(
+      `${label}: this browser has no DecompressionStream support for gzip parcel shards`,
+    )
   const body = new Response(bytes as BodyInit).body
-  if (!body) throw new Error('compressed parcel response has no body')
-  const stream = body.pipeThrough(new DecompressionStream('gzip'))
-  return JSON.parse(await new Response(stream).text()) as T
+  if (!body) throw new Error(`${label}: compressed parcel response has no body`)
+  let text: string
+  try {
+    const stream = body.pipeThrough(new DecompressionStream('gzip'))
+    text = await new Response(stream).text()
+  } catch (error) {
+    throw new Error(
+      `${label}: gzip decompression failed (${bytes.byteLength} bytes)`,
+      { cause: error },
+    )
+  }
+  try {
+    return JSON.parse(text) as T
+  } catch (error) {
+    throw new Error(`${label}: invalid JSON after decompression`, {
+      cause: error,
+    })
+  }
 }
 
 export class ParcelRepository {
@@ -85,23 +104,29 @@ export class ParcelRepository {
     console.info('[location] fetching parcel manifest', {
       url: new URL('manifest.json', this.#absoluteBase()).href,
     })
-    const loading = this.#fetch(
-      new URL('manifest.json', this.#absoluteBase()),
-      {
-        cache: 'no-store',
-      },
-    ).then(async (response) => {
-      if (!response.ok)
-        throw new Error(`parcel manifest: HTTP ${response.status}`)
-      const manifest = (await response.json()) as ParcelManifest
-      if (manifest.schemaVersion !== 1)
-        throw new Error('unsupported parcel schema')
-      this.datasetVersion = manifest.datasetVersion
-      console.info('[location] parcel manifest loaded', {
-        datasetVersion: manifest.datasetVersion,
-      })
-      return manifest
+    const manifestUrl = new URL('manifest.json', this.#absoluteBase())
+    const loading = this.#fetch(manifestUrl, {
+      cache: 'no-store',
     })
+      .catch((error: unknown) => {
+        throw new Error(`parcel manifest ${manifestUrl.href}: network error`, {
+          cause: error,
+        })
+      })
+      .then(async (response) => {
+        if (!response.ok)
+          throw new Error(
+            `parcel manifest ${manifestUrl.href}: HTTP ${response.status}`,
+          )
+        const manifest = (await response.json()) as ParcelManifest
+        if (manifest.schemaVersion !== 1)
+          throw new Error('unsupported parcel schema')
+        this.datasetVersion = manifest.datasetVersion
+        console.info('[location] parcel manifest loaded', {
+          datasetVersion: manifest.datasetVersion,
+        })
+        return manifest
+      })
     this.#manifest = loading
     loading.catch(() => {
       if (this.#manifest === loading) this.#manifest = undefined
@@ -134,6 +159,7 @@ export class ParcelRepository {
         try {
           const parsed = await decompressJson<T>(
             new Uint8Array(await cached.arrayBuffer()),
+            `cached ${assetPath}`,
           )
           console.info('[location] parcel shard persistent cache hit', {
             assetPath,
@@ -151,10 +177,13 @@ export class ParcelRepository {
         assetPath,
         url: request.url,
       })
-      const response = await this.#fetch(request)
-      if (!response.ok) throw new Error(`${assetPath}: HTTP ${response.status}`)
+      const response = await this.#fetch(request).catch((error: unknown) => {
+        throw new Error(`${request.url}: network error`, { cause: error })
+      })
+      if (!response.ok)
+        throw new Error(`${request.url}: HTTP ${response.status}`)
       const bytes = new Uint8Array(await response.clone().arrayBuffer())
-      const parsed = await decompressJson<T>(bytes)
+      const parsed = await decompressJson<T>(bytes, assetPath)
       await cache?.put(request, response.clone()).catch(() => undefined)
       if (this.#cacheStorage) {
         const current = `registered-parcels-${manifest.datasetVersion}`
