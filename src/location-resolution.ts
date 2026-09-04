@@ -144,17 +144,31 @@ export const createLocationResolver = (dependencies: {
           longitude: plot.longitudeClue,
         }
         const lks94 = toLks94(coordinates.latitude, coordinates.longitude)
+        console.info('[location] resolving Candidate Plot coordinates', {
+          candidatePlotId: plot.id,
+          coordinates,
+          lks94,
+        })
         let parcel: RegisteredParcel | null = null
         let parcelLookupUnavailable = false
         try {
           parcel = await dependencies.parcels.findAtLks94(lks94.x, lks94.y)
-        } catch {
+        } catch (error) {
           parcelLookupUnavailable = true
+          console.error('[location] parcel coordinate lookup failed', {
+            candidatePlotId: plot.id,
+            error,
+          })
         }
         const address = await dependencies
           .reverseAddress(coordinates.latitude, coordinates.longitude)
           .catch(() => null)
-        if (parcel)
+        if (parcel) {
+          console.info('[location] Candidate Plot parcel resolved', {
+            candidatePlotId: plot.id,
+            uniqueNumber: parcel.uniqueNumber,
+            cadastralNumber: parcel.cadastralNumber,
+          })
           return parcelResult(
             parcel,
             'coordinates',
@@ -163,6 +177,11 @@ export const createLocationResolver = (dependencies: {
             dependencies.parcels.datasetVersion,
             plot.coordinateCluePrecision ?? 'exact',
           )
+        }
+        console.info('[location] Candidate Plot parcel not resolved', {
+          candidatePlotId: plot.id,
+          parcelLookupUnavailable,
+        })
         return {
           ...emptyResult('no-result'),
           resolvedLatitude: coordinates.latitude,
@@ -202,7 +221,11 @@ export const createLocationResolver = (dependencies: {
         }
       }
       return emptyResult('no-result')
-    } catch {
+    } catch (error) {
+      console.error('[location] Candidate Plot location resolution failed', {
+        candidatePlotId: plot.id,
+        error,
+      })
       return emptyResult('unavailable')
     }
   },

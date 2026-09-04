@@ -322,12 +322,17 @@ export const createHouseholdRuntime = (dependencies: {
         expectedClues.longitudeClue !== null) ||
       Boolean(expectedClues.addressClue?.trim())
     if (!hasClue) return
+    console.info('[location] Candidate Plot retry started', {
+      sourceListingId,
+      candidatePlotId,
+      clues: expectedClues,
+    })
     runningLocationResolutions.add(candidatePlotId)
     for (const listener of listeners) listener()
     try {
       const resolution = await dependencies.locationResolver.resolve(plot)
       const updatedAt = mutationTime()
-      await serializeWrite(() =>
+      const applied = await serializeWrite(() =>
         dependencies.sourceListings.applyCandidatePlotResolution(
           sourceListingId,
           candidatePlotId,
@@ -336,6 +341,13 @@ export const createHouseholdRuntime = (dependencies: {
           updatedAt,
         ),
       )
+      console.info('[location] Candidate Plot resolution completed', {
+        sourceListingId,
+        candidatePlotId,
+        state: resolution.locationResolutionState,
+        resolvedParcelNumber: resolution.resolvedParcelNumber,
+        applied,
+      })
     } finally {
       runningLocationResolutions.delete(candidatePlotId)
       for (const listener of listeners) listener()

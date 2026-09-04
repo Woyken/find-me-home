@@ -97,6 +97,7 @@ describe('Candidate Plot location resolution', () => {
   })
 
   it('keeps known coordinates retryable when parcel lookup is unavailable', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const resolver = createLocationResolver({
       parcels: {
         findByNumber: async () => [],
@@ -129,6 +130,11 @@ describe('Candidate Plot location resolution', () => {
       locationResolutionState: 'unavailable',
       parcelDatasetVersion: null,
     })
+    expect(error).toHaveBeenCalledWith(
+      '[location] parcel coordinate lookup failed',
+      expect.objectContaining({ candidatePlotId: 'plot' }),
+    )
+    error.mockRestore()
   })
 
   it('returns no result when Regia finds no address', async () => {

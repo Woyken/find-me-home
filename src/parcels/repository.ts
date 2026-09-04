@@ -78,7 +78,13 @@ export class ParcelRepository {
   }
 
   async #getManifest(): Promise<ParcelManifest> {
-    if (this.#manifest) return this.#manifest
+    if (this.#manifest) {
+      console.info('[location] parcel manifest memory hit')
+      return this.#manifest
+    }
+    console.info('[location] fetching parcel manifest', {
+      url: new URL('manifest.json', this.#absoluteBase()).href,
+    })
     const loading = this.#fetch(
       new URL('manifest.json', this.#absoluteBase()),
       {
@@ -91,6 +97,9 @@ export class ParcelRepository {
       if (manifest.schemaVersion !== 1)
         throw new Error('unsupported parcel schema')
       this.datasetVersion = manifest.datasetVersion
+      console.info('[location] parcel manifest loaded', {
+        datasetVersion: manifest.datasetVersion,
+      })
       return manifest
     })
     this.#manifest = loading
@@ -111,7 +120,10 @@ export class ParcelRepository {
     const manifest = await this.#getManifest()
     const key = `${manifest.datasetVersion}/${assetPath}`
     const existing = this.#loaded.get(key)
-    if (existing) return existing as Promise<T>
+    if (existing) {
+      console.info('[location] parcel shard memory hit', { assetPath })
+      return existing as Promise<T>
+    }
     const loading = (async () => {
       const request = new Request(new URL(assetPath, this.#absoluteBase()))
       const cache = await this.#cacheStorage
@@ -120,13 +132,25 @@ export class ParcelRepository {
       const cached = await cache?.match(request).catch(() => undefined)
       if (cached) {
         try {
-          return await decompressJson<T>(
+          const parsed = await decompressJson<T>(
             new Uint8Array(await cached.arrayBuffer()),
           )
-        } catch {
+          console.info('[location] parcel shard persistent cache hit', {
+            assetPath,
+          })
+          return parsed
+        } catch (error) {
+          console.error('[location] cached parcel shard is invalid', {
+            assetPath,
+            error,
+          })
           await cache?.delete(request).catch(() => undefined)
         }
       }
+      console.info('[location] fetching parcel shard', {
+        assetPath,
+        url: request.url,
+      })
       const response = await this.#fetch(request)
       if (!response.ok) throw new Error(`${assetPath}: HTTP ${response.status}`)
       const bytes = new Uint8Array(await response.clone().arrayBuffer())
@@ -208,8 +232,12 @@ export class ParcelRepository {
   async findAtLks94(x: number, y: number): Promise<RegisteredParcel | null> {
     const manifest = await this.#getManifest()
     const cell = `${Math.floor(x / manifest.cellSizeMetres)}_${Math.floor(y / manifest.cellSizeMetres)}`
+    console.info('[location] looking up parcel at coordinates', { x, y, cell })
     const asset = manifest.cells[cell] as ParcelAsset | undefined
-    if (!asset) return null
+    if (!asset) {
+      console.info('[location] parcel dataset has no coordinate cell', { cell })
+      return null
+    }
     const shard = await this.#loadCompressed<SpatialShard>(asset.path)
     let best: RegisteredParcel | null = null
     let bestArea = Infinity
@@ -229,6 +257,12 @@ export class ParcelRepository {
         bestArea = area
       }
     }
+    console.info('[location] parcel coordinate lookup completed', {
+      cell,
+      found: best !== null,
+      uniqueNumber: best?.uniqueNumber ?? null,
+      cadastralNumber: best?.cadastralNumber ?? null,
+    })
     return best
   }
 }

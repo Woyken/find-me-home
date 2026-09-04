@@ -330,13 +330,19 @@ function CandidatePlotEditor(props: {
       (props.plot.resolvedParcelNumber === null ||
         props.plot.resolvedCadastralNumber === null ||
         props.plot.resolvedBoundary === null))
-  const resolveLocation = () =>
-    needsLocationRetry()
+  const resolveLocation = () => {
+    console.info('[location] Retry location requested', {
+      candidatePlotId: props.plot.id,
+      state: props.plot.locationResolutionState,
+      needsLocationRetry: needsLocationRetry(),
+    })
+    return needsLocationRetry()
       ? household.resolveCandidatePlotLocation(
           props.plot.sourceListingId,
           props.plot.id,
         )
       : undefined
+  }
   const runAutomaticChecks = () =>
     household.runCandidatePlotAutomaticChecks(
       props.plot.sourceListingId,
