@@ -117,16 +117,21 @@ export class ParcelRepository {
       const cache = await this.#cacheStorage?.open(
         `registered-parcels-${manifest.datasetVersion}`,
       )
-      let response = await cache?.match(request)
-      if (!response) {
-        response = await this.#fetch(request)
-        if (!response.ok)
-          throw new Error(`${assetPath}: HTTP ${response.status}`)
+      const cached = await cache?.match(request)
+      if (cached) {
+        try {
+          return await decompressJson<T>(
+            new Uint8Array(await cached.arrayBuffer()),
+          )
+        } catch {
+          await cache?.delete(request)
+        }
       }
+      const response = await this.#fetch(request)
+      if (!response.ok) throw new Error(`${assetPath}: HTTP ${response.status}`)
       const bytes = new Uint8Array(await response.clone().arrayBuffer())
       const parsed = await decompressJson<T>(bytes)
-      if (!(await cache?.match(request)))
-        await cache?.put(request, response.clone())
+      await cache?.put(request, response.clone())
       if (this.#cacheStorage) {
         const current = `registered-parcels-${manifest.datasetVersion}`
         await Promise.all(
