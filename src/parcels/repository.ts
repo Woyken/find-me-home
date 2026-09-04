@@ -90,7 +90,10 @@ export class ParcelRepository {
 
   constructor(baseUrl: string, options: RepositoryOptions = {}) {
     this.#baseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
-    this.#fetch = options.fetch ?? fetch
+    // Bind so `this.#fetch(...)` is not invoked with the repository as `this`;
+    // Firefox throws "'fetch' called on an object that does not implement
+    // interface Window" otherwise.
+    this.#fetch = options.fetch ?? ((input, init) => fetch(input, init))
     this.#cacheStorage =
       options.cacheStorage ??
       (typeof globalThis.caches === 'undefined' ? undefined : globalThis.caches)
