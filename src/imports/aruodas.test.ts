@@ -26,18 +26,31 @@ const payload = {
 }
 
 describe('Aruodas import fragment', () => {
-  it('generates a same-tab bookmarklet for the deployed app base URL', () => {
+  it('generates a short loader bookmarklet for the deployed app base URL', () => {
     const bookmarklet = createAruodasBookmarklet(
-      'https://woyken.github.io/find-me-home/',
+      'https://woyken.github.io/find-me-home/?x=1#y',
     )
 
+    expect(bookmarklet.startsWith('javascript:')).toBe(true)
     expect(bookmarklet).toContain(
-      'const appUrl = "https://woyken.github.io/find-me-home/"',
+      'var a="https://woyken.github.io/find-me-home/"',
     )
-    expect(bookmarklet).toContain('#import=${encoded}')
-    expect(bookmarklet).toContain('window.location.href')
-    expect(bookmarklet).not.toContain('form.submit')
-    expect(bookmarklet).not.toContain('__FMH_APP_URL__')
+    expect(bookmarklet).toContain('__fmhAppUrl=a')
+    expect(bookmarklet).toContain('aruodas-bookmarklet.js?t=')
+    expect(bookmarklet).toContain('document.createElement("script")')
+    // Short enough that browsers do not truncate it when pasted as a bookmark.
+    expect(bookmarklet.length).toBeLessThan(600)
+    expect(bookmarklet).not.toMatch(/[\r\n]/)
+    expect(
+      () => new Function(bookmarklet.slice('javascript:'.length)),
+    ).not.toThrow()
+  })
+
+  it('serves a scraper that navigates the same tab with the import fragment', () => {
+    expect(bookmarkletSource).toContain('#import=${encoded}')
+    expect(bookmarkletSource).toContain('window.location.href')
+    expect(bookmarkletSource).not.toContain('form.submit')
+    expect(bookmarkletSource).toContain('__fmhAppUrl')
   })
 
   it('uses the same bookmarklet for adverts and the favorites page', () => {
@@ -157,10 +170,15 @@ describe('Aruodas import fragment', () => {
     new Function(
       'window',
       'document',
-      bookmarkletSource
-        .replace('__FMH_APP_URL__', 'https://example.test/')
-        .replace(/[\r\n\t]/g, ''),
-    )({ location, alert: () => undefined }, broken)
+      bookmarkletSource.replace(/[\r\n\t]/g, ''),
+    )(
+      {
+        location,
+        alert: () => undefined,
+        __fmhAppUrl: 'https://example.test/',
+      },
+      broken,
+    )
 
     expect(heartbeatSeen).toBe(true)
     expect(location.href).toBe('https://m.aruodas.lt/isiminti-skelbimai/')
@@ -264,14 +282,15 @@ const runBookmarklet = (
   const bookmarklet = new Function(
     'window',
     'document',
-    // Browsers strip newlines from a javascript: URL when it is saved as a
-    // bookmark, so run the source the way it will actually be executed.
-    bookmarkletSource
-      .replace('__FMH_APP_URL__', 'https://example.test/')
-      .replace(/[\r\n\t]/g, ''),
+    // The scraper is served as a classic script; keep it robust to newline
+    // stripping in case it is ever inlined into a javascript: URL again.
+    bookmarkletSource.replace(/[\r\n\t]/g, ''),
   )
 
-  bookmarklet({ location, alert: () => undefined }, document)
+  bookmarklet(
+    { location, alert: () => undefined, __fmhAppUrl: 'https://example.test/' },
+    document,
+  )
 
   const fragment = new URL(location.href).hash.slice('#import='.length)
   return decodeImportTransportFragment(fragment)

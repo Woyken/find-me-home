@@ -1,4 +1,9 @@
-const appUrl = '__FMH_APP_URL__'
+/* This file is served from Pages as `aruodas-bookmarklet.js` and loaded by the
+   tiny bookmarklet in src/imports/bookmarklet.ts, which sets `__fmhAppUrl`
+   before loading it. The script tag URL is the fallback. */
+const appUrl: string =
+  (window as { __fmhAppUrl?: string }).__fmhAppUrl ??
+  new URL('.', (document.currentScript as HTMLScriptElement).src).href
 
 const clean = (value: string | null | undefined) =>
   value?.replace(/\s+/g, ' ').trim() || undefined

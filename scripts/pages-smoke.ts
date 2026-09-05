@@ -23,6 +23,7 @@ const [
   manifestResponse,
   serviceWorker,
   parcels,
+  bookmarkletScript,
 ] = await Promise.all([
   expectOk(new URL('.', pagesUrl)),
   fetch(new URL('visit-plan', pagesUrl)),
@@ -33,6 +34,7 @@ const [
   expectOk(new URL('manifest.webmanifest', pagesUrl)),
   expectOk(new URL('service-worker.js', pagesUrl)),
   expectOk(new URL('parcels/manifest.json', pagesUrl)),
+  expectOk(new URL('aruodas-bookmarklet.js', pagesUrl)),
 ])
 
 const [
@@ -43,6 +45,7 @@ const [
   manifest,
   serviceWorkerText,
   parcelManifest,
+  bookmarkletScriptText,
 ] = await Promise.all([
   home.text(),
   directRoute.text(),
@@ -54,7 +57,17 @@ const [
     datasetVersion?: string
     cells?: Record<string, { path: string }>
   }>,
+  bookmarkletScript.text(),
 ])
+
+if (
+  bookmarkletScript.headers.get('access-control-allow-origin') !== '*' ||
+  !bookmarkletScriptText.includes('#import=')
+) {
+  throw new Error(
+    'Pages does not serve the Aruodas bookmarklet script for cross-origin loading',
+  )
+}
 
 if (!homeHtml.includes('<title>Find Me Home</title>')) {
   throw new Error('Pages home does not contain the Find Me Home shell')
