@@ -83,9 +83,14 @@ url.search = ''
 url.hash = ''
 
 if (url.pathname.startsWith('/isiminti-skelbimai')) {
-  // www.aruodas.lt and m.aruodas.lt render the favourites page with
-  // different markup; every selector below lists the desktop one first and
-  // the mobile one second.
+  /*
+   * www.aruodas.lt and m.aruodas.lt render the favourites page with
+   * different markup; every selector below lists the desktop one first and
+   * the mobile one second.
+   *
+   * Only block comments in this file: browsers strip newlines from a
+   * javascript: URL, so a line comment would swallow the rest of the script.
+   */
   const firstText = (card: HTMLElement, ...selectors: Array<string>) => {
     for (const selector of selectors) {
       const text = clean(card.querySelector(selector)?.textContent)

@@ -226,7 +226,11 @@ const runBookmarklet = (
   const bookmarklet = new Function(
     'window',
     'document',
-    bookmarkletSource.replace('__FMH_APP_URL__', 'https://example.test/'),
+    // Browsers strip newlines from a javascript: URL when it is saved as a
+    // bookmark, so run the source the way it will actually be executed.
+    bookmarkletSource
+      .replace('__FMH_APP_URL__', 'https://example.test/')
+      .replace(/[\r\n\t]/g, ''),
   )
 
   bookmarklet({ location, alert: () => undefined }, document)
