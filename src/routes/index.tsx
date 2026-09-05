@@ -64,8 +64,15 @@ export const sortListings = (
 export default function Home() {
   const household = useHousehold()
   const [sort, setSort] = createSignal<SortKey>('new')
+  const [unvisitedOnly, setUnvisitedOnly] = createSignal(false)
+  const allListings = createMemo(() => household.listSourceListings())
   const listings = createMemo(() =>
-    sortListings(household.listSourceListings(), sort()),
+    sortListings(
+      unvisitedOnly()
+        ? allListings().filter((listing) => listing.visitedAt === null)
+        : allListings(),
+      sort(),
+    ),
   )
   const plannedCount = createMemo(
     () => household.getVisitPlan().sourceListingIds.length,
@@ -92,7 +99,7 @@ export default function Home() {
       </div>
 
       <Show
-        when={listings().length > 0}
+        when={allListings().length > 0}
         fallback={
           <section class="panel empty">
             <h2>No plots yet</h2>
@@ -107,7 +114,7 @@ export default function Home() {
         }
       >
         <div class="tools">
-          <div class="sort" role="group" aria-label="Sort plots">
+          <div class="sort" role="group" aria-label="Sort and filter plots">
             <For each={SORTS}>
               {([key, label]) => (
                 <button
@@ -119,6 +126,13 @@ export default function Home() {
                 </button>
               )}
             </For>
+            <button
+              type="button"
+              aria-pressed={unvisitedOnly() ? 'true' : 'false'}
+              onClick={() => setUnvisitedOnly((value) => !value)}
+            >
+              Not visited
+            </button>
           </div>
           <span class="small muted">
             {listings().length} {listings().length === 1 ? 'plot' : 'plots'} ·{' '}
@@ -126,11 +140,16 @@ export default function Home() {
           </span>
         </div>
 
-        <section class="list" aria-label="Saved plots">
-          <For each={listings()}>
-            {(listing) => <ListingRow listing={listing} />}
-          </For>
-        </section>
+        <Show
+          when={listings().length > 0}
+          fallback={<section class="panel empty">No unvisited plots</section>}
+        >
+          <section class="list" aria-label="Saved plots">
+            <For each={listings()}>
+              {(listing) => <ListingRow listing={listing} />}
+            </For>
+          </section>
+        </Show>
       </Show>
       <FannedStack />
     </main>
