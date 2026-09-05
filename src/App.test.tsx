@@ -274,9 +274,10 @@ describe('App Household boundary', () => {
         'listing-id',
         'plot-id',
         expect.objectContaining({
-          latitudeClue: 54.8,
-          longitudeClue: 25.2,
-          coordinateCluePrecision: 'exact',
+          parcelNumberClue: null,
+          latitudeClue: null,
+          longitudeClue: null,
+          coordinateCluePrecision: null,
           addressClue: 'Vilniaus r.',
         }),
       ),

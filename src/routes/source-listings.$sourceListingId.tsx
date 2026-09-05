@@ -498,6 +498,23 @@ function CandidatePlotEditor(props: {
     },
   )
 
+  // Only the clue for the selected "find it by" kind is saved, so the
+  // selection sticks after a reload and the resolver uses that clue.
+  const locationClues = () => {
+    const kind = clueKind()
+    const hasCoordinates = Boolean(latitude().trim() || longitude().trim())
+    return {
+      parcelNumberClue: kind === 'parcel' ? optionalText(parcel()) : null,
+      latitudeClue:
+        kind === 'coordinates' ? optionalNumber(latitude()) : null,
+      longitudeClue:
+        kind === 'coordinates' ? optionalNumber(longitude()) : null,
+      coordinateCluePrecision:
+        kind === 'coordinates' && hasCoordinates ? precision() : null,
+      addressClue: kind === 'address' ? optionalText(address()) : null,
+    }
+  }
+
   const save = async () => {
     setStatus({ text: 'Saving…', bad: false })
     try {
@@ -507,12 +524,7 @@ function CandidatePlotEditor(props: {
         areaAres: optionalNumber(area()),
         purposeText: optionalText(purpose()),
         notes: optionalText(notes()),
-        parcelNumberClue: optionalText(parcel()),
-        latitudeClue: optionalNumber(latitude()),
-        longitudeClue: optionalNumber(longitude()),
-        coordinateCluePrecision:
-          latitude().trim() || longitude().trim() ? precision() : null,
-        addressClue: optionalText(address()),
+        ...locationClues(),
         roadAccessRating: road(),
         areaFeelingRating: feeling(),
         viewRating: view(),
