@@ -10,6 +10,7 @@ import { useHousehold } from '../households/context'
 import { paths } from '../paths'
 import type {
   CandidatePlotRecord,
+  LocationClueKind,
   SourceListingRecord,
 } from '../source-listings/model'
 import {
@@ -358,6 +359,25 @@ export default function SourceListingPage(props: {
 
 type ClueKind = 'parcel' | 'coordinates' | 'address'
 
+const clueKindOf = (kind: LocationClueKind): ClueKind =>
+  kind === 'parcel_number' ? 'parcel' : kind
+
+const locationClueKindOf = (kind: ClueKind): LocationClueKind =>
+  kind === 'parcel' ? 'parcel_number' : kind
+
+/**
+ * The stored Primary Location Clue wins; otherwise mirror the resolver's
+ * default order so the selector shows what will actually be used.
+ */
+const initialClueKind = (plot: CandidatePlotRecord): ClueKind =>
+  plot.primaryLocationClue
+    ? clueKindOf(plot.primaryLocationClue)
+    : plot.parcelNumberClue
+      ? 'parcel'
+      : plot.latitudeClue !== null
+        ? 'coordinates'
+        : 'address'
+
 function CandidatePlotEditor(props: {
   plot: CandidatePlotRecord
   sourceListing: SourceListingRecord
@@ -379,11 +399,7 @@ function CandidatePlotEditor(props: {
   const [purpose, setPurpose] = createSignal(props.plot.purposeText ?? '')
   const [notes, setNotes] = createSignal(props.plot.notes ?? '')
   const [clueKind, setClueKind] = createSignal<ClueKind>(
-    props.plot.parcelNumberClue
-      ? 'parcel'
-      : props.plot.latitudeClue !== null
-        ? 'coordinates'
-        : 'address',
+    initialClueKind(props.plot),
   )
   const [parcel, setParcel] = createSignal(props.plot.parcelNumberClue ?? '')
   const [latitude, setLatitude] = createSignal(
@@ -498,23 +514,6 @@ function CandidatePlotEditor(props: {
     },
   )
 
-  // Only the clue for the selected "find it by" kind is saved, so the
-  // selection sticks after a reload and the resolver uses that clue.
-  const locationClues = () => {
-    const kind = clueKind()
-    const hasCoordinates = Boolean(latitude().trim() || longitude().trim())
-    return {
-      parcelNumberClue: kind === 'parcel' ? optionalText(parcel()) : null,
-      latitudeClue:
-        kind === 'coordinates' ? optionalNumber(latitude()) : null,
-      longitudeClue:
-        kind === 'coordinates' ? optionalNumber(longitude()) : null,
-      coordinateCluePrecision:
-        kind === 'coordinates' && hasCoordinates ? precision() : null,
-      addressClue: kind === 'address' ? optionalText(address()) : null,
-    }
-  }
-
   const save = async () => {
     setStatus({ text: 'Saving…', bad: false })
     try {
@@ -524,7 +523,13 @@ function CandidatePlotEditor(props: {
         areaAres: optionalNumber(area()),
         purposeText: optionalText(purpose()),
         notes: optionalText(notes()),
-        ...locationClues(),
+        parcelNumberClue: optionalText(parcel()),
+        latitudeClue: optionalNumber(latitude()),
+        longitudeClue: optionalNumber(longitude()),
+        coordinateCluePrecision:
+          latitude().trim() || longitude().trim() ? precision() : null,
+        addressClue: optionalText(address()),
+        primaryLocationClue: locationClueKindOf(clueKind()),
         roadAccessRating: road(),
         areaFeelingRating: feeling(),
         viewRating: view(),

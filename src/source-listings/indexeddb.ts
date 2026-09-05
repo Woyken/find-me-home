@@ -207,6 +207,7 @@ export const createIndexedDbSourceListingRepository = (
             ? 'primary'
             : null,
         name: record.name ?? null,
+        primaryLocationClue: record.primaryLocationClue ?? null,
         roadAccessRating: record.roadAccessRating ?? null,
         areaFeelingRating: record.areaFeelingRating ?? null,
         viewRating: record.viewRating ?? null,
@@ -499,6 +500,7 @@ export const createIndexedDbSourceListingRepository = (
             longitudeClue: review.longitudeClue,
             coordinateCluePrecision: review.coordinateCluePrecision,
             addressClue: review.addressClue,
+            primaryLocationClue: null,
             roadAccessRating: null,
             areaFeelingRating: null,
             viewRating: null,
@@ -611,6 +613,7 @@ export const createIndexedDbSourceListingRepository = (
         longitudeClue: null,
         coordinateCluePrecision: null,
         addressClue: null,
+        primaryLocationClue: null,
         roadAccessRating: null,
         areaFeelingRating: null,
         viewRating: null,
@@ -659,7 +662,8 @@ export const createIndexedDbSourceListingRepository = (
         existing.latitudeClue !== update.latitudeClue ||
         existing.longitudeClue !== update.longitudeClue ||
         existing.coordinateCluePrecision !== update.coordinateCluePrecision ||
-        existing.addressClue !== update.addressClue
+        existing.addressClue !== update.addressClue ||
+        existing.primaryLocationClue !== update.primaryLocationClue
       const candidatePlot: CandidatePlotRecord = {
         ...existing,
         ...structuredClone(update),
@@ -770,6 +774,7 @@ export const createIndexedDbSourceListingRepository = (
         longitudeClue: existing.longitudeClue,
         coordinateCluePrecision: existing.coordinateCluePrecision,
         addressClue: existing.addressClue,
+        primaryLocationClue: existing.primaryLocationClue,
       }
       if (JSON.stringify(currentClues) !== JSON.stringify(expectedClues))
         return false

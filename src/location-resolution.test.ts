@@ -25,6 +25,7 @@ const plot = (
   longitudeClue: null,
   coordinateCluePrecision: null,
   addressClue: null,
+  primaryLocationClue: null,
   roadAccessRating: null,
   areaFeelingRating: null,
   viewRating: null,
@@ -74,6 +75,71 @@ describe('Candidate Plot location resolution', () => {
     expect(result.resolvedBoundary?.coordinates[0]).toHaveLength(5)
     expect(findAtLks94).not.toHaveBeenCalled()
     expect(searchAddress).not.toHaveBeenCalled()
+  })
+
+  it('tries the Primary Location Clue first even when coordinates are recorded', async () => {
+    const findByNumber = vi.fn(async () => [])
+    const findAtLks94 = vi.fn(async () => null)
+    const searchAddress = vi.fn(async () => ({
+      latitude: 54.9,
+      longitude: 25.1,
+      address: 'Regia address',
+    }))
+    const reverseAddress = vi.fn(async () => 'Reverse address')
+    const resolver = createLocationResolver({
+      parcels: { findByNumber, findAtLks94, datasetVersion: 'fixture-2026' },
+      searchAddress,
+      reverseAddress,
+    })
+
+    const result = await resolver.resolve(
+      plot({
+        latitudeClue: 54.7,
+        longitudeClue: 25.3,
+        coordinateCluePrecision: 'exact',
+        addressClue: 'Upės g. 7',
+        primaryLocationClue: 'address',
+      }),
+    )
+
+    expect(result).toMatchObject({
+      effectiveLocationSource: 'address',
+      resolvedLatitude: 54.9,
+      resolvedLongitude: 25.1,
+      resolvedAddress: 'Regia address',
+    })
+    expect(reverseAddress).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the other clues when the Primary Location Clue finds nothing', async () => {
+    const searchAddress = vi.fn(async () => null)
+    const resolver = createLocationResolver({
+      parcels: {
+        findByNumber: async () => [],
+        findAtLks94: async () => null,
+        datasetVersion: null,
+      },
+      searchAddress,
+      reverseAddress: async () => 'Reverse address',
+    })
+
+    const result = await resolver.resolve(
+      plot({
+        latitudeClue: 54.7,
+        longitudeClue: 25.3,
+        coordinateCluePrecision: 'approx',
+        addressClue: 'Nowhere g. 1',
+        primaryLocationClue: 'address',
+      }),
+    )
+
+    expect(searchAddress).toHaveBeenCalledOnce()
+    expect(result).toMatchObject({
+      effectiveLocationSource: 'coordinates',
+      resolvedLatitude: 54.7,
+      resolvedLongitude: 25.3,
+      locationResolutionState: 'resolved',
+    })
   })
 
   it('marks Regia failure unavailable without calling another address service', async () => {

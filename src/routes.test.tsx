@@ -40,6 +40,7 @@ const listing = (
       longitudeClue: null,
       coordinateCluePrecision: null,
       addressClue: null,
+      primaryLocationClue: null,
       roadAccessRating: null,
       areaFeelingRating: null,
       viewRating: null,

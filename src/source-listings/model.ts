@@ -19,6 +19,12 @@ export type SourceListingRecord = {
   deletedAt?: number
 }
 
+/**
+ * Which Recorded Location Clue the resolver tries first. `null` means
+ * automatic: unique parcel number, then coordinates, then address.
+ */
+export type LocationClueKind = 'parcel_number' | 'coordinates' | 'address'
+
 export type CandidatePlotRecord = {
   id: string
   householdId: string
@@ -34,6 +40,7 @@ export type CandidatePlotRecord = {
   longitudeClue: number | null
   coordinateCluePrecision: 'exact' | 'approx' | null
   addressClue: string | null
+  primaryLocationClue: LocationClueKind | null
   roadAccessRating: number | null
   areaFeelingRating: number | null
   viewRating: number | null
@@ -60,6 +67,7 @@ export type RecordedLocationClues = Pick<
   | 'longitudeClue'
   | 'coordinateCluePrecision'
   | 'addressClue'
+  | 'primaryLocationClue'
 >
 
 export type ResolvedLocationData = Pick<
@@ -88,6 +96,7 @@ export type CandidatePlotUpdate = Pick<
   | 'longitudeClue'
   | 'coordinateCluePrecision'
   | 'addressClue'
+  | 'primaryLocationClue'
   | 'roadAccessRating'
   | 'areaFeelingRating'
   | 'viewRating'

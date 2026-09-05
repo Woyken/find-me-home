@@ -696,7 +696,8 @@ export const createHouseholdRuntime = (dependencies: {
           plotBefore.longitudeClue !== update.longitudeClue ||
           plotBefore.coordinateCluePrecision !==
             update.coordinateCluePrecision ||
-          plotBefore.addressClue !== update.addressClue)
+          plotBefore.addressClue !== update.addressClue ||
+          plotBefore.primaryLocationClue !== update.primaryLocationClue)
       const updatedAt = mutationTime()
       await serializeWrite(() =>
         dependencies.sourceListings.updateCandidatePlot(
@@ -814,6 +815,18 @@ const validateCandidatePlotUpdate = (update: CandidatePlotUpdate) => {
     (update.coordinateCluePrecision === null)
   )
     throw new Error('Coordinate precision must accompany coordinates')
+  if (
+    update.primaryLocationClue === 'parcel_number' &&
+    !update.parcelNumberClue?.trim()
+  )
+    throw new Error('Enter the unique parcel number to find it by')
+  if (
+    update.primaryLocationClue === 'coordinates' &&
+    update.latitudeClue === null
+  )
+    throw new Error('Enter the coordinates to find it by')
+  if (update.primaryLocationClue === 'address' && !update.addressClue?.trim())
+    throw new Error('Enter the address to find it by')
   if (
     update.latitudeClue !== null &&
     (update.latitudeClue < -90 || update.latitudeClue > 90)

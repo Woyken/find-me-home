@@ -208,6 +208,7 @@ describe('App Household boundary', () => {
           longitudeClue: 25.2,
           coordinateCluePrecision: 'exact',
           addressClue: null,
+          primaryLocationClue: null,
           roadAccessRating: null,
           areaFeelingRating: null,
           viewRating: null,
@@ -274,11 +275,11 @@ describe('App Household boundary', () => {
         'listing-id',
         'plot-id',
         expect.objectContaining({
-          parcelNumberClue: null,
-          latitudeClue: null,
-          longitudeClue: null,
-          coordinateCluePrecision: null,
+          latitudeClue: 54.8,
+          longitudeClue: 25.2,
+          coordinateCluePrecision: 'exact',
           addressClue: 'Vilniaus r.',
+          primaryLocationClue: 'address',
         }),
       ),
     )
