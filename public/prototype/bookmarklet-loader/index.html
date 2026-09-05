@@ -1,0 +1,345 @@
+<!doctype html>
+<!--
+  PROTOTYPE - throwaway. Answers one question:
+  "Which ways of loading a hosted script from a javascript: bookmarklet actually
+  work on aruodas.lt (and other pages), so the bookmarklet itself can be tiny?"
+
+  Everything here is self-contained. Nothing is imported by the real app.
+  Rules for the code that ends up inside a javascript: URL:
+    - block comments only (browsers strip newlines from javascript: URLs)
+    - no template literals, no line-sensitive syntax
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PROTOTYPE - bookmarklet loader probe</title>
+    <style>
+      body {
+        font:
+          15px/1.5 system-ui,
+          sans-serif;
+        margin: 0 auto;
+        padding: 16px;
+        max-width: 960px;
+        color: #1b2733;
+        background: #f6f7f5;
+      }
+      h1 {
+        font-size: 22px;
+      }
+      h1 span {
+        background: #c0392b;
+        color: #fff;
+        font-size: 12px;
+        padding: 2px 8px;
+        border-radius: 6px;
+        vertical-align: middle;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid #d8ddd6;
+        border-radius: 10px;
+        padding: 14px 16px;
+        margin: 14px 0;
+      }
+      a.drag {
+        display: inline-block;
+        padding: 10px 14px;
+        background: #0b6b3a;
+        color: #fff;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      button {
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid #b7bfb4;
+        background: #fff;
+        cursor: pointer;
+      }
+      button:active {
+        background: #e6ebe4;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 13px;
+      }
+      th,
+      td {
+        border-bottom: 1px solid #e1e5df;
+        padding: 6px 8px;
+        text-align: left;
+        vertical-align: top;
+      }
+      code {
+        background: #eef1ec;
+        padding: 1px 4px;
+        border-radius: 4px;
+        word-break: break-all;
+      }
+      textarea {
+        width: 100%;
+        min-height: 90px;
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
+      }
+      .muted {
+        color: #5c6862;
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Bookmarklet loader probe <span>PROTOTYPE</span></h1>
+    <p class="muted">
+      Hosted at <code id="baseUrl"></code>. The probe script is
+      <a id="probeLink" href="probe.js">probe.js</a>, the probe page is
+      <a id="probeHtmlLink" href="probe.html">probe.html</a>.
+    </p>
+
+    <div class="card">
+      <h2>1. Bootstrap runner (tiny, use this first)</h2>
+      <p>
+        A short bookmarklet that loads <code>runner.js</code> from this host
+        with a script tag (fallback: fetch + eval) and then runs every method
+        below. Open an aruodas.lt advert, tap the bookmark, wait ~2 minutes. A
+        panel appears with the report and <b>Copy</b> / <b>Download</b> /
+        <b>Share</b> buttons. If nothing happens within ~10 s and no alert
+        shows, script loading is blocked; fall back to the all-in-one runner.
+      </p>
+      <div class="row">
+        <a class="drag" id="bootstrapLink" href="#"
+          >FMH loader probe (bootstrap)</a
+        >
+        <button id="copyBootstrap">Copy bootstrap</button>
+      </div>
+      <p class="muted">Length: <b id="bootstrapLen"></b> chars.</p>
+      <textarea id="bootstrapText" readonly></textarea>
+    </div>
+
+    <div class="card">
+      <h2>1b. All-in-one runner (long, no remote code needed to start)</h2>
+      <p>
+        Same report, but every method is inlined so it works even when nothing
+        can be loaded. Also a useful test of how long a bookmark Chrome accepts:
+        if the report panel never appears, the bookmark was truncated.
+      </p>
+      <div class="row">
+        <a class="drag" id="runnerLink" href="#">FMH loader probe (inline)</a>
+        <button id="copyRunner">Copy runner (raw)</button>
+        <button id="copyRunnerEncoded">Copy runner (percent-encoded)</button>
+        <button id="testHere">Run the runner on this page</button>
+      </div>
+      <p class="muted">
+        Raw length: <b id="runnerLen"></b> chars. Encoded length:
+        <b id="runnerLenEnc"></b> chars. If Chrome truncates the raw one when
+        pasting, try the encoded one, and note in the report which one you used.
+      </p>
+      <textarea id="runnerText" readonly></textarea>
+    </div>
+
+    <div class="card">
+      <h2>2. Minimal single-method bookmarklets</h2>
+      <p class="muted">
+        Each one loads probe.js with exactly one technique and shows a green
+        toast when the probe runs (or an alert on failure). These are what the
+        final bookmarklet would look like. Length shown is the raw
+        <code>javascript:</code> URL length.
+      </p>
+      <table id="methodsTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Method</th>
+            <th>What it does</th>
+            <th>Len</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>3. How to read the report</h2>
+      <ul class="muted">
+        <li>
+          <b>ok</b>: probe.js executed and called back into the page. Candidate.
+        </li>
+        <li><b>fail</b>: an error event or exception, message included.</li>
+        <li>
+          <b>timeout</b>: nothing happened within 8 s (silent CSP block, popup
+          blocked, ...).
+        </li>
+        <li>
+          <b>skipped</b>: precondition missing on that page (e.g. no nonce to
+          reuse).
+        </li>
+        <li>
+          CSP violations captured via <code>securitypolicyviolation</code> are
+          listed separately.
+        </li>
+      </ul>
+    </div>
+
+    <script src="runner.js"></script>
+    <script>
+      /* ------------------------------------------------------------------ */
+      /* Page glue: build javascript: URLs from the functions above.         */
+      /* ------------------------------------------------------------------ */
+      var BASE = new URL('.', location.href).href;
+      var flat = function (code) {
+        return code.replace(/\n\s*/g, ' ');
+      };
+      var methodsSource =
+        '[' +
+        METHODS.map(function (m) {
+          return (
+            '{id:' +
+            JSON.stringify(m.id) +
+            ',label:' +
+            JSON.stringify(m.label) +
+            ',f:' +
+            flat(m.f.toString()) +
+            '}'
+          );
+        }).join(',') +
+        ']';
+      var buildRunner = function (len, enc) {
+        return (
+          'javascript:(' +
+          flat(runnerMain.toString()) +
+          ')(' +
+          methodsSource +
+          ',' +
+          JSON.stringify(BASE) +
+          ',{len:' +
+          len +
+          ',enc:' +
+          JSON.stringify(enc) +
+          '})'
+        );
+      };
+      var draft = buildRunner(0, 'raw');
+      var runnerRaw = buildRunner(draft.length, 'raw');
+      var runnerEncodedBody = buildRunner(draft.length, 'encoded').slice(
+        'javascript:'.length,
+      );
+      var runnerEncoded = 'javascript:' + encodeURIComponent(runnerEncodedBody);
+
+      /* Tiny bootstrap: loads runner.js with a script tag, falls back to fetch+eval. */
+      var buildBootstrap = function (len) {
+        return (
+          'javascript:(function(){var B=' +
+          JSON.stringify(BASE) +
+          ';var go=function(enc){window.__fmhRunner.run(B,{len:' +
+          len +
+          ',enc:enc})};var s=document.createElement("script");s.src=B+"runner.js?t="+Date.now();s.onload=function(){go("bootstrap-script")};s.onerror=function(){fetch(B+"runner.js").then(function(r){return r.text()}).then(function(t){(0,eval)(t);go("bootstrap-fetch")}).catch(function(e){alert("Find Me Home probe bootstrap failed: "+e)})};document.head.appendChild(s)})()'
+        );
+      };
+      var bootstrap = buildBootstrap(buildBootstrap(0).length);
+
+      var minimalFor = function (m) {
+        return (
+          'javascript:(function(){var B=' +
+          JSON.stringify(BASE) +
+          ';window.__fmhVia=' +
+          JSON.stringify(m.id) +
+          ';var ok=function(){alert("Find Me Home probe reported in via ' +
+          m.id +
+          '")};addEventListener("message",function(e){if(e.data&&e.data.type==="fmh-probe")ok()});(' +
+          flat(m.f.toString()) +
+          ')(B+"probe.js?t="+Date.now(),ok,function(e){alert("Find Me Home probe FAILED via ' +
+          m.id +
+          ': "+(e&&e.message||e))},{html:B+"probe.html?via=' +
+          m.id +
+          '",bin:document.body,note:function(){},skip:function(r){alert("skipped: "+r)}})})()'
+        );
+      };
+
+      var copyText = function (text, button) {
+        var original = button.textContent;
+        var done = function () {
+          button.textContent = 'Copied!';
+          setTimeout(function () {
+            button.textContent = original;
+          }, 1500);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done, function () {
+            prompt('Copy this:', text);
+          });
+        } else prompt('Copy this:', text);
+      };
+
+      document.getElementById('baseUrl').textContent = BASE;
+      document.getElementById('runnerLink').href = runnerRaw;
+      document.getElementById('runnerLen').textContent = runnerRaw.length;
+      document.getElementById('runnerLenEnc').textContent =
+        runnerEncoded.length;
+      document.getElementById('runnerText').value = runnerRaw;
+      document.getElementById('bootstrapLink').href = bootstrap;
+      document.getElementById('bootstrapLen').textContent = bootstrap.length;
+      document.getElementById('bootstrapText').value = bootstrap;
+      document.getElementById('copyBootstrap').onclick = function () {
+        copyText(bootstrap, this);
+      };
+      document.getElementById('copyRunner').onclick = function () {
+        copyText(runnerRaw, this);
+      };
+      document.getElementById('copyRunnerEncoded').onclick = function () {
+        copyText(runnerEncoded, this);
+      };
+      document.getElementById('testHere').onclick = function () {
+        runnerMain(METHODS, BASE, { len: runnerRaw.length, enc: 'in-page' });
+      };
+
+      /* Sanity check: the flattened code must still parse. */
+      try {
+        new Function(runnerRaw.slice('javascript:'.length));
+      } catch (e) {
+        document.body.insertAdjacentHTML(
+          'afterbegin',
+          '<p style="background:#c0392b;color:#fff;padding:8px">Runner does not parse after flattening: ' +
+            e +
+            '</p>',
+        );
+      }
+
+      var tbody = document.querySelector('#methodsTable tbody');
+      METHODS.forEach(function (m, i) {
+        var href = minimalFor(m);
+        var tr = document.createElement('tr');
+        var td = function (html) {
+          var c = document.createElement('td');
+          c.innerHTML = html;
+          tr.appendChild(c);
+          return c;
+        };
+        td(String(i + 1));
+        td(
+          '<a class="drag" style="padding:6px 10px;font-size:12px" href="#">' +
+            m.id +
+            '</a>',
+        ).querySelector('a').href = href;
+        td('<span class="muted">' + m.label + '</span>');
+        td(String(href.length));
+        var actions = td('<button>Copy</button>');
+        actions.querySelector('button').onclick = function () {
+          copyText(href, this);
+        };
+        tbody.appendChild(tr);
+      });
+    </script>
+  </body>
+</html>
