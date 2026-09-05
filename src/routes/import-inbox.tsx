@@ -82,12 +82,23 @@ export default function ImportInboxPage() {
   })
   const done = () => total() - deck().length
 
+  // The favourites pile handed over by the bookmark. It stays in the draft
+  // until the household has captured it, so a failed capture can be retried
+  // and a reload picks it up again.
+  const pile = createMemo(() => {
+    const transport = imports.draft()
+    return transport?.kind === 'favorites' ? transport : undefined
+  })
+  const [capturing, setCapturing] = createSignal(false)
+  const [attempt, setAttempt] = createSignal(0)
   let consumed = false
   createEffect(
-    () => imports.draft(),
-    (transport) => {
-      if (consumed || transport?.kind !== 'favorites') return
+    () => ({ transport: pile(), attempt: attempt() }),
+    ({ transport }) => {
+      if (consumed || !transport) return
       consumed = true
+      setCapturing(true)
+      setError('')
       void household
         .captureImportInbox(transport.items)
         .then((result) => {
@@ -105,8 +116,10 @@ export default function ImportInboxPage() {
           consumed = false
           setError(caught instanceof Error ? caught.message : String(caught))
         })
+        .finally(() => setCapturing(false))
     },
   )
+  const retry = () => setAttempt((current) => current + 1)
 
   const skip = () =>
     setOrder((current) =>
@@ -179,29 +192,88 @@ export default function ImportInboxPage() {
       <Show when={error()}>
         <p class="alert" role="alert">
           {error()}
+          <Show when={pile()}>
+            {' '}
+            <button
+              class="btn ghost sm"
+              type="button"
+              disabled={capturing()}
+              onClick={retry}
+            >
+              Try again
+            </button>
+          </Show>
         </p>
       </Show>
 
       <Show
         when={deck()[0]}
         fallback={
-          <div class="panel done">
-            <span class="big" aria-hidden="true">
-              <CheckIcon />
-            </span>
-            <h2 style={{ 'margin-top': '14px' }}>All sorted</h2>
-            <p
-              class="muted"
-              style={{ 'max-width': '44ch', margin: '8px auto 18px' }}
-            >
-              Nothing waiting from Aruodas. Next time you're on your favourites
-              page there, click the Find Me Home bookmark to bring over a new
-              pile.
-            </p>
-            <a class="btn" href={paths.home}>
-              Back to plots
-            </a>
-          </div>
+          <Show
+            when={!pile()}
+            fallback={
+              <div
+                class="panel done"
+                aria-busy={capturing() ? 'true' : 'false'}
+              >
+                <Show
+                  when={!error()}
+                  fallback={
+                    <>
+                      <h2 style={{ 'margin-top': '14px' }}>
+                        Your favourites did not come through
+                      </h2>
+                      <p
+                        class="muted"
+                        style={{ 'max-width': '44ch', margin: '8px auto 18px' }}
+                      >
+                        {pile()!.items.length} clippings from Aruodas are still
+                        waiting to be brought over. Try again, or reload this
+                        page.
+                      </p>
+                      <button
+                        class="btn"
+                        type="button"
+                        disabled={capturing()}
+                        onClick={retry}
+                      >
+                        Try again
+                      </button>
+                    </>
+                  }
+                >
+                  <h2 style={{ 'margin-top': '14px' }}>
+                    Bringing over your Aruodas favourites…
+                  </h2>
+                  <p
+                    class="muted"
+                    style={{ 'max-width': '44ch', margin: '8px auto 18px' }}
+                  >
+                    {pile()!.items.length} clippings are on their way. This only
+                    takes a moment.
+                  </p>
+                </Show>
+              </div>
+            }
+          >
+            <div class="panel done">
+              <span class="big" aria-hidden="true">
+                <CheckIcon />
+              </span>
+              <h2 style={{ 'margin-top': '14px' }}>All sorted</h2>
+              <p
+                class="muted"
+                style={{ 'max-width': '44ch', margin: '8px auto 18px' }}
+              >
+                Nothing waiting from Aruodas. Next time you're on your
+                favourites page there, click the Find Me Home bookmark to bring
+                over a new pile.
+              </p>
+              <a class="btn" href={paths.home}>
+                Back to plots
+              </a>
+            </div>
+          </Show>
         }
       >
         {(top) => (

@@ -68,22 +68,45 @@ const allowedPhoto = (source: string) => {
   }
 }
 const url = new URL(window.location.href)
+/**
+ * Land adverts live under `/sklypai-…-11-123/` on www.aruodas.lt, while
+ * m.aruodas.lt links to them as a bare `/11-123/` (category 11 is land).
+ */
+const isLandAdvertPath = (pathname: string) => {
+  const id = pathname.match(/(?:-|^\/)(\d{1,3}-\d+)\/?$/)?.[1]
+  if (!id) return false
+  return pathname.startsWith('/sklypai') || id.startsWith('11-')
+}
 const returnTo =
   url.hash === '#find-me-home-return=import-inbox' ? 'import-inbox' : undefined
 url.search = ''
 url.hash = ''
 
 if (url.pathname.startsWith('/isiminti-skelbimai')) {
+  // www.aruodas.lt and m.aruodas.lt render the favourites page with
+  // different markup; every selector below lists the desktop one first and
+  // the mobile one second.
+  const firstText = (card: HTMLElement, ...selectors: Array<string>) => {
+    for (const selector of selectors) {
+      const text = clean(card.querySelector(selector)?.textContent)
+      if (text) return text
+    }
+    return undefined
+  }
   let skippedNonLand = 0
   let skippedInactive = 0
   let unreadable = 0
   const seen = new Set<string>()
   const items = [
-    ...document.querySelectorAll<HTMLElement>('.list-row-container'),
+    ...document.querySelectorAll<HTMLElement>(
+      '.list-row-container, .result-item-big-thumb',
+    ),
   ].flatMap((card) => {
-    const id = card
-      .querySelector<HTMLAnchorElement>('a[href]')
-      ?.href.match(/(?:-|\/)(\d{1,3}-\d+)\/?(?:[?#]|$)/)?.[1]
+    const id =
+      card.id.match(/^objectRow(\d{1,3}-\d+)$/)?.[1] ??
+      card
+        .querySelector<HTMLAnchorElement>('a[href]')
+        ?.href.match(/(?:-|\/)(\d{1,3}-\d+)\/?(?:[?#]|$)/)?.[1]
     if (!id) {
       unreadable += 1
       return []
@@ -94,23 +117,33 @@ if (url.pathname.startsWith('/isiminti-skelbimai')) {
     }
     if (
       card.classList.contains('inactive-saved') ||
-      card.querySelector('.advert-is-passive')
+      card.querySelector('.advert-is-passive, .list-sold-lt')
     ) {
       skippedInactive += 1
       return []
     }
     if (seen.has(id)) return []
     seen.add(id)
-    const thumbnail = card.querySelector<HTMLImageElement>('.list-img img')?.src
+    const image = card.querySelector<HTMLImageElement>(
+      '.list-img img, .object-image-link-big_thumbs img',
+    )
+    const thumbnail =
+      image?.currentSrc || image?.src || image?.dataset.src || undefined
+    const details = [...card.querySelectorAll('.desc-img-txt')]
+      .map((node) => clean(node.textContent))
+      .filter(Boolean)
+      .join(', ')
     return [
       {
         sourceId: id,
-        title: clean(card.querySelector('h3 a')?.textContent),
-        description: clean(card.querySelector('.description')?.textContent),
+        title: firstText(card, 'h3 a', '.item-address-v4'),
+        description: firstText(card, '.description') ?? clean(details),
         priceEur: numberFrom(
-          card.querySelector('.rememb-item-price')?.textContent,
+          firstText(card, '.rememb-item-price', '.price-main'),
         ),
-        areaAres: numberFrom(card.querySelector('.description')?.textContent),
+        areaAres: numberFrom(
+          firstText(card, '.description', '.desc-AreaOverall .desc-img-txt'),
+        ),
         thumbnail: thumbnail && allowedPhoto(thumbnail) ? thumbnail : undefined,
       },
     ]
@@ -132,10 +165,7 @@ if (url.pathname.startsWith('/isiminti-skelbimai')) {
       .replace(/=+$/, '')
     window.location.href = `${appUrl}import-inbox#import=${encoded}`
   }
-} else if (
-  !url.pathname.startsWith('/sklypai') ||
-  !/-(\d{1,3}-\d+)\/?$/.test(url.pathname)
-) {
+} else if (!isLandAdvertPath(url.pathname)) {
   fail(
     'Open an individual Aruodas land advertisement or your favorites page before importing.',
   )

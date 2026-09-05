@@ -1588,4 +1588,51 @@ describe('Household runtime', () => {
       peer.dispose()
     }
   })
+
+  it('accepts writes the moment a Household is published as active on startup', async () => {
+    // The UI mounts on the 'active' state and may write straight away, e.g.
+    // the Import Inbox capturing a favourites pile handed over by the
+    // bookmark. That write must not be rejected as "Household is changing"
+    // just because startup housekeeping is still running.
+    const prefix = `startup-write-${crypto.randomUUID()}`
+    databasePrefixes.push(prefix)
+    let uuid = 0
+    const createRuntime = () =>
+      createBrowserHouseholdRuntime({
+        accessDatabaseName: `${prefix}-access`,
+        sharedDatabasePrefix: prefix,
+        crypto,
+        now: () => 5_000,
+        uuid: () => `startup-${++uuid}`,
+      })
+    const seed = createRuntime()
+    await seed.start()
+    await seed.createHousehold()
+    seed.dispose()
+
+    const runtime = createRuntime()
+    try {
+      let capture: ReturnType<typeof runtime.captureImportInbox> | undefined
+      const unsubscribe = runtime.subscribe(() => {
+        if (capture || runtime.state().status !== 'active') return
+        capture = runtime.captureImportInbox([
+          parseAruodasImport({
+            url: 'https://www.aruodas.lt/11-9001/',
+            title: 'Favourite from the pile',
+            photos: [],
+            features: [],
+          }),
+        ])
+      })
+      await runtime.start()
+      unsubscribe()
+      expect(capture).toBeDefined()
+      await expect(capture).resolves.toMatchObject({ added: 1 })
+      expect(runtime.listImportInbox()).toMatchObject([
+        { sourceId: '11-9001', title: 'Favourite from the pile' },
+      ])
+    } finally {
+      runtime.dispose()
+    }
+  })
 })

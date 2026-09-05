@@ -76,6 +76,66 @@ describe('Aruodas import fragment', () => {
     })
   })
 
+  it('captures the favorites page of the mobile site (m.aruodas.lt)', () => {
+    const transport = runBookmarklet(
+      `
+        <ul class="search-result-list-big_thumbs" id="objectList">
+          <li class=" result-item-big-thumb " data-id="loadobject11-1476517" id="objectRow11-1476517">
+            <a class="object-image-link-big_thumbs" href="/11-1476517/?from_saved=1&amp;inMap=0&amp;return_url=%2Fisiminti-skelbimai%2F">
+              <picture><img class="impression-log-class lazyload" data-src="https://aruodas-img.dgn.lt/object_67_134641491/misko-g.jpg" src="https://aruodas-img.dgn.lt/object_67_134641491/misko-g.jpg"></picture>
+            </a>
+            <div class="result-item-info-v4">
+              <div class="price-flex"><span class="item-price-main-v4"><span class="price-main">21 500 €</span><span class="price-per">1 132 €/a</span></span></div>
+              <div class="item-address-v4"> Vilniaus r. sav., Piktakonių k., Miško g. </div>
+              <div class="item-description-v5 twocols">
+                <div class="description-item desc-AreaOverall"><div class="desc-img-txt nowrap"> 19 a </div></div>
+                <div class="description-item desc-Intendance"><div class="desc-img-txt"> Namų valda </div></div>
+              </div>
+            </div>
+          </li>
+          <li class=" result-item-big-thumb inactive-saved " id="objectRow2-1776648">
+            <a class="object-image-link-big_thumbs" href="/namai-vilniaus-rajone-2-1776648/?from_saved=1"></a>
+            <div class="list-sold-lt"></div>
+          </li>
+          <li class=" result-item-big-thumb " id="objectRow11-1461928">
+            <a class="object-image-link-big_thumbs" href="/11-1461928/?from_saved=1"></a>
+            <div class="list-sold-lt"></div>
+            <div class="item-address-v4">Sold plot</div>
+          </li>
+        </ul>
+      `,
+      'https://m.aruodas.lt/isiminti-skelbimai/?return_url=%2Fsklypai-11-1476669%2F',
+    )
+
+    expect(transport).toMatchObject({
+      kind: 'favorites',
+      skippedNonLand: 1,
+      skippedInactive: 1,
+      unreadable: 0,
+      items: [
+        {
+          sourceId: '11-1476517',
+          title: 'Vilniaus r. sav., Piktakonių k., Miško g.',
+          description: '19 a, Namų valda',
+          areaAres: 19,
+          priceEur: 21_500,
+          photos: [
+            'https://aruodas-img.dgn.lt/object_67_134641491/misko-g.jpg',
+          ],
+        },
+      ],
+    })
+  })
+
+  it('accepts a bare mobile land advert URL and still rejects other categories', () => {
+    expect(
+      runBookmarklet('', 'https://m.aruodas.lt/11-1476517/?from_saved=1'),
+    ).toMatchObject({ kind: 'listing', imported: { sourceId: '11-1476517' } })
+    expect(() =>
+      runBookmarklet('', 'https://m.aruodas.lt/2-1776648/'),
+    ).toThrow()
+  })
+
   it('carries the inbox return marker only from the opened advert', () => {
     expect(
       runBookmarklet(

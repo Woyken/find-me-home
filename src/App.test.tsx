@@ -7,6 +7,7 @@ import { HouseholdHeader } from './components/HouseholdHeader'
 import type { HouseholdRuntime } from './households/runtime'
 import type { HouseholdRuntimeState } from './households/model'
 import { encodeImportFragment } from './imports/aruodas'
+import type { ImportInboxCaptureResult } from './imports/inbox-model'
 import type { SourceListingDetail } from './source-listings/model'
 
 let dispose: (() => void) | undefined
@@ -280,6 +281,98 @@ describe('App Household boundary', () => {
         }),
       ),
     )
+  })
+
+  it('shows the favourites pile being brought over, lets a failed capture be retried, and only then says all sorted', async () => {
+    sessionStorage.setItem(
+      'find-me-home-import-draft',
+      JSON.stringify({
+        kind: 'favorites',
+        items: [
+          {
+            source: 'aruodas',
+            sourceId: '11-1',
+            url: 'https://www.aruodas.lt/11-1/',
+            locationConfidence: 'unknown',
+            photos: [],
+            raw: { importedBy: 'aruodas-bookmarklet', features: [] },
+          },
+          {
+            source: 'aruodas',
+            sourceId: '11-2',
+            url: 'https://www.aruodas.lt/11-2/',
+            locationConfidence: 'unknown',
+            photos: [],
+            raw: { importedBy: 'aruodas-bookmarklet', features: [] },
+          },
+        ],
+        skippedNonLand: 0,
+        skippedInactive: 0,
+        unreadable: 0,
+      }),
+    )
+    const runtime = createTestRuntime()
+    let settle: ((succeed: boolean) => void) | undefined
+    runtime.captureImportInbox = vi.fn(
+      () =>
+        new Promise<ImportInboxCaptureResult>((resolve, reject) => {
+          settle = (succeed) =>
+            succeed
+              ? resolve({
+                  added: 0,
+                  refreshed: 0,
+                  alreadyImported: 2,
+                  records: [],
+                })
+              : reject(new Error('Household is changing'))
+        }),
+    )
+    history.replaceState(null, '', '/import-inbox')
+    mountRouter(runtime)
+    await runtime.createHousehold()
+
+    await waitFor(() =>
+      expect(document.body.textContent).toContain(
+        'Bringing over your Aruodas favourites',
+      ),
+    )
+    expect(document.body.textContent).toContain('2 clippings are on their way')
+    expect(document.body.textContent).not.toContain('All sorted')
+    expect(runtime.captureImportInbox).toHaveBeenCalledTimes(1)
+
+    settle?.(false)
+    await waitFor(() =>
+      expect(document.body.textContent).toContain(
+        'Your favourites did not come through',
+      ),
+    )
+    expect(document.body.textContent).toContain('Household is changing')
+    expect(document.body.textContent).not.toContain('All sorted')
+    expect(sessionStorage.getItem('find-me-home-import-draft')).toContain(
+      '11-2',
+    )
+
+    findButton('Try again')?.click()
+    await waitFor(() =>
+      expect(runtime.captureImportInbox).toHaveBeenCalledTimes(2),
+    )
+    await waitFor(() =>
+      expect(document.body.textContent).toContain(
+        'Bringing over your Aruodas favourites',
+      ),
+    )
+    expect(document.body.textContent).not.toContain('did not come through')
+
+    settle?.(true)
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('All sorted'),
+    )
+    expect(document.body.textContent).toContain(
+      'Brought over from your Aruodas favourites just now',
+    )
+    expect(document.body.textContent).toContain('2already saved')
+    expect(document.body.textContent).not.toContain('Household is changing')
+    expect(sessionStorage.getItem('find-me-home-import-draft')).toBeNull()
   })
 
   it('removes an import fragment and resumes its review after creating a Household', async () => {

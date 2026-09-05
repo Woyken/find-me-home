@@ -154,6 +154,20 @@ export const createHouseholdRuntime = (dependencies: {
   }
   let lifecycle = Promise.resolve()
   let pendingLifecycles = 0
+  /**
+   * Publishes the Household a lifecycle operation has landed on and starts
+   * accepting writes for it. Listeners (the UI) react to the published state
+   * synchronously and may write straight away, so writes are opened before
+   * the state goes out, not once the remaining lifecycle housekeeping (local
+   * list refresh, room connection) has finished. Writes stay closed while a
+   * later lifecycle is still queued behind this one.
+   */
+  const settle = (
+    next: Extract<HouseholdRuntimeState, { status: 'active' | 'waiting' }>,
+  ) => {
+    acceptingWrites = pendingLifecycles <= 1
+    setState(next)
+  }
   const serializeLifecycle = <T>(operation: () => Promise<T>) => {
     pendingLifecycles += 1
     acceptingWrites = false
@@ -290,7 +304,7 @@ export const createHouseholdRuntime = (dependencies: {
         .map((record) => record.updatedAt),
     )
     if (!household && !openedAccess.initialized) {
-      setState({
+      settle({
         status: 'waiting',
         access: openedAccess,
         roomPassword: credentials.roomPassword,
@@ -298,7 +312,7 @@ export const createHouseholdRuntime = (dependencies: {
       })
     } else {
       if (!household) throw new Error('Household metadata is unavailable')
-      setState({
+      settle({
         status: 'active',
         access: openedAccess,
         household,
@@ -491,7 +505,7 @@ export const createHouseholdRuntime = (dependencies: {
           await dependencies.households.remove(household.id)
           throw error
         }
-        setState({
+        settle({
           status: 'active',
           access,
           household,
@@ -524,7 +538,7 @@ export const createHouseholdRuntime = (dependencies: {
           await dependencies.sourceListings.open(access.householdId)
           const household = dependencies.households.get()
           if (access.initialized && household) {
-            setState({
+            settle({
               status: 'active',
               access,
               household,
@@ -532,7 +546,7 @@ export const createHouseholdRuntime = (dependencies: {
               syncStatus: 'alone',
             })
           } else {
-            setState({
+            settle({
               status: 'waiting',
               access: { ...access, initialized: false },
               roomPassword: credentials.roomPassword,
