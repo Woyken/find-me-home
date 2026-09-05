@@ -136,6 +136,44 @@ describe('Aruodas import fragment', () => {
     ).toThrow()
   })
 
+  it('shows a heartbeat before running and a copyable crash report when it fails', () => {
+    let heartbeatSeen: boolean | undefined
+    const broken = new Proxy(document, {
+      get(target, key) {
+        if (key === 'querySelectorAll') {
+          return () => {
+            heartbeatSeen ??= document.body.textContent.includes(
+              'Find Me Home: working…',
+            )
+            throw new Error('boom from the page')
+          }
+        }
+        const value = Reflect.get(target, key)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+    const location = { href: 'https://m.aruodas.lt/isiminti-skelbimai/' }
+    document.body.innerHTML = ''
+    new Function(
+      'window',
+      'document',
+      bookmarkletSource
+        .replace('__FMH_APP_URL__', 'https://example.test/')
+        .replace(/[\r\n\t]/g, ''),
+    )({ location, alert: () => undefined }, broken)
+
+    expect(heartbeatSeen).toBe(true)
+    expect(location.href).toBe('https://m.aruodas.lt/isiminti-skelbimai/')
+    const report = document.querySelector('textarea')?.value ?? ''
+    expect(report).toContain('Error: boom from the page')
+    expect(report).toContain('https://m.aruodas.lt/isiminti-skelbimai/')
+    expect(document.body.textContent).toContain(
+      'Find Me Home could not import this page',
+    )
+    expect(document.body.textContent).toContain('Copy details')
+    expect(document.body.textContent).not.toContain('Find Me Home: working…')
+  })
+
   it('carries the inbox return marker only from the opened advert', () => {
     expect(
       runBookmarklet(
