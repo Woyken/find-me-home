@@ -7,7 +7,7 @@ import { FannedStack } from '../components/FannedStack'
 import { GoSeeButton } from '../components/GoSeeButton'
 import { CheckIcon, PinIcon } from '../components/icons'
 import { useHousehold } from '../households/context'
-import { paths } from '../paths'
+import { paths, routes } from '../paths'
 import type {
   CandidatePlotRecord,
   LocationClueKind,
@@ -106,7 +106,7 @@ export default function SourceListingPage(props: {
       const current = listing()
       if (!current) return
       await household.markSourceListingVisited(current.id)
-      navigate(paths.visitPlan)
+      navigate(routes.visitPlan)
     })
   const remove = () => {
     const current = listing()
@@ -119,7 +119,7 @@ export default function SourceListingPage(props: {
       return
     void run(async () => {
       await household.removeSourceListing(current.id)
-      navigate(paths.home)
+      navigate(routes.home)
     })
   }
 

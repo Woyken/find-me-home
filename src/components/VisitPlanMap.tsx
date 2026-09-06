@@ -2,7 +2,7 @@ import { useNavigate } from '@solidjs/router'
 import { Show, createEffect, onCleanup } from 'solid-js'
 import 'leaflet/dist/leaflet.css'
 import type * as Leaflet from 'leaflet'
-import { paths } from '../paths'
+import { routes } from '../paths'
 import type { SourceListingDetail } from '../source-listings/model'
 import { sourceListingMapLocation } from '../source-listings/map'
 import {
@@ -47,7 +47,7 @@ export function VisitPlanMap(props: {
         interactive: true,
         className: 'fmh-stop',
       })
-      const open = () => navigate(paths.sourceListing(sourceListing.id))
+      const open = () => navigate(routes.sourceListing(sourceListing.id))
       shape.on('click', open)
       shape.getTooltip()?.on('click', open)
       shape.addTo(stopLayer)
