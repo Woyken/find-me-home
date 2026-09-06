@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest'
+import { plotsMapStops } from './components/PlotsMap'
 import { reconcileDeckOrder } from './routes/import-inbox'
 import { sortListings } from './routes/index'
 import { routeUrl } from './routes/visit-plan'
@@ -107,6 +108,24 @@ describe('plots list sorting', () => {
   })
   it('sorts plots with problems last', () => {
     expect(sortListings([dearNew, cheapOld], 'clean')[0].id).toBe('cheap')
+  })
+})
+
+describe('plots map', () => {
+  it('draws only located plots, in list order, marking the ones we are going to see', () => {
+    const located = (id: string) =>
+      listing(id, {
+        resolvedLatitude: 54.1,
+        resolvedLongitude: 25.1,
+        resolvedPrecision: 'exact',
+      })
+    const stops = plotsMapStops(
+      [located('a'), listing('nowhere', {}), located('b')],
+      ['b'],
+    )
+    expect(stops.map((stop) => stop.sourceListing.id)).toEqual(['a', 'b'])
+    expect(stops.map((stop) => stop.going)).toEqual([false, true])
+    expect(stops[0].location.label).toBe('a')
   })
 })
 

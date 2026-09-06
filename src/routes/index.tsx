@@ -5,6 +5,7 @@ import { CheckStrip, CheckSummaryText } from '../components/CheckStrip'
 import { FannedStack } from '../components/FannedStack'
 import { GoSeeButton } from '../components/GoSeeButton'
 import { MiniMap, miniMapCaption } from '../components/MiniMap'
+import { PlotsMap } from '../components/PlotsMap'
 import { CheckIcon } from '../components/icons'
 import { openAddPlotDialog } from '../components/AddPlotDialog'
 import { useHousehold } from '../households/context'
@@ -66,6 +67,7 @@ export default function Home() {
   const household = useHousehold()
   const [sort, setSort] = createSignal<SortKey>('new')
   const [unvisitedOnly, setUnvisitedOnly] = createSignal(false)
+  const [view, setView] = createSignal<'list' | 'map'>('list')
   const allListings = createMemo(() => household.listSourceListings())
   const listings = createMemo(() =>
     sortListings(
@@ -75,9 +77,8 @@ export default function Home() {
       sort(),
     ),
   )
-  const plannedCount = createMemo(
-    () => household.getVisitPlan().sourceListingIds.length,
-  )
+  const plannedIds = createMemo(() => household.getVisitPlan().sourceListingIds)
+  const plannedCount = () => plannedIds().length
 
   return (
     <main class="wrap">
@@ -135,21 +136,46 @@ export default function Home() {
               Not visited
             </button>
           </div>
-          <span class="small muted">
-            {listings().length} {listings().length === 1 ? 'plot' : 'plots'} ·{' '}
-            {plannedCount()} going to see
-          </span>
+          <div class="rowline tight">
+            <span class="small muted">
+              {listings().length} {listings().length === 1 ? 'plot' : 'plots'} ·{' '}
+              {plannedCount()} going to see
+            </span>
+            <div class="seg" role="group" aria-label="View">
+              <button
+                type="button"
+                aria-pressed={view() === 'list' ? 'true' : 'false'}
+                onClick={() => setView('list')}
+              >
+                List
+              </button>
+              <button
+                type="button"
+                aria-pressed={view() === 'map' ? 'true' : 'false'}
+                onClick={() => setView('map')}
+              >
+                Map
+              </button>
+            </div>
+          </div>
         </div>
 
         <Show
           when={listings().length > 0}
           fallback={<section class="panel empty">No unvisited plots</section>}
         >
-          <section class="list" aria-label="Saved plots">
-            <For each={listings()}>
-              {(listing) => <ListingRow listing={listing} />}
-            </For>
-          </section>
+          <Show
+            when={view() === 'list'}
+            fallback={
+              <PlotsMap sourceListings={listings()} goingIds={plannedIds()} />
+            }
+          >
+            <section class="list" aria-label="Saved plots">
+              <For each={listings()}>
+                {(listing) => <ListingRow listing={listing} />}
+              </For>
+            </section>
+          </Show>
         </Show>
       </Show>
       <FannedStack />
