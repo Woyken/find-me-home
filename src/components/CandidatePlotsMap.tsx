@@ -28,10 +28,13 @@ export function CandidatePlotsMap(props: {
   let leaflet: typeof Leaflet | undefined
   let resizeObserver: ResizeObserver | undefined
   let householdLayer: Leaflet.LayerGroup | undefined
+  let locationWatch: number | undefined
+  let locationMarker: Leaflet.CircleMarker | undefined
+  let accuracyCircle: Leaflet.Circle | undefined
   let container: HTMLDivElement | undefined
   let disposed = false
   const [locationState, setLocationState] = createSignal<
-    'idle' | 'locating' | 'available' | 'unavailable'
+    'idle' | 'locating' | 'tracking' | 'unavailable'
   >('idle')
   const [locationMessage, setLocationMessage] = createSignal('')
   const [fullscreen, setFullscreen] = createSignal(false)
@@ -122,6 +125,9 @@ export function CandidatePlotsMap(props: {
 
   onCleanup(() => {
     disposed = true
+    if (locationWatch !== undefined) {
+      navigator.geolocation.clearWatch(locationWatch)
+    }
     resizeObserver?.disconnect()
     map?.remove()
   })
@@ -132,52 +138,80 @@ export function CandidatePlotsMap(props: {
       setLocationMessage('Your location is not available here.')
       return
     }
+    if (locationWatch !== undefined) {
+      if (locationMarker) {
+        map.setView(locationMarker.getLatLng(), Math.max(map.getZoom(), 16))
+      }
+      return
+    }
     setLocationState('locating')
     setLocationMessage('Finding you…')
-    navigator.geolocation.getCurrentPosition(
+    let centerOnFirstPosition = true
+    locationWatch = navigator.geolocation.watchPosition(
       ({ coords }) => {
         if (disposed || !leaflet || !map || !householdLayer) return
-        householdLayer.clearLayers()
-        leaflet
-          .circle([coords.latitude, coords.longitude], {
-            radius: coords.accuracy,
-            color: BLUE,
-            weight: 1,
-            fillColor: BLUE,
-            fillOpacity: 0.1,
-          })
-          .addTo(householdLayer)
-        leaflet
-          .circleMarker([coords.latitude, coords.longitude], {
-            radius: 7,
-            color: '#fff',
-            weight: 3,
-            fillColor: BLUE,
-            fillOpacity: 1,
-          })
-          .bindTooltip(`You · ±${Math.round(coords.accuracy)} m`)
-          .addTo(householdLayer)
-        map.setView(
-          [coords.latitude, coords.longitude],
-          Math.max(map.getZoom(), 16),
-        )
+        const position: Leaflet.LatLngTuple = [
+          coords.latitude,
+          coords.longitude,
+        ]
+        if (accuracyCircle && locationMarker) {
+          accuracyCircle.setLatLng(position).setRadius(coords.accuracy)
+          locationMarker.setLatLng(position)
+        } else {
+          accuracyCircle = leaflet
+            .circle(position, {
+              radius: coords.accuracy,
+              color: BLUE,
+              weight: 1,
+              fillColor: BLUE,
+              fillOpacity: 0.1,
+            })
+            .addTo(householdLayer)
+          locationMarker = leaflet
+            .circleMarker(position, {
+              radius: 7,
+              color: '#fff',
+              weight: 3,
+              fillColor: BLUE,
+              fillOpacity: 1,
+            })
+            .addTo(householdLayer)
+        }
+        locationMarker.bindTooltip(`You · ±${Math.round(coords.accuracy)} m`)
+        // Keep live updates from interrupting the user's map panning.
+        if (centerOnFirstPosition) {
+          map.setView(position, Math.max(map.getZoom(), 16))
+          centerOnFirstPosition = false
+        }
         setLocationMessage(
-          `You are here, give or take ${Math.round(coords.accuracy)} m`,
+          `Live location, give or take ${Math.round(coords.accuracy)} m`,
         )
-        setLocationState('available')
+        setLocationState('tracking')
       },
       (error) => {
         if (disposed) return
-        setLocationState('unavailable')
+        householdLayer?.clearLayers()
+        locationMarker = undefined
+        accuracyCircle = undefined
+        if (
+          error.code === error.PERMISSION_DENIED &&
+          locationWatch !== undefined
+        ) {
+          navigator.geolocation.clearWatch(locationWatch)
+          locationWatch = undefined
+        }
+        setLocationState(
+          error.code === error.PERMISSION_DENIED ? 'unavailable' : 'locating',
+        )
         setLocationMessage(
           error.code === error.PERMISSION_DENIED
             ? 'Location access was denied. The map still works.'
             : error.code === error.TIMEOUT
-              ? 'Finding you took too long. The map still works.'
-              : 'Your location is not available. The map still works.',
+              ? 'Finding you took too long. Still trying to update your location.'
+              : 'Your location is not available. Still trying to update your location.',
         )
       },
-      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 15_000 },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 },
     )
   }
 
