@@ -14,6 +14,7 @@ import {
   sourceListingMapItems,
 } from '../source-listings/map'
 import { checkCells, checkTroubleScore } from '../check-summary'
+import { candidatePlotRegiaUrl } from '../location-resolution'
 import {
   formatAgo,
   formatAres,
@@ -165,6 +166,8 @@ function ListingRow(props: { listing: SourceListingDetail }) {
     props.listing.title ?? `Aruodas advert ${props.listing.sourceId}`
   const locationState = () => sourceListingLocationState(props.listing)
   const mapItems = () => sourceListingMapItems(props.listing)
+  const regiaUrl = () =>
+    props.listing.candidatePlots.map(candidatePlotRegiaUrl).find(Boolean)
 
   return (
     <article class={`panel row ${going() ? 'going' : ''}`}>
@@ -222,6 +225,18 @@ function ListingRow(props: { listing: SourceListingDetail }) {
       </div>
       <div class="side">
         <GoSeeButton sourceListingId={props.listing.id} />
+        <Show when={regiaUrl()}>
+          {(url) => (
+            <a
+              class="btn ghost sm"
+              href={url()}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              REGIA
+            </a>
+          )}
+        </Show>
         <span class="updated">
           changed {formatAgo(props.listing.updatedAt)}
         </span>

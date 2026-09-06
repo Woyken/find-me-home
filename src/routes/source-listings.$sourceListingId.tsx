@@ -26,7 +26,7 @@ import {
   checkStatusTagClass,
   checkStatusWord,
 } from '../check-summary'
-import { describeLks94 } from '../location-resolution'
+import { candidatePlotRegiaUrl, describeLks94 } from '../location-resolution'
 import { formatAgo, formatDateLong, formatDateShort } from '../format'
 
 export const preloadSourceListing = () => undefined
@@ -553,6 +553,18 @@ function CandidatePlotEditor(props: {
           {heading()}
         </h3>
         <div class="rowline tight">
+          <Show when={candidatePlotRegiaUrl(props.plot)}>
+            {(url) => (
+              <a
+                class="btn ghost sm"
+                href={url()}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                REGIA
+              </a>
+            )}
+          </Show>
           <Show when={directionsUrl()}>
             {(url) => (
               <a

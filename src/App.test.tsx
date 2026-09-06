@@ -178,7 +178,7 @@ describe('App Household boundary', () => {
   })
   it('renders a directly loaded imported Source Listing', async () => {
     const runtime = createTestRuntime()
-    const listing: SourceListingDetail = {
+    let listing: SourceListingDetail = {
       id: 'listing-id',
       householdId: 'household-id',
       source: 'aruodas',
@@ -246,6 +246,13 @@ describe('App Household boundary', () => {
       expect(runtime.runCandidatePlotAutomaticChecks).toHaveBeenCalledTimes(1)
     })
 
+    const regiaLink = document.querySelector<HTMLAnchorElement>(
+      'a[href^="https://regia.lt/map/regia2?"]',
+    )
+    expect(regiaLink?.textContent.trim()).toBe('REGIA')
+    expect(regiaLink?.target).toBe('_blank')
+    expect(regiaLink?.rel).toBe('noopener noreferrer')
+
     listing.candidatePlots[0].locationResolutionState = 'resolved'
     await runtime.renameActiveHousehold('Parcel retry')
     await waitFor(() => expect(findButton('Look up again')).toBeTruthy())
@@ -283,6 +290,53 @@ describe('App Household boundary', () => {
         }),
       ),
     )
+
+    listing = {
+      ...listing,
+      candidatePlots: [
+        {
+          ...listing.candidatePlots[0],
+          latitudeClue: null,
+          longitudeClue: null,
+        },
+      ],
+    }
+    await runtime.renameActiveHousehold('No coordinates')
+    await waitFor(() =>
+      expect(document.querySelector('a[href^="https://regia.lt/"]')).toBeNull(),
+    )
+
+    listing = {
+      ...listing,
+      candidatePlots: [
+        {
+          ...listing.candidatePlots[0],
+          resolvedLatitude: 54.690165483250915,
+          resolvedLongitude: 25.27825197453475,
+          effectiveLocationSource: 'address',
+        },
+      ],
+    }
+    await runtime.renameActiveHousehold('Address resolved')
+    await waitFor(() =>
+      expect(
+        document.querySelector<HTMLAnchorElement>(
+          'a[href^="https://regia.lt/"]',
+        )?.href,
+      ).toContain('?x=582411&y=6062277&'),
+    )
+
+    runtime.listSourceListings = () => [listing]
+    document.querySelector<HTMLAnchorElement>('a.crumb')?.click()
+    await waitFor(() => {
+      expect(location.pathname).toBe('/')
+      const link = document.querySelector<HTMLAnchorElement>(
+        '.list a[href^="https://regia.lt/"]',
+      )
+      expect(link?.href).toContain('?x=582411&y=6062277&')
+      expect(link?.target).toBe('_blank')
+      expect(link?.rel).toBe('noopener noreferrer')
+    })
   })
 
   it('shows the favourites pile being brought over, lets a failed capture be retried, and only then says all sorted', async () => {

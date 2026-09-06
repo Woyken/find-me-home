@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  candidatePlotRegiaUrl,
   createLocationResolver,
   isLocationResolutionError,
 } from './location-resolution'
@@ -41,6 +42,85 @@ const plot = (
   parcelDatasetVersion: null,
   updatedAt: 1,
   ...overrides,
+})
+
+describe('Candidate Plot REGIA link', () => {
+  const latitude = 54.690165483250915
+  const longitude = 25.27825197453475
+  const sharedUrl =
+    'https://regia.lt/map/regia2?x=582411&y=6062277&scale=10000&identify=true&sluo_ids=22,250,72,148,252,270,271,272,273,274,275,276,277,280,281,282,283,284,285,287,288'
+
+  it('projects direct coordinates into the shared REGIA URL format before lookup', () => {
+    expect(
+      candidatePlotRegiaUrl(
+        plot({
+          latitudeClue: latitude,
+          longitudeClue: longitude,
+        }),
+      ),
+    ).toBe(sharedUrl)
+  })
+
+  it.each(['address', 'parcel_number', 'coordinates'] as const)(
+    'prefers coordinates resolved from %s over the direct clue',
+    (effectiveLocationSource) => {
+      expect(
+        candidatePlotRegiaUrl(
+          plot({
+            resolvedLatitude: latitude,
+            resolvedLongitude: longitude,
+            effectiveLocationSource,
+            latitudeClue: 54.8,
+            longitudeClue: 25.2,
+          }),
+        ),
+      ).toBe(sharedUrl)
+    },
+  )
+
+  it('does not link unresolved addresses or parcel numbers', () => {
+    expect(candidatePlotRegiaUrl(plot({ addressClue: 'Vilnius' }))).toBeNull()
+    expect(
+      candidatePlotRegiaUrl(plot({ parcelNumberClue: '4400-1234-5678' })),
+    ).toBeNull()
+  })
+
+  it.each([
+    [null, longitude],
+    [latitude, null],
+    [NaN, longitude],
+    [latitude, Infinity],
+    [91, longitude],
+    [latitude, -181],
+  ])(
+    'rejects invalid coordinate pairs (%s, %s)',
+    (latitudeClue, longitudeClue) => {
+      expect(
+        candidatePlotRegiaUrl(plot({ latitudeClue, longitudeClue })),
+      ).toBeNull()
+      expect(
+        candidatePlotRegiaUrl(
+          plot({
+            resolvedLatitude: latitudeClue,
+            resolvedLongitude: longitudeClue,
+            latitudeClue: latitude,
+            longitudeClue: longitude,
+          }),
+        ),
+      ).toBe(sharedUrl)
+    },
+  )
+
+  it('does not mix incomplete resolved and direct coordinate pairs', () => {
+    expect(
+      candidatePlotRegiaUrl(
+        plot({
+          resolvedLatitude: latitude,
+          longitudeClue: longitude,
+        }),
+      ),
+    ).toBeNull()
+  })
 })
 
 describe('Candidate Plot location resolution', () => {

@@ -66,6 +66,30 @@ export const describeLks94 = (latitude: number, longitude: number) => {
   return `LKS94 x=${x.toFixed(1)} y=${y.toFixed(1)}`
 }
 
+export const candidatePlotRegiaUrl = (plot: CandidatePlotRecord) => {
+  // Resolved locations take precedence; direct clues also work before lookup.
+  for (const [latitude, longitude] of [
+    [plot.resolvedLatitude, plot.resolvedLongitude],
+    [plot.latitudeClue, plot.longitudeClue],
+  ]) {
+    if (
+      latitude === null ||
+      longitude === null ||
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180
+    )
+      continue
+    const { x, y } = toLks94(latitude, longitude)
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+    return `https://regia.lt/map/regia2?x=${Math.round(x)}&y=${Math.round(y)}&scale=10000&identify=true&sluo_ids=22,250,72,148,252,270,271,272,273,274,275,276,277,280,281,282,283,284,285,287,288`
+  }
+  return null
+}
+
 const cluesOf = (plot: CandidatePlotRecord): RecordedLocationClues => ({
   parcelNumberClue: plot.parcelNumberClue,
   latitudeClue: plot.latitudeClue,
