@@ -65,6 +65,12 @@ const scripts = [...homeHtml.matchAll(/<script[^>]+src="([^"]+)"/g)].map(
     expectOk(new URL(source, pagesUrl)).then((response) => response.text()),
 )
 const scriptText = (await Promise.all(scripts)).join('\n')
+const e2eChunk = scriptText.match(/assets\/bootstrap-[\w-]+\.js/)?.[0]
+const e2eText = e2eChunk
+  ? await expectOk(new URL(e2eChunk, pagesUrl)).then((response) =>
+      response.text(),
+    )
+  : ''
 
 if (
   bookmarkletScript.headers.get('access-control-allow-origin') !== '*' ||
@@ -94,10 +100,10 @@ if (!serviceWorkerText.includes('find-me-home-shell-')) {
     'Production service worker does not contain a versioned shell',
   )
 }
-if (e2eArgument === 'e2e' && !scriptText.includes('__FMH_E2E__')) {
+if (e2eArgument === 'e2e' && !e2eText.includes('__FMH_E2E__')) {
   throw new Error('E2E Pages artifact does not expose its test API')
 }
-if (e2eArgument !== 'e2e' && scriptText.includes('__FMH_E2E__')) {
+if (e2eArgument !== 'e2e' && e2eText.includes('__FMH_E2E__')) {
   throw new Error('Production Pages artifact exposes the E2E test API')
 }
 if (!parcelManifest.datasetVersion) {
