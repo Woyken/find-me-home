@@ -126,7 +126,9 @@ test('validates numeric and location clue inputs at boundaries', async ({
   await area.getByLabel('How exact').selectOption('exact')
   await area.getByLabel('Area (ares)').fill('8')
   await area.getByRole('button', { name: 'Save this area' }).click()
-  await expect(area.getByLabel('Longitude')).toHaveValue('180')
+  // The save remounts this editor and clears its local status. Wait for the
+  // persisted coordinates so the next validation cannot race its completion.
+  await expect(area.getByText('Hint 90, 180')).toBeVisible()
 
   await area.getByLabel('Longitude').fill('180.1')
   await area.getByRole('button', { name: 'Save this area' }).click()
