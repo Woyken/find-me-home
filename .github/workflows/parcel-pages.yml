@@ -83,7 +83,7 @@ jobs:
         if: inputs.e2e-pages == true
         run: pnpm exec playwright install --with-deps chromium
       - name: Refresh Registered Parcel assets
-        if: github.event_name != 'push' && inputs.e2e-pages != true
+        if: github.event_name != 'push' && inputs.e2e-pages != true && inputs.pages-only != true
         run: pnpm generate:parcels public/parcels
       - name: Validate Registered Parcel assets
         run: pnpm validate:parcels public/parcels
