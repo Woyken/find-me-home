@@ -12,6 +12,9 @@ dist-ssr
 __unconfig*
 
 data/
+!e2e/data/
+!e2e/data/aruodas/
+!e2e/data/aruodas/scenarios.ts
 dev-out.log
 dev-err.log
 playwright-report/
