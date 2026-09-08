@@ -21,7 +21,6 @@ try {
   await page.waitForFunction(() => Boolean(window.__FMH_E2E__))
   await page.evaluate(async () => {
     const api = window.__FMH_E2E__
-    if (!api) throw new Error('E2E runtime is unavailable')
     await api.ready()
     await api.reset()
   })
