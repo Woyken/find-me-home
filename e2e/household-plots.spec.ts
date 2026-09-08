@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import type { E2eApi, E2eListingSeed, E2eSeed } from '../src/e2e/support'
 import { PlotsPage } from './pages/plots.page'
+import { appOrigin, appPathPattern, appUrl } from './support/app-url.ts'
 
 declare global {
   interface Window {
@@ -16,7 +17,7 @@ const namespace = (prefix: string) =>
   )
 
 const open = async (page: Page, value: string) => {
-  await page.goto(`/?e2e=${value}`)
+  await page.goto(appUrl(`?e2e=${value}`))
   await expect
     .poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__)))
     .toBe(true)
@@ -36,7 +37,7 @@ test('creates a search, persists it, and handles invalid and hash invitations', 
 }) => {
   const value = namespace('household-start')
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
-    origin: 'http://127.0.0.1:3000',
+    origin: appOrigin,
   })
   await open(page, value)
   await page.getByRole('button', { name: 'Start a search' }).click()
@@ -64,7 +65,7 @@ test('creates a search, persists it, and handles invalid and hash invitations', 
   const invalid = await browser.newContext()
   try {
     const invalidPage = await invalid.newPage()
-    await invalidPage.goto(`/?e2e=${value}#household=%`)
+    await invalidPage.goto(appUrl(`?e2e=${value}#household=%`))
     await expect(
       invalidPage.getByRole('heading', { name: 'Find land together.' }),
     ).toBeVisible()
@@ -76,7 +77,9 @@ test('creates a search, persists it, and handles invalid and hash invitations', 
 
     const waitingPage = await invalid.newPage()
     await waitingPage.goto(
-      `/?e2e=${namespace('waiting')}#household=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`,
+      appUrl(
+        `?e2e=${namespace('waiting')}#household=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`,
+      ),
     )
     await expect(
       waitingPage.getByRole('heading', { name: 'Joining the search…' }),
@@ -118,12 +121,12 @@ test('manages settings and navigates empty plots and not-found pages', async ({
     page.getByRole('heading', { name: 'Second search' }),
   ).toBeVisible()
 
-  await page.goto(`/missing?e2e=${value}`)
+  await page.goto(appUrl(`missing?e2e=${value}`))
   await expect(
     page.getByRole('heading', { name: "There's nothing at this address" }),
   ).toBeVisible()
   await page.getByRole('link', { name: 'Back to plots' }).click()
-  await expect(page).toHaveURL(/\/$/)
+  await expect(page).toHaveURL(appPathPattern())
 })
 
 test('sorts, filters, maps, and plans populated located and unlocated plots', async ({

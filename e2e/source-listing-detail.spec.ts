@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import type { E2eListingSeed } from '../src/e2e/support'
+import { appPathPattern, appUrl } from './support/app-url.ts'
 
 type SeedResult = {
   sourceListingIds: string[]
@@ -20,13 +21,15 @@ const seed = async (page: Page, listings: readonly E2eListingSeed[]) =>
 
 const openSeededListing = async (page: Page, listing: E2eListingSeed) => {
   const e2eNamespace = namespace()
-  await page.goto(`/?e2e=${e2eNamespace}`, { waitUntil: 'domcontentloaded' })
+  await page.goto(appUrl(`?e2e=${e2eNamespace}`), {
+    waitUntil: 'domcontentloaded',
+  })
   await expect
     .poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__)))
     .toBe(true)
   const result = await seed(page, [listing])
   await page.goto(
-    `/source-listings/${result.sourceListingIds[0]}?e2e=${e2eNamespace}`,
+    appUrl(`source-listings/${result.sourceListingIds[0]}?e2e=${e2eNamespace}`),
     { waitUntil: 'domcontentloaded' },
   )
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
@@ -146,14 +149,16 @@ test('reports resolution and service failures, then retries deterministically', 
   page,
 }) => {
   const e2eNamespace = namespace()
-  await page.goto(`/?e2e=${e2eNamespace}`, { waitUntil: 'domcontentloaded' })
+  await page.goto(appUrl(`?e2e=${e2eNamespace}`), {
+    waitUntil: 'domcontentloaded',
+  })
   await expect
     .poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__)))
     .toBe(true)
   await page.evaluate(() => window.__FMH_E2E__?.setFailure('location'))
   const result = await seed(page, [{ id: '103', title: 'Retry fixture' }])
   await page.goto(
-    `/source-listings/${result.sourceListingIds[0]}?e2e=${e2eNamespace}`,
+    appUrl(`source-listings/${result.sourceListingIds[0]}?e2e=${e2eNamespace}`),
     { waitUntil: 'domcontentloaded' },
   )
   const area = page.locator('article.area').first()
@@ -228,7 +233,7 @@ test('removes a listing and restores the saved area when the advert is saved aga
 
   page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Remove plot' }).click()
-  await expect(page).toHaveURL(/\/$/)
+  await expect(page).toHaveURL(appPathPattern())
   await expect(page.getByText('Restore fixture')).toHaveCount(0)
 
   const restored = await page.evaluate((input) => {
@@ -236,7 +241,9 @@ test('removes a listing and restores the saved area when the advert is saved aga
     return window.__FMH_E2E__.resaveListing(input)
   }, listing)
   await page.goto(
-    `/source-listings/${restored.sourceListingIds[0]}?e2e=${namespace()}`,
+    appUrl(
+      `source-listings/${restored.sourceListingIds[0]}?e2e=${namespace()}`,
+    ),
     { waitUntil: 'domcontentloaded' },
   )
   const restoredArea = page.locator('article.area').first()

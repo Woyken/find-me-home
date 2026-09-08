@@ -14,12 +14,13 @@ import {
   runAddPlotDialogBookmarklet,
 } from '../support/bookmarklet-source.ts'
 import type { PlaywrightPage } from '../support/bookmarklet-source.ts'
+import { appPathPattern, appUrl } from '../support/app-url.ts'
 
 const encode = (value: unknown) =>
   Buffer.from(JSON.stringify(value), 'utf8').toString('base64url')
 
 const app = async (page: PlaywrightPage, namespace: string) => {
-  await page.goto(`/?e2e=${namespace}`)
+  await page.goto(appUrl(`?e2e=${namespace}`))
   await expect
     .poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__)))
     .toBe(true)
@@ -156,11 +157,11 @@ test('accepts v1 and v2 fragments and removes the fragment after storing a sessi
     title: 'Fragment plot',
     photos: [],
   }
-  await page.goto(`/#import=${encode({ version: 1, payload })}`)
+  await page.goto(appUrl(`#import=${encode({ version: 1, payload })}`))
   await new ImportReviewPage(page).expectListing('11-999999')
-  await expect(page).toHaveURL(/\/$/)
+  await expect(page).toHaveURL(appPathPattern())
   await page.goto(
-    `/#import=${encode({ version: 2, kind: 'listing', payload })}`,
+    appUrl(`#import=${encode({ version: 2, kind: 'listing', payload })}`),
   )
   await new ImportReviewPage(page).expectListing('11-999999')
   await page.reload()
@@ -180,7 +181,7 @@ test('rejects malformed, hostile, and oversized fragments without retaining a dr
     }),
     Buffer.from('x'.repeat(100_001)).toString('base64url'),
   ].entries()) {
-    await page.goto(`/?import-case=${index}#import=${fragment}`)
+    await page.goto(appUrl(`?import-case=${index}#import=${fragment}`))
     await new ImportReviewPage(page).expectUnreadable()
     await page.getByRole('button', { name: 'Back to plots' }).click()
     await expect(page).toHaveURL(new RegExp(`\\?import-case=${index}$`))

@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import { E2eSyncRelay } from './support/sync-relay.ts'
 import type { Page } from '@playwright/test'
 import type { E2eSeed } from '../src/e2e/support'
+import { appUrl } from './support/app-url.ts'
 
 const uniqueNamespace = (name: string) =>
   `${name}-${test.info().project.name.replace(/[^a-z0-9]/gi, '')}-${test.info().testId.replace(/[^a-z0-9]/gi, '')}`.slice(
@@ -10,7 +11,9 @@ const uniqueNamespace = (name: string) =>
   )
 
 const open = async (page: Page, namespace: string) => {
-  await page.goto(`/?e2e=${namespace}`, { waitUntil: 'domcontentloaded' })
+  await page.goto(appUrl(`?e2e=${namespace}`), {
+    waitUntil: 'domcontentloaded',
+  })
   await expect
     .poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__)))
     .toBe(true)
@@ -38,7 +41,7 @@ test.describe('visit plan', () => {
     const namespace = uniqueNamespace('visit-empty')
     await open(page, namespace)
     await seed(page, [])
-    await page.goto(`/visit-plan?e2e=${namespace}`, {
+    await page.goto(appUrl(`visit-plan?e2e=${namespace}`), {
       waitUntil: 'domcontentloaded',
     })
     await expect(
@@ -64,7 +67,7 @@ test.describe('visit plan', () => {
         plannedListingIds: ['101', '102'],
       })
     })
-    await page.goto(`/visit-plan?e2e=${namespace}`, {
+    await page.goto(appUrl(`visit-plan?e2e=${namespace}`), {
       waitUntil: 'domcontentloaded',
     })
     await page.getByRole('link', { name: 'Going to see' }).click()
@@ -96,7 +99,7 @@ test.describe('visit plan', () => {
         plannedListingIds: ['201', '202', '203'],
       })
     })
-    await page.goto(`/visit-plan?e2e=${namespace}`, {
+    await page.goto(appUrl(`visit-plan?e2e=${namespace}`), {
       waitUntil: 'domcontentloaded',
     })
 
@@ -170,7 +173,7 @@ test.describe('visit plan', () => {
       if (!api) throw new Error('E2E runtime is unavailable')
       return api.removeSourceListing(id)
     }, result.sourceListingIds[0])
-    await page.goto(`/visit-plan?e2e=${namespace}`, {
+    await page.goto(appUrl(`visit-plan?e2e=${namespace}`), {
       waitUntil: 'domcontentloaded',
     })
     await expect(
@@ -240,23 +243,26 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
       )
 
     await second.getByRole('button', { name: 'Move Shared second up' }).click()
-    await first.goto(`/visit-plan?e2e=${namespace}&e2e-device=first`, {
+    await first.goto(appUrl(`visit-plan?e2e=${namespace}&e2e-device=first`), {
       waitUntil: 'domcontentloaded',
     })
     await expect
       .poll(() => plannedTitles(first))
       .toEqual(['Shared second', 'Shared first'])
     await first.evaluate(() => window.__FMH_E2E__?.captureInbox('503'))
-    await second.goto(`/import-inbox?e2e=${namespace}&e2e-device=second`, {
-      waitUntil: 'domcontentloaded',
-    })
+    await second.goto(
+      appUrl(`import-inbox?e2e=${namespace}&e2e-device=second`),
+      {
+        waitUntil: 'domcontentloaded',
+      },
+    )
     await expect(second.getByText('E2E inbox 503')).toBeVisible()
     await first.evaluate((id) => {
       const api = window.__FMH_E2E__
       if (!api) throw new Error('E2E runtime is unavailable')
       return api.markVisited(id)
     }, result.sourceListingIds[0])
-    await second.goto(`/visit-plan?e2e=${namespace}&e2e-device=second`, {
+    await second.goto(appUrl(`visit-plan?e2e=${namespace}&e2e-device=second`), {
       waitUntil: 'domcontentloaded',
     })
     await expect.poll(() => plannedTitles(second)).toEqual(['Shared second'])
@@ -265,13 +271,15 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
       if (!api) throw new Error('E2E runtime is unavailable')
       return api.removeSourceListing(id)
     }, result.sourceListingIds[1])
-    await first.goto(`/visit-plan?e2e=${namespace}&e2e-device=first`, {
+    await first.goto(appUrl(`visit-plan?e2e=${namespace}&e2e-device=first`), {
       waitUntil: 'domcontentloaded',
     })
     await expect.poll(() => plannedTitles(first)).toEqual([])
 
     await first.goto(
-      `/source-listings/${result.sourceListingIds[0]}?e2e=${namespace}&e2e-device=first`,
+      appUrl(
+        `source-listings/${result.sourceListingIds[0]}?e2e=${namespace}&e2e-device=first`,
+      ),
       {
         waitUntil: 'domcontentloaded',
       },

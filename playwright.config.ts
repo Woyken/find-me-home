@@ -3,7 +3,9 @@ import { defineConfig, devices } from '@playwright/test'
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
 const isTermux = process.env.FMH_TERMUX === '1'
 const port = Number(process.env.PLAYWRIGHT_WEB_SERVER_PORT ?? 3000)
-const baseURL = `http://127.0.0.1:${port}`
+const localBasePath = process.env.E2E_BASE_PATH ?? '/'
+const localBaseURL = new URL(localBasePath, `http://127.0.0.1:${port}`).href
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? localBaseURL
 const mobileDevice = devices['iPhone 13']
 const desktopDevice = devices['Desktop Chrome']
 
@@ -45,12 +47,19 @@ export default defineConfig({
       use: { ...termuxSafeMobileDevice, browserName: 'chromium' },
     },
   ],
-  webServer: {
-    command: `pnpm dev --mode e2e --host 127.0.0.1 --port ${port}`,
-    url: baseURL,
-    reuseExistingServer: false,
-    timeout: 30_000,
-    // The runner's Termux preload must not affect Vite or app dependencies.
-    env: { NODE_OPTIONS: '' },
-  },
+  ...(process.env.PLAYWRIGHT_BASE_URL
+    ? {}
+    : {
+        webServer: {
+          command: `pnpm dev --mode e2e --host 127.0.0.1 --port ${port}`,
+          url: localBaseURL,
+          reuseExistingServer: false,
+          timeout: 30_000,
+          // The runner's Termux preload must not affect Vite or app dependencies.
+          env: {
+            NODE_OPTIONS: '',
+            VITE_E2E_BASE_PATH: localBasePath,
+          },
+        },
+      }),
 })

@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run --exclude=e2e/**",
     "test:e2e": "playwright test",
+    "test:e2e:base-path": "E2E_BASE_PATH=/find-me-home/ playwright test",
     "test:e2e:termux": "FMH_TERMUX=1 NODE_OPTIONS=--require=./e2e/termux-preload.cjs PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$(command -v chromium-browser) playwright test --workers=1",
     "deploy:worker": "wrangler deploy",
     "smoke:worker": "node --experimental-strip-types scripts/worker-smoke.ts",

@@ -51,10 +51,10 @@ const bookmarkletPlugin = (): Plugin => ({
 })
 
 export default defineConfig(({ mode }) => ({
-  // PR browser tests always run at the localhost root, even in GitHub Actions.
+  // PR browser tests default to the localhost root but can exercise Pages scope.
   base:
     mode === 'e2e'
-      ? '/'
+      ? (process.env.VITE_E2E_BASE_PATH ?? '/')
       : process.env.GITHUB_ACTIONS === 'true'
         ? `/${process.env.GITHUB_REPOSITORY?.split('/')[1] ?? ''}/`
         : '/',

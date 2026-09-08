@@ -7,8 +7,10 @@ import VisitPlanPage, { preloadVisitPlan } from './routes/visit-plan'
 import ImportInboxPage, { preloadImportInbox } from './routes/import-inbox'
 import { paths } from './paths'
 
+const base = import.meta.env.BASE_URL.replace(/\/$/, '') || '/'
+
 export const Router = createRouter({
-  base: import.meta.env.BASE_URL,
+  base,
   routes: [
     { path: '/', component: Home, preload: preloadHome },
     {

@@ -12,9 +12,10 @@ import {
   runAddPlotDialogBookmarklet,
 } from '../support/bookmarklet-source.ts'
 import type { PlaywrightPage } from '../support/bookmarklet-source.ts'
+import { appUrl } from '../support/app-url.ts'
 
 const app = async (page: PlaywrightPage, namespace: string) => {
-  await page.goto(`/?e2e=${namespace}`)
+  await page.goto(appUrl(`?e2e=${namespace}`))
   await expect
     .poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__)))
     .toBe(true)

@@ -1,16 +1,14 @@
-import {
-  findMeHomeAppOrigin,
-  findMeHomeHttpsFixtureOrigin,
-} from '../fixtures/aruodas/source-page.ts'
+import { findMeHomeHttpsFixtureOrigin } from '../fixtures/aruodas/source-page.ts'
 import type { SourcePageFixture } from '../fixtures/aruodas/source-page.ts'
 import type { Page, Route } from '@playwright/test'
 import { expect } from '@playwright/test'
 import { AddPlotDialog } from '../components/add-plot-dialog.ts'
+import { appBaseUrl, appOrigin, appPath, appUrl } from './app-url.ts'
 
 export type PlaywrightPage = Page
 export type PlaywrightRoute = Route
 
-export const bookmarkletAssetPath = '/aruodas-bookmarklet.js'
+export const bookmarkletAssetPath = appPath('aruodas-bookmarklet.js')
 const escapeRegExp = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -21,7 +19,7 @@ export const addPlotDialogBookmarkletHref = (appPage: PlaywrightPage) =>
 /** Reads the scraper asset the running application actually exposes. */
 export const actualBookmarkletSource = (appPage: PlaywrightPage) =>
   appPage.request
-    .get(`${findMeHomeAppOrigin}${bookmarkletAssetPath}`)
+    .get(appUrl('aruodas-bookmarklet.js'))
     .then(async (response) => {
       if (!response.ok())
         throw new Error(`Could not fetch scraper: ${response.status()}`)
@@ -29,8 +27,10 @@ export const actualBookmarkletSource = (appPage: PlaywrightPage) =>
     })
 
 const testLoaderHref = (href: string) => {
-  const productionOrigin = JSON.stringify(`${findMeHomeAppOrigin}/`)
-  const fixtureOrigin = JSON.stringify(`${findMeHomeHttpsFixtureOrigin}/`)
+  const productionOrigin = JSON.stringify(appBaseUrl.href)
+  const fixtureOrigin = JSON.stringify(
+    new URL(appBaseUrl.pathname, `${findMeHomeHttpsFixtureOrigin}/`).href,
+  )
   if (!href.includes(productionOrigin))
     throw new Error('Loader does not contain the rendered app base URL')
   // Only the embedded app base changes. The emitted loader itself is untouched.
@@ -58,16 +58,13 @@ export const runAddPlotDialogBookmarklet = async (
       if (route.request().isNavigationRequest()) {
         await route.fulfill({
           contentType: 'text/html',
-          body: `<script>location.replace(${JSON.stringify(findMeHomeAppOrigin)}+location.pathname+location.search+location.hash)</script>`,
+          body: `<script>location.replace(${JSON.stringify(appOrigin)}+location.pathname+location.search+location.hash)</script>`,
         })
         return
       }
       const fixtureUrl = new URL(route.request().url())
       const response = await sourcePage.request.get(
-        new URL(
-          `${fixtureUrl.pathname}${fixtureUrl.search}`,
-          findMeHomeAppOrigin,
-        ).href,
+        new URL(`${fixtureUrl.pathname}${fixtureUrl.search}`, appOrigin).href,
       )
       await route.fulfill({
         status: response.status(),
@@ -105,7 +102,9 @@ export const runAddPlotDialogBookmarklet = async (
   }
   if (options?.expectImport === false) return { requests }
   await expect(sourcePage).toHaveURL(
-    new RegExp(`^${escapeRegExp(findMeHomeAppOrigin)}/.*#import=`),
+    new RegExp(
+      `^${escapeRegExp(appOrigin)}${escapeRegExp(appBaseUrl.pathname)}.*#import=`,
+    ),
   )
   const destination = await captureNavigation(sourcePage)
   return { requests, destination }
@@ -121,10 +120,7 @@ export const openSourcePage = async (
   // Permit only the app and this fixture document; fail closed for everything else.
   await page.route('**/*', async (route) => {
     const url = new URL(route.request().url())
-    if (
-      url.origin === new URL(findMeHomeAppOrigin).origin ||
-      url.origin === findMeHomeHttpsFixtureOrigin
-    )
+    if (url.origin === appOrigin || url.origin === findMeHomeHttpsFixtureOrigin)
       return route.continue()
     await route.abort()
   })
