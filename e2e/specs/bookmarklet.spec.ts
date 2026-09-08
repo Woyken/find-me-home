@@ -28,13 +28,6 @@ const app = async (page: PlaywrightPage, namespace: string) => {
   }, undefined)
 }
 
-const transportFromPage = async (page: PlaywrightPage) => {
-  const fragment = new URL(page.url()).hash.match(/^#import=(.+)$/)?.[1]
-  if (!fragment)
-    throw new Error('Bookmarklet did not produce an import fragment')
-  return decodeBookmarkletPayload(fragment)
-}
-
 test('uses the Add a plot dialog loader and requests the cache-busted scraper', async ({
   page,
 }) => {
@@ -63,7 +56,6 @@ for (const scenario of importableAdverts) {
       href,
       await actualBookmarkletSource(page),
     )
-    await expect(page).toHaveURL(/#import=/)
     const review = new ImportReviewPage(page)
     await review.expectListing(scenario.listingId)
     if (scenario.lazyPhotos)
@@ -110,7 +102,6 @@ test('imports an advert when unrelated JSON-LD is malformed', async ({
     href,
     await actualBookmarkletSource(page),
   )
-  await expect(page).toHaveURL(/#import=/)
   await new ImportReviewPage(page).expectListing('11-424242')
 })
 
@@ -123,18 +114,19 @@ test('does not manufacture coordinates from malformed Aruodas map data', async (
     page,
     createAruodasSourcePage(aruodasScenarios.malformedCoordinatesAdvert),
   )
-  await runAddPlotDialogBookmarklet(
+  const { destination } = await runAddPlotDialogBookmarklet(
     page,
     href,
     await actualBookmarkletSource(page),
   )
-  await expect(page).toHaveURL(/#import=/)
 
-  expect(await transportFromPage(page)).toMatchObject({
+  expect(decodeBookmarkletPayload(destination?.fragment ?? '')).toMatchObject({
     kind: 'listing',
     payload: { locationConfidence: 'unknown' },
   })
-  expect(await transportFromPage(page)).not.toMatchObject({
+  expect(
+    decodeBookmarkletPayload(destination?.fragment ?? ''),
+  ).not.toMatchObject({
     payload: { lat: expect.any(Number) },
   })
 })
@@ -153,7 +145,6 @@ test('uses the loader fetch fallback and alerts when the scraper cannot load', a
     { failScriptElement: true },
   )
   expect(result.requests).toBe(2)
-  await expect(page).toHaveURL(/#import=/)
   await new ImportReviewPage(page).expectListing('11-424242')
 })
 
@@ -169,7 +160,7 @@ test('alerts when both loader paths cannot load the scraper', async ({
     page,
     href,
     await actualBookmarkletSource(page),
-    { failScriptElement: true, failFallback: true },
+    { failScriptElement: true, failFallback: true, expectImport: false },
   )
   expect(result.requests).toBe(2)
   const alert = await dialog
@@ -192,7 +183,6 @@ test('keeps a return marker through advert review and save', async ({
     href,
     await actualBookmarkletSource(page),
   )
-  await expect(page).toHaveURL(/#import=/)
   const review = new ImportReviewPage(page)
   await review.save()
   await expect(page).toHaveURL(/\/import-inbox$/)
@@ -213,7 +203,6 @@ for (const scenario of [
       href,
       await actualBookmarkletSource(page),
     )
-    await expect(page).toHaveURL(/#import=/)
     await new ImportReviewPage(page).save()
     await expect(page).toHaveURL(/\/source-listings\//)
     await expect(page.getByRole('heading', { level: 1 })).toContainText(

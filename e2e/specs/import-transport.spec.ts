@@ -33,8 +33,7 @@ const app = async (page: PlaywrightPage, namespace: string) => {
   }, undefined)
 }
 
-const favoritesPayload = (page: PlaywrightPage) => {
-  const fragment = new URL(page.url()).hash.match(/^#import=(.+)$/)?.[1]
+const favoritesPayload = (fragment: string | undefined) => {
   if (!fragment)
     throw new Error('Bookmarklet did not produce an import fragment')
   return decodeBookmarkletPayload(fragment)
@@ -49,13 +48,13 @@ test('moves favorites to the IndexedDB inbox, then returns after saving an adver
     page,
     createAruodasSourcePage(aruodasScenarios.desktopFavorites),
   )
-  await runAddPlotDialogBookmarklet(
+  const { destination } = await runAddPlotDialogBookmarklet(
     page,
     href,
     await actualBookmarkletSource(page),
   )
   await expect(page).toHaveURL(/\/import-inbox/)
-  expect(favoritesPayload(page)).toMatchObject({
+  expect(favoritesPayload(destination?.fragment)).toMatchObject({
     version: 2,
     kind: 'favorites',
     payload: {
@@ -99,7 +98,6 @@ test('moves favorites to the IndexedDB inbox, then returns after saving an adver
     href,
     await actualBookmarkletSource(page),
   )
-  await expect(page).toHaveURL(/#import=/)
   const review = new ImportReviewPage(page)
   await review.expectListing('11-424242')
   await review.save()
@@ -116,14 +114,14 @@ test('moves mobile Aruodas favorites through the inbox with lazy thumbnails', as
     page,
     createAruodasSourcePage(aruodasScenarios.mobileFavorites),
   )
-  await runAddPlotDialogBookmarklet(
+  const { destination } = await runAddPlotDialogBookmarklet(
     page,
     href,
     await actualBookmarkletSource(page),
   )
   await expect(page).toHaveURL(/\/import-inbox/)
 
-  expect(favoritesPayload(page)).toMatchObject({
+  expect(favoritesPayload(destination?.fragment)).toMatchObject({
     version: 2,
     kind: 'favorites',
     payload: {

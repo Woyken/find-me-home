@@ -91,6 +91,14 @@ export const runAddPlotDialogBookmarklet = async (
       url.searchParams.has('t')
     )
   })
+  const destination =
+    options?.expectImport === false
+      ? undefined
+      : sourcePage.waitForEvent('framenavigated', (frame) =>
+          new RegExp(
+            `^${escapeRegExp(appOrigin)}${escapeRegExp(appBaseUrl.pathname)}.*#import=`,
+          ).test(frame.url()),
+        )
   await sourcePage.evaluate(
     (code) => (0, eval)(code),
     testLoaderHref(href).slice('javascript:'.length),
@@ -101,13 +109,16 @@ export const runAddPlotDialogBookmarklet = async (
     return { requests }
   }
   if (options?.expectImport === false) return { requests }
-  await expect(sourcePage).toHaveURL(
-    new RegExp(
-      `^${escapeRegExp(appOrigin)}${escapeRegExp(appBaseUrl.pathname)}.*#import=`,
-    ),
-  )
-  const destination = await captureNavigation(sourcePage)
-  return { requests, destination }
+  if (!destination)
+    throw new Error('Bookmarklet import navigation was not set up')
+  const frame = await destination
+  return {
+    requests,
+    destination: {
+      url: frame.url(),
+      fragment: new URL(frame.url()).hash.slice(8),
+    },
+  }
 }
 
 /** Hosts a fixture as its independent source origin, optionally enforcing CSP. */
