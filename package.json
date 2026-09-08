@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite dev --port 3000",
     "build": "vite build && node --experimental-strip-types scripts/build-pages-assets.ts",
+    "build:e2e:pages": "vite build --mode e2e && node --experimental-strip-types scripts/build-pages-assets.ts",
     "start": "vite preview",
     "preview": "vite preview",
     "test": "vitest run --exclude=e2e/**",
@@ -14,6 +15,7 @@
     "deploy:worker": "wrangler deploy",
     "smoke:worker": "node --experimental-strip-types scripts/worker-smoke.ts",
     "smoke:pages": "node --experimental-strip-types scripts/pages-smoke.ts",
+    "smoke:pages:e2e": "node --experimental-strip-types scripts/pages-e2e-ready.ts",
     "verify:worker-build": "node --experimental-strip-types scripts/verify-worker-build.ts",
     "generate:parcels": "node --experimental-strip-types scripts/generate-parcels.ts",
     "validate:parcels": "node --experimental-strip-types scripts/validate-parcels.ts",
