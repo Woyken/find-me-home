@@ -1,10 +1,20 @@
-const namespacePattern = /^[A-Za-z0-9_-]{1,80}$/
+export const e2eStorageKey = 'find-me-home-e2e-enabled'
 
-/** E2E is an explicit, browser-local test selector, never an access control boundary. */
-export const e2eNamespace = (search: string): string | undefined => {
-  const value = new URLSearchParams(search).get('e2e')
-  return value && namespacePattern.test(value) ? value : undefined
+/** E2E is test tooling, not an access-control boundary. */
+export const shouldBootE2e = (mode: string, storage: Storage = sessionStorage) =>
+  mode === 'e2e' || storage.getItem(e2eStorageKey) === 'true'
+
+export const e2eInitializerPath = () =>
+  `${import.meta.env.BASE_URL.replace(/\/$/, '')}/initialize-e2e-storage`
+
+export const e2eReturnPath = (value: string | null) => {
+  const base = new URL(import.meta.env.BASE_URL, location.origin)
+  const basePath = base.pathname.replace(/\/$/, '') || '/'
+  if (!value?.startsWith('/')) return base.pathname
+  const target = new URL(value, location.origin)
+  const withinBase =
+    basePath === '/' || target.pathname === basePath || target.pathname.startsWith(`${basePath}/`)
+  return target.origin === location.origin && withinBase
+    ? `${target.pathname}${target.search}${target.hash}`
+    : base.pathname
 }
-
-export const shouldBootE2e = (mode: string, search: string) =>
-  mode === 'e2e' || e2eNamespace(search) !== undefined

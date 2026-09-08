@@ -40,11 +40,11 @@ describe('Aruodas import fragment', () => {
     expect(() => new Function(bookmarklet.slice('javascript:'.length))).not.toThrow()
   })
 
-  it('retains only a valid E2E selector in a test loader URL', () => {
+  it('removes query parameters from the loader URL', () => {
     expect(createAruodasBookmarklet('https://example.test/find-me-home/?e2e=run_42&x=1')).toContain(
-      'var a="https://example.test/find-me-home/?e2e=run_42"',
+      'var a="https://example.test/find-me-home/"',
     )
-    expect(createAruodasBookmarklet('https://example.test/find-me-home/?e2e=not%20safe')).toContain(
+    expect(createAruodasBookmarklet('https://example.test/find-me-home/?x=1')).toContain(
       'var a="https://example.test/find-me-home/"',
     )
   })

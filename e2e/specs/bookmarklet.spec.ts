@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { initializeE2ePage, test } from '../support/test.ts'
 import { AddPlotDialog } from '../components/add-plot-dialog.ts'
 import { aruodasScenarios } from '../data/aruodas/scenarios.ts'
 import type { AdvertScenario } from '../data/aruodas/scenarios.ts'
@@ -12,11 +13,9 @@ import {
   runAddPlotDialogBookmarklet,
 } from '../support/bookmarklet-source.ts'
 import type { PlaywrightPage } from '../support/bookmarklet-source.ts'
-import { appUrl } from '../support/app-url.ts'
 
-const app = async (page: PlaywrightPage, namespace: string) => {
-  await page.goto(appUrl(`?e2e=${namespace}`))
-  await expect.poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__))).toBe(true)
+const app = async (page: PlaywrightPage) => {
+  await initializeE2ePage(page)
   await page.evaluate(async () => {
     const api = window.__FMH_E2E__
     if (!api) throw new Error('E2E runtime is unavailable')
@@ -29,7 +28,7 @@ const app = async (page: PlaywrightPage, namespace: string) => {
 test('uses the Add a plot dialog loader and requests the cache-busted scraper', async ({
   page,
 }) => {
-  await app(page, 'bookmarklet-loader')
+  await app(page)
   const href = await new AddPlotDialog(page).bookmarkletHref()
   expect(href).toMatch(/^javascript:/)
   expect(href).toContain('aruodas-bookmarklet.js?t=')
@@ -45,7 +44,7 @@ const importableAdverts: ReadonlyArray<AdvertScenario> = [
 
 for (const scenario of importableAdverts) {
   test(`imports ${scenario.name} through the browser`, async ({ page }) => {
-    await app(page, `advert-${scenario.name}`)
+    await app(page)
     const href = await addPlotDialogBookmarkletHref(page)
     const sourcePage = createAruodasSourcePage(scenario)
     await openSourcePage(page, sourcePage)
@@ -65,7 +64,7 @@ for (const scenario of [
   aruodasScenarios.inactiveAdvert,
 ]) {
   test(`rejects ${scenario.name}`, async ({ page }) => {
-    await app(page, `reject-${scenario.name}`)
+    await app(page)
     const href = await addPlotDialogBookmarkletHref(page)
     await openSourcePage(page, createAruodasSourcePage(scenario))
     page.once('dialog', (dialog) => dialog.accept())
@@ -77,7 +76,7 @@ for (const scenario of [
 }
 
 test('imports an advert when unrelated JSON-LD is malformed', async ({ page }) => {
-  await app(page, 'malformed-advert')
+  await app(page)
   const href = await addPlotDialogBookmarkletHref(page)
   const fixture = createAruodasSourcePage(aruodasScenarios.malformedAdvert)
   await openSourcePage(page, fixture)
@@ -86,7 +85,7 @@ test('imports an advert when unrelated JSON-LD is malformed', async ({ page }) =
 })
 
 test('does not manufacture coordinates from malformed Aruodas map data', async ({ page }) => {
-  await app(page, 'malformed-coordinates')
+  await app(page)
   const href = await addPlotDialogBookmarkletHref(page)
   await openSourcePage(page, createAruodasSourcePage(aruodasScenarios.malformedCoordinatesAdvert))
   const { destination } = await runAddPlotDialogBookmarklet(
@@ -105,7 +104,7 @@ test('does not manufacture coordinates from malformed Aruodas map data', async (
 })
 
 test('uses the loader fetch fallback and alerts when the scraper cannot load', async ({ page }) => {
-  await app(page, 'load-fallback')
+  await app(page)
   const href = await addPlotDialogBookmarkletHref(page)
   const fixture = createAruodasSourcePage(aruodasScenarios.desktopAdvert)
   await openSourcePage(page, fixture)
@@ -120,7 +119,7 @@ test('uses the loader fetch fallback and alerts when the scraper cannot load', a
 })
 
 test('alerts when both loader paths cannot load the scraper', async ({ page }) => {
-  await app(page, 'load-failure')
+  await app(page)
   const href = await addPlotDialogBookmarkletHref(page)
   const fixture = createAruodasSourcePage(aruodasScenarios.desktopAdvert)
   await openSourcePage(page, fixture)
@@ -138,7 +137,7 @@ test('alerts when both loader paths cannot load the scraper', async ({ page }) =
 })
 
 test('keeps a return marker through advert review and save', async ({ page }) => {
-  await app(page, 'return-marker')
+  await app(page)
   const href = await addPlotDialogBookmarkletHref(page)
   const fixture = createAruodasSourcePage(aruodasScenarios.desktopAdvert)
   await openSourcePage(page, {
@@ -148,14 +147,14 @@ test('keeps a return marker through advert review and save', async ({ page }) =>
   await runAddPlotDialogBookmarklet(page, href, await actualBookmarkletSource(page))
   const review = new ImportReviewPage(page)
   await review.save()
-  await expect(page).toHaveURL(/\/import-inbox\?e2e=return-marker$/)
+  await expect(page).toHaveURL(/\/import-inbox$/)
 })
 
 for (const scenario of [aruodasScenarios.desktopAdvert, aruodasScenarios.mobileAdvert]) {
   test(`saves ${scenario.name}, opens its detail, and persists it after reload`, async ({
     page,
   }) => {
-    await app(page, `save-${scenario.name}`)
+    await app(page)
     const href = await addPlotDialogBookmarkletHref(page)
     await openSourcePage(page, createAruodasSourcePage(scenario))
     await runAddPlotDialogBookmarklet(page, href, await actualBookmarkletSource(page))

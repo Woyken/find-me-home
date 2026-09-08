@@ -6,7 +6,6 @@ import { LocationResolutionError } from '../location-resolution'
 import type { LocationResolver } from '../location-resolution'
 import type { ResolvedLocationData } from '../source-listings/model'
 import { createE2eRoomFactory } from './room'
-import { e2eNamespace } from './selector'
 import { e2eReview } from './support'
 import type { E2eApi, E2eFailure, E2eSeed, E2eSyncEvent } from './support'
 
@@ -24,11 +23,7 @@ const resolvedLocation = (latitude: number, longitude: number): ResolvedLocation
 })
 
 const boot = () => {
-  const namespace = e2eNamespace(location.search) ?? 'default'
-  const device = new URLSearchParams(location.search).get('e2e-device')
-  if (device && !/^[A-Za-z0-9_-]{1,80}$/.test(device)) throw new Error('Invalid E2E device')
-  const storageNamespace = `${namespace}-${device ?? 'default'}`
-  const failureKey = `find-me-home-e2e-failure-${namespace}`
+  const failureKey = 'find-me-home-e2e-failure'
   let tick = 1_735_689_600_000
   let uuid = 0
   const syncEvents: E2eSyncEvent[] = []
@@ -110,10 +105,10 @@ const boot = () => {
     },
   }
   const runtime = createBrowserHouseholdRuntime({
-    accessDatabaseName: `find-me-home-e2e-device-${storageNamespace}`,
-    sharedDatabasePrefix: `find-me-home-e2e-shared-${storageNamespace}`,
+    accessDatabaseName: 'find-me-home-device',
+    sharedDatabasePrefix: 'find-me-home-shared',
     now: () => ++tick,
-    uuid: () => `e2e-${namespace}-${++uuid}`,
+    uuid: () => `e2e-${++uuid}`,
     beforeVisitPlanCommit: (transaction) => {
       if (failure === 'visit-plan-storage') transaction.abort()
     },
@@ -134,9 +129,8 @@ const boot = () => {
     await ready()
     for (const household of runtime.listHouseholds())
       await runtime.removeHousehold(household.householdId)
-    sessionStorage.clear()
-    localStorage.clear()
     if (failure) localStorage.setItem(failureKey, failure)
+    else localStorage.removeItem(failureKey)
   }
   const seed = async (seedInput: E2eSeed) => {
     await reset()
@@ -177,7 +171,7 @@ const boot = () => {
     }
   }
   const api: E2eApi = {
-    namespace,
+    namespace: 'browser-context',
     ready,
     reset,
     seed,

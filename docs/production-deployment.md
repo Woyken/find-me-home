@@ -37,13 +37,16 @@ has no Pages write or deployment action. A failure is visible on that workflow
 run, including its always-uploaded Playwright artifacts, but cannot block, alter,
 roll back, or otherwise change the already-completed deployment.
 
-The normal production app remains fail-closed: E2E fixtures are loaded lazily only
-for an explicit valid `?e2e=<safe namespace>` query. This selector is browser-local
-test isolation, not authentication. Unselected or malformed visits use ordinary
-application startup and service-worker registration. Selected tests use unique
-namespaces, `find-me-home-e2e-*` IndexedDB databases, fake service providers, and
-the E2E room transport, so they do not touch normal browser data, the Worker, or
-real Trystero. Because GitHub evaluates event-triggered workflow definitions from
+The normal production app remains fail-closed. Live browser tests first visit the
+non-product `/initialize-e2e-storage` page in every fresh browser context; it sets
+a sessionStorage flag and replaces itself with a same-origin, base-path-relative
+return path. Direct visits simply enable test tooling for that tab and return to
+the app root. This is not authentication or a security boundary. Normal routes,
+including URLs produced by bookmarks and imports, never enable E2E or carry E2E
+parameters. Initialized tabs use fake service providers and the E2E room transport,
+and suppress service-worker registration, so they do not call the Worker or real
+Trystero. They use the normal IndexedDB names because each Playwright BrowserContext
+is fresh and isolated; context closure is the primary cleanup. Because GitHub evaluates event-triggered workflow definitions from
 the default branch, the observer first becomes eligible after this workflow has
 merged; it does not retrospectively test the deployment that introduces it.
 

@@ -66,7 +66,7 @@ describe('production Pages artifact', () => {
     expect(serviceWorker).not.toContain('workers.dev')
   })
 
-  it('keeps the normal entry fail-closed while shipping a lazy gated E2E chunk', () => {
+  it('keeps the normal entry fail-closed while shipping a lazy browser-local E2E chunk', () => {
     const index = readFileSync(path.join(clientDirectory, 'index.html'), 'utf8')
     const serviceWorker = readFileSync(path.join(clientDirectory, 'service-worker.js'), 'utf8')
     const bookmarklet = readFileSync(path.join(clientDirectory, 'aruodas-bookmarklet.js'), 'utf8')
@@ -81,8 +81,8 @@ describe('production Pages artifact', () => {
     expect(index).not.toContain('__FMH_E2E__')
     expect(appAssetContents.filter((asset) => asset.includes('__FMH_E2E__'))).toHaveLength(1)
     expect(appAssetContents.some((asset) => /import\(`\.\/bootstrap-/.test(asset))).toBe(true)
-    expect(appAssetContents.some((asset) => asset.includes('find-me-home-e2e-device-'))).toBe(true)
-    expect(appAssetContents.some((asset) => asset.includes('find-me-home-e2e-shared-'))).toBe(true)
+    expect(appAssetContents.some((asset) => asset.includes('find-me-home-e2e-device-'))).toBe(false)
+    expect(appAssetContents.some((asset) => asset.includes('find-me-home-e2e-shared-'))).toBe(false)
     expect(appAssetContents.some((asset) => asset.includes('find-me-home-device'))).toBe(true)
     expect(serviceWorker).toContain('/find-me-home/index.html')
     expect(serviceWorker).not.toContain('__FMH_E2E__')

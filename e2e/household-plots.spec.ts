@@ -1,8 +1,9 @@
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { initializeE2ePage, test } from './support/test.ts'
 import type { Page } from '@playwright/test'
 import type { E2eApi, E2eListingSeed, E2eSeed } from '../src/e2e/support'
 import { PlotsPage } from './pages/plots.page'
-import { appOrigin, appUrl } from './support/app-url.ts'
+import { appOrigin, appPath, appUrl } from './support/app-url.ts'
 
 declare global {
   interface Window {
@@ -10,17 +11,7 @@ declare global {
   }
 }
 
-const namespace = (prefix: string) =>
-  `${prefix}-${test.info().project.name.replace(/[^a-z0-9]/gi, '')}-${test.info().testId.replace(/[^a-z0-9]/gi, '')}`.slice(
-    0,
-    80,
-  )
-
-const open = async (page: Page, value: string) => {
-  await page.goto(appUrl(`?e2e=${value}`))
-  await expect.poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__))).toBe(true)
-  await page.evaluate(async () => window.__FMH_E2E__?.ready())
-}
+const open = async (page: Page) => initializeE2ePage(page)
 
 const seed = async (page: Page, input: E2eSeed) =>
   page.evaluate((value) => {
@@ -33,11 +24,10 @@ test('creates a search, persists it, and handles invalid and hash invitations', 
   browser,
   context,
 }) => {
-  const value = namespace('household-start')
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
     origin: appOrigin,
   })
-  await open(page, value)
+  await open(page)
   await page.getByRole('button', { name: 'Start a search' }).click()
   await expect(page.getByRole('heading', { name: 'Our home search' })).toBeVisible()
   await page.reload()
@@ -55,15 +45,16 @@ test('creates a search, persists it, and handles invalid and hash invitations', 
   const invalid = await browser.newContext()
   try {
     const invalidPage = await invalid.newPage()
-    await invalidPage.goto(appUrl(`?e2e=${value}#household=%`))
+    await initializeE2ePage(invalidPage, `${appPath()}#household=%`)
     await expect(invalidPage.getByRole('heading', { name: 'Find land together.' })).toBeVisible()
     await invalidPage.getByLabel('Invitation link').fill('not an invitation')
     await invalidPage.getByRole('button', { name: 'Join' }).click()
     await expect(invalidPage.getByRole('alert')).toContainText("doesn't look like")
 
     const waitingPage = await invalid.newPage()
-    await waitingPage.goto(
-      appUrl(`?e2e=${namespace('waiting')}#household=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`),
+    await initializeE2ePage(
+      waitingPage,
+      `${appPath()}#household=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`,
     )
     await expect(waitingPage.getByRole('heading', { name: 'Joining the search…' })).toBeVisible()
     await expect(waitingPage.getByRole('status')).toContainText('Waiting for another device')
@@ -73,8 +64,7 @@ test('creates a search, persists it, and handles invalid and hash invitations', 
 })
 
 test('manages settings and navigates empty plots and not-found pages', async ({ page }) => {
-  const value = namespace('settings-empty')
-  await open(page, value)
+  await open(page)
   await page.getByRole('button', { name: 'Start a search' }).click()
   const plots = new PlotsPage(page)
   await plots.expectEmpty()
@@ -89,15 +79,14 @@ test('manages settings and navigates empty plots and not-found pages', async ({ 
   await page.getByRole('button', { name: 'Remove this search from this device' }).click()
   await expect(page.getByRole('heading', { name: 'Second search' })).toBeVisible()
 
-  await page.goto(appUrl(`missing?e2e=${value}`))
+  await page.goto(appUrl('missing'))
   await expect(page.getByRole('heading', { name: "There's nothing at this address" })).toBeVisible()
   await page.getByRole('link', { name: 'Back to plots' }).click()
-  await expect(page).toHaveURL(appUrl(`?e2e=${value}`))
+  await expect(page).toHaveURL(appUrl())
 })
 
 test('sorts, filters, maps, and plans populated located and unlocated plots', async ({ page }) => {
-  const value = namespace('plots-list')
-  await open(page, value)
+  await open(page)
   const listings: E2eListingSeed[] = [
     { id: '101', title: 'Expensive located', priceEur: 90_000, areaAres: 8 },
     {

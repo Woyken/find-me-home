@@ -11,10 +11,8 @@ export const aruodasBookmarkletScriptName = 'aruodas-bookmarklet.js'
 
 export const createAruodasBookmarklet = (appUrl: string) => {
   const url = new URL(appUrl)
-  const e2e = url.searchParams.get('e2e')
   url.hash = ''
-  // Preserve the browser-local E2E selector across the source-page round trip.
-  url.search = e2e && /^[A-Za-z0-9_-]{1,80}$/.test(e2e) ? `?e2e=${e2e}` : ''
+  url.search = ''
   const base = JSON.stringify(url.toString())
   const code = [
     '(function(){',

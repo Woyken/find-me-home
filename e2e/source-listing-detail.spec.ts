@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { initializeE2ePage, test } from './support/test.ts'
 import type { Page } from '@playwright/test'
 import type { E2eListingSeed } from '../src/e2e/support'
 import { appPathPattern, appUrl } from './support/app-url.ts'
@@ -7,12 +8,6 @@ type SeedResult = {
   sourceListingIds: string[]
 }
 
-const namespace = () =>
-  `detail-${test.info().project.name.replace(/[^a-z0-9]/gi, '')}-${test.info().testId.replace(/[^a-z0-9]/gi, '')}`.slice(
-    0,
-    80,
-  )
-
 const seed = async (page: Page, listings: readonly E2eListingSeed[]) =>
   page.evaluate(async (input) => {
     if (!window.__FMH_E2E__) throw new Error('E2E API is unavailable')
@@ -20,13 +15,9 @@ const seed = async (page: Page, listings: readonly E2eListingSeed[]) =>
   }, listings) as Promise<SeedResult>
 
 const openSeededListing = async (page: Page, listing: E2eListingSeed) => {
-  const e2eNamespace = namespace()
-  await page.goto(appUrl(`?e2e=${e2eNamespace}`), {
-    waitUntil: 'domcontentloaded',
-  })
-  await expect.poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__))).toBe(true)
+  await initializeE2ePage(page)
   const result = await seed(page, [listing])
-  await page.goto(appUrl(`source-listings/${result.sourceListingIds[0]}?e2e=${e2eNamespace}`), {
+  await page.goto(appUrl(`source-listings/${result.sourceListingIds[0]}`), {
     waitUntil: 'domcontentloaded',
   })
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
@@ -130,14 +121,10 @@ test('validates numeric and location clue inputs at boundaries', async ({ page }
 test('reports resolution and service failures, then retries deterministically', async ({
   page,
 }) => {
-  const e2eNamespace = namespace()
-  await page.goto(appUrl(`?e2e=${e2eNamespace}`), {
-    waitUntil: 'domcontentloaded',
-  })
-  await expect.poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__))).toBe(true)
+  await initializeE2ePage(page)
   await page.evaluate(() => window.__FMH_E2E__?.setFailure('location'))
   const result = await seed(page, [{ id: '103', title: 'Retry fixture' }])
-  await page.goto(appUrl(`source-listings/${result.sourceListingIds[0]}?e2e=${e2eNamespace}`), {
+  await page.goto(appUrl(`source-listings/${result.sourceListingIds[0]}`), {
     waitUntil: 'domcontentloaded',
   })
   const area = page.locator('article.area').first()
@@ -199,7 +186,7 @@ test('removes a listing and restores the saved area when the advert is saved aga
     if (!window.__FMH_E2E__) throw new Error('E2E API is unavailable')
     return window.__FMH_E2E__.resaveListing(input)
   }, listing)
-  await page.goto(appUrl(`source-listings/${restored.sourceListingIds[0]}?e2e=${namespace()}`), {
+  await page.goto(appUrl(`source-listings/${restored.sourceListingIds[0]}`), {
     waitUntil: 'domcontentloaded',
   })
   const restoredArea = page.locator('article.area').first()

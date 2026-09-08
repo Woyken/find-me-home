@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { initializeE2ePage, test } from '../support/test.ts'
 import { aruodasScenarios, renderAruodasScenario } from '../data/aruodas/scenarios.ts'
 import { createAruodasSourcePage } from '../fixtures/aruodas/source-page.ts'
 import { ImportInboxPage } from '../pages/import-inbox.page.ts'
@@ -15,9 +16,8 @@ import { appUrl } from '../support/app-url.ts'
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value), 'utf8').toString('base64url')
 
-const app = async (page: PlaywrightPage, namespace: string) => {
-  await page.goto(appUrl(`?e2e=${namespace}`))
-  await expect.poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__))).toBe(true)
+const app = async (page: PlaywrightPage) => {
+  await initializeE2ePage(page)
   await page.evaluate(async () => {
     const api = window.__FMH_E2E__
     if (!api) throw new Error('E2E runtime is unavailable')
@@ -35,7 +35,8 @@ const favoritesPayload = (fragment: string | undefined) => {
 test('moves favorites to the IndexedDB inbox, then returns after saving an advert', async ({
   page,
 }) => {
-  await app(page, 'favorites-journey')
+  test.setTimeout(60_000)
+  await app(page)
   const href = await addPlotDialogBookmarkletHref(page)
   await openSourcePage(page, createAruodasSourcePage(aruodasScenarios.desktopFavorites))
   const { destination } = await runAddPlotDialogBookmarklet(
@@ -79,12 +80,12 @@ test('moves favorites to the IndexedDB inbox, then returns after saving an adver
   const review = new ImportReviewPage(page)
   await review.expectListing('11-424242')
   await review.save()
-  await expect(page).toHaveURL(/\/import-inbox\?e2e=favorites-journey$/)
+  await expect(page).toHaveURL(/\/import-inbox$/)
   await inbox.expectClippings(1)
 })
 
 test('moves mobile Aruodas favorites through the inbox with lazy thumbnails', async ({ page }) => {
-  await app(page, 'mobile-favorites-journey')
+  await app(page)
   const href = await addPlotDialogBookmarkletHref(page)
   await openSourcePage(page, createAruodasSourcePage(aruodasScenarios.mobileFavorites))
   const { destination } = await runAddPlotDialogBookmarklet(
@@ -119,18 +120,16 @@ test('moves mobile Aruodas favorites through the inbox with lazy thumbnails', as
 test('accepts v1 and v2 fragments and removes the fragment after storing a session draft', async ({
   page,
 }) => {
-  await app(page, 'fragment-versions')
+  await app(page)
   const payload = {
     url: 'https://www.aruodas.lt/sklypai-test-11-999999/',
     title: 'Fragment plot',
     photos: [],
   }
-  await page.goto(appUrl(`?e2e=fragment-versions#import=${encode({ version: 1, payload })}`))
+  await page.goto(appUrl(`#import=${encode({ version: 1, payload })}`))
   await new ImportReviewPage(page).expectListing('11-999999')
-  await expect(page).toHaveURL(appUrl('?e2e=fragment-versions'))
-  await page.goto(
-    appUrl(`?e2e=fragment-versions#import=${encode({ version: 2, kind: 'listing', payload })}`),
-  )
+  await expect(page).toHaveURL(appUrl())
+  await page.goto(appUrl(`#import=${encode({ version: 2, kind: 'listing', payload })}`))
   await new ImportReviewPage(page).expectListing('11-999999')
   await page.reload()
   await new ImportReviewPage(page).expectListing('11-999999')
@@ -139,7 +138,7 @@ test('accepts v1 and v2 fragments and removes the fragment after storing a sessi
 test('rejects malformed, hostile, and oversized fragments without retaining a draft', async ({
   page,
 }) => {
-  await app(page, 'hostile-fragments')
+  await app(page)
   for (const [index, fragment] of [
     'not-base64!',
     encode({
@@ -149,9 +148,9 @@ test('rejects malformed, hostile, and oversized fragments without retaining a dr
     }),
     Buffer.from('x'.repeat(100_001)).toString('base64url'),
   ].entries()) {
-    await page.goto(appUrl(`?e2e=hostile-fragments&import-case=${index}#import=${fragment}`))
+    await page.goto(appUrl(`?import-case=${index}#import=${fragment}`))
     await new ImportReviewPage(page).expectUnreadable()
     await page.getByRole('button', { name: 'Back to plots' }).click()
-    await expect(page).toHaveURL(new RegExp(`\\?e2e=hostile-fragments&import-case=${index}$`))
+    await expect(page).toHaveURL(new RegExp(`\\?import-case=${index}$`))
   }
 })

@@ -50,13 +50,14 @@ Termux script selects a mobile project built from its stable desktop process
 configuration, with the iPhone viewport, touch support, and user agent.
 Linux CI uses full mobile emulation.
 
-The E2E server runs Vite in the explicit `e2e` mode. A production artifact can
-also enable the same browser-local fixtures only with a valid explicit
-`?e2e=<namespace>` selector. This is test isolation, not authentication: normal,
-missing, or malformed selectors render the ordinary app and never expose the E2E
-API. Gated tests use only `find-me-home-e2e-*` IndexedDB names, fake providers,
-and an E2E-only room; they do not use the Worker, real Trystero transport, normal
-browser data, or the production service worker.
+The E2E server runs Vite in the explicit `e2e` mode. Production live tests instead
+visit `/initialize-e2e-storage` once in each fresh BrowserContext. That non-product
+test-tooling page sets a tab-local sessionStorage flag and replace-navigates to a
+validated same-origin path. It is not authentication or a security boundary.
+Normal routes and product-generated URLs never contain E2E parameters. Initialized
+tabs use fake providers and an E2E-only room, suppress service-worker registration,
+and use normal IndexedDB names safely because every test has an isolated fresh
+BrowserContext.
 
 `pnpm build` creates the complete static artifact in `dist/client`, including the repository-aware manifest, history-route fallback, and versioned offline shell. Registered Parcel shards are generated separately into `public/parcels` before a production build and are fetched lazily rather than precached.
 

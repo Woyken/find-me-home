@@ -1,26 +1,11 @@
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { initializeE2ePage, test } from './support/test.ts'
 import { E2eSyncRelay } from './support/sync-relay.ts'
 import type { Page } from '@playwright/test'
 import type { E2eSeed } from '../src/e2e/support'
 import { appUrl } from './support/app-url.ts'
 
-const uniqueNamespace = (name: string) =>
-  `${name}-${test.info().project.name.replace(/[^a-z0-9]/gi, '')}-${test.info().testId.replace(/[^a-z0-9]/gi, '')}`.slice(
-    0,
-    80,
-  )
-
-const open = async (page: Page, namespace: string) => {
-  await page.goto(appUrl(`?e2e=${namespace}`), {
-    waitUntil: 'domcontentloaded',
-  })
-  await expect.poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__))).toBe(true)
-  await page.evaluate(async () => {
-    const api = window.__FMH_E2E__
-    if (!api) throw new Error('E2E runtime is unavailable')
-    await api.ready()
-  })
-}
+const open = async (page: Page) => initializeE2ePage(page)
 
 const seed = async (page: Page, listings: E2eSeed['listings']) =>
   page.evaluate((value) => {
@@ -35,10 +20,9 @@ test.describe('visit plan', () => {
   test('covers the empty state and the Google Maps route only appears for located stops', async ({
     page,
   }) => {
-    const namespace = uniqueNamespace('visit-empty')
-    await open(page, namespace)
+    await open(page)
     await seed(page, [])
-    await page.goto(appUrl(`visit-plan?e2e=${namespace}`), {
+    await page.goto(appUrl('visit-plan'), {
       waitUntil: 'domcontentloaded',
     })
     await expect(page.getByRole('heading', { name: 'No visits planned yet' })).toBeVisible()
@@ -60,7 +44,7 @@ test.describe('visit plan', () => {
         plannedListingIds: ['101', '102'],
       })
     })
-    await page.goto(appUrl(`visit-plan?e2e=${namespace}`), {
+    await page.goto(appUrl('visit-plan'), {
       waitUntil: 'domcontentloaded',
     })
     await page.getByRole('link', { name: 'Going to see' }).click()
@@ -79,8 +63,7 @@ test.describe('visit plan', () => {
   test('retains driving order across reloads and supports keyboard-operable reordering and removal', async ({
     page,
   }) => {
-    const namespace = uniqueNamespace('visit-order')
-    await open(page, namespace)
+    await open(page)
     await page.evaluate(async () => {
       const api = window.__FMH_E2E__
       if (!api) throw new Error('E2E runtime is unavailable')
@@ -93,7 +76,7 @@ test.describe('visit plan', () => {
         plannedListingIds: ['201', '202', '203'],
       })
     })
-    await page.goto(appUrl(`visit-plan?e2e=${namespace}`), {
+    await page.goto(appUrl('visit-plan'), {
       waitUntil: 'domcontentloaded',
     })
 
@@ -127,8 +110,7 @@ test.describe('visit plan', () => {
   })
 
   test('shows a failed storage write without changing the visit plan', async ({ page }) => {
-    const namespace = uniqueNamespace('visit-error')
-    await open(page, namespace)
+    await open(page)
     await seed(page, [{ id: '301', title: 'Cannot save' }])
     await page.evaluate(() => window.__FMH_E2E__?.setFailure('visit-plan-storage'))
     await page.getByRole('button', { name: 'Go see it' }).click()
@@ -140,8 +122,7 @@ test.describe('visit plan', () => {
   })
 
   test('keeps plan references safe when a listing disappears', async ({ page }) => {
-    const namespace = uniqueNamespace('visit-missing')
-    await open(page, namespace)
+    await open(page)
     const result = await seed(page, [{ id: '401', title: 'Gone soon' }])
     await page.getByRole('button', { name: 'Go see it' }).click()
     await page.evaluate((id) => {
@@ -149,7 +130,7 @@ test.describe('visit plan', () => {
       if (!api) throw new Error('E2E runtime is unavailable')
       return api.removeSourceListing(id)
     }, result.sourceListingIds[0])
-    await page.goto(appUrl(`visit-plan?e2e=${namespace}`), {
+    await page.goto(appUrl('visit-plan'), {
       waitUntil: 'domcontentloaded',
     })
     await expect(page.getByRole('heading', { name: 'No visits planned yet' })).toBeVisible()
@@ -159,7 +140,7 @@ test.describe('visit plan', () => {
 test('two pages synchronize initial state and subsequent plan, inbox, visit, and delete mutations', async ({
   browser,
 }) => {
-  const namespace = uniqueNamespace('two-device')
+  test.setTimeout(60_000)
   const relay = new E2eSyncRelay()
   const firstContext = await browser.newContext()
   const secondContext = await browser.newContext()
@@ -168,7 +149,7 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
   const first = await firstContext.newPage()
   const second = await secondContext.newPage()
   try {
-    await open(first, `${namespace}&e2e-device=first`)
+    await open(first)
     const result = await first.evaluate(async () => {
       const api = window.__FMH_E2E__
       if (!api) throw new Error('E2E runtime is unavailable')
@@ -187,9 +168,7 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
         return api.invitationUrl()
       }),
     )
-    invitation.searchParams.set('e2e', namespace)
-    invitation.searchParams.set('e2e-device', 'second')
-    await second.goto(invitation.toString(), { waitUntil: 'domcontentloaded' })
+    await initializeE2ePage(second, `${invitation.pathname}${invitation.hash}`)
     await expect(second.getByRole('link', { name: 'Going to see' })).toContainText('2')
     await second.getByRole('link', { name: 'Going to see' }).click()
     await expect.poll(() => plannedTitles(second)).toEqual(['Shared first', 'Shared second'])
@@ -213,12 +192,12 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
       )
 
     await second.getByRole('button', { name: 'Move Shared second up' }).click()
-    await first.goto(appUrl(`visit-plan?e2e=${namespace}&e2e-device=first`), {
+    await first.goto(appUrl('visit-plan'), {
       waitUntil: 'domcontentloaded',
     })
     await expect.poll(() => plannedTitles(first)).toEqual(['Shared second', 'Shared first'])
     await first.evaluate(() => window.__FMH_E2E__?.captureInbox('503'))
-    await second.goto(appUrl(`import-inbox?e2e=${namespace}&e2e-device=second`), {
+    await second.goto(appUrl('import-inbox'), {
       waitUntil: 'domcontentloaded',
     })
     await expect(second.getByText('E2E inbox 503')).toBeVisible()
@@ -227,7 +206,7 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
       if (!api) throw new Error('E2E runtime is unavailable')
       return api.markVisited(id)
     }, result.sourceListingIds[0])
-    await second.goto(appUrl(`visit-plan?e2e=${namespace}&e2e-device=second`), {
+    await second.goto(appUrl('visit-plan'), {
       waitUntil: 'domcontentloaded',
     })
     await expect.poll(() => plannedTitles(second)).toEqual(['Shared second'])
@@ -236,26 +215,21 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
       if (!api) throw new Error('E2E runtime is unavailable')
       return api.removeSourceListing(id)
     }, result.sourceListingIds[1])
-    await first.goto(appUrl(`visit-plan?e2e=${namespace}&e2e-device=first`), {
+    await first.goto(appUrl('visit-plan'), {
       waitUntil: 'domcontentloaded',
     })
     await expect.poll(() => plannedTitles(first)).toEqual([])
 
-    await first.goto(
-      appUrl(`source-listings/${result.sourceListingIds[0]}?e2e=${namespace}&e2e-device=first`),
-      {
-        waitUntil: 'domcontentloaded',
-      },
-    )
+    await first.goto(appUrl(`source-listings/${result.sourceListingIds[0]}`), {
+      waitUntil: 'domcontentloaded',
+    })
     await first.getByRole('button', { name: 'Go see it' }).click()
     await expect(first.getByRole('button', { name: 'Going to see' })).toBeVisible()
 
     await second.close()
     const rejoined = await secondContext.newPage()
     try {
-      await rejoined.goto(invitation.toString(), {
-        waitUntil: 'domcontentloaded',
-      })
+      await initializeE2ePage(rejoined, `${invitation.pathname}${invitation.hash}`)
       await expect(rejoined.getByRole('link', { name: 'Going to see' })).toContainText('1')
       await rejoined.getByRole('link', { name: 'Going to see' }).click()
       await expect.poll(() => plannedTitles(rejoined)).toEqual(['Shared first'])
