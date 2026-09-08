@@ -5,7 +5,6 @@
   "scripts": {
     "dev": "vite dev --port 3000",
     "build": "vite build && node --experimental-strip-types scripts/build-pages-assets.ts",
-    "build:e2e:pages": "vite build --mode e2e && node --experimental-strip-types scripts/build-pages-assets.ts",
     "start": "vite preview",
     "preview": "vite preview",
     "test": "vitest run --exclude=e2e/**",

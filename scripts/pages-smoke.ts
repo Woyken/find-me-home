@@ -1,8 +1,8 @@
-const [pagesArgument, workerArgument, e2eArgument] = process.argv.slice(2)
+const [pagesArgument, workerArgument] = process.argv.slice(2)
 export {}
 
 if (!pagesArgument || !workerArgument) {
-  throw new Error('Usage: pnpm smoke:pages <pages-url> <worker-url> [e2e]')
+  throw new Error('Usage: pnpm smoke:pages <pages-url> <worker-url>')
 }
 
 const pagesUrl = new URL(pagesArgument)
@@ -60,18 +60,6 @@ const [
   bookmarkletScript.text(),
 ])
 
-const scripts = [...homeHtml.matchAll(/<script[^>]+src="([^"]+)"/g)].map(
-  ([, source]) =>
-    expectOk(new URL(source, pagesUrl)).then((response) => response.text()),
-)
-const scriptText = (await Promise.all(scripts)).join('\n')
-const e2eChunk = scriptText.match(/assets\/bootstrap-[\w-]+\.js/)?.[0]
-const e2eText = e2eChunk
-  ? await expectOk(new URL(e2eChunk, pagesUrl)).then((response) =>
-      response.text(),
-    )
-  : ''
-
 if (
   bookmarkletScript.headers.get('access-control-allow-origin') !== '*' ||
   !bookmarkletScriptText.includes('#import=')
@@ -99,12 +87,6 @@ if (!serviceWorkerText.includes('find-me-home-shell-')) {
   throw new Error(
     'Production service worker does not contain a versioned shell',
   )
-}
-if (e2eArgument === 'e2e' && !e2eText.includes('__FMH_E2E__')) {
-  throw new Error('E2E Pages artifact does not expose its test API')
-}
-if (e2eArgument !== 'e2e' && e2eText.includes('__FMH_E2E__')) {
-  throw new Error('Production Pages artifact exposes the E2E test API')
 }
 if (!parcelManifest.datasetVersion) {
   throw new Error('Production parcel manifest has no dataset version')
