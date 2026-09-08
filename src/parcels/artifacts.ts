@@ -40,10 +40,7 @@ export interface ParcelManifest {
   builtAt: string
   cellSizeMetres: number
   sourceVersions: Record<string, string>
-  municipalities: Record<
-    string,
-    { extent: [number, number, number, number]; parcelCount: number }
-  >
+  municipalities: Record<string, { extent: [number, number, number, number]; parcelCount: number }>
   cells: Record<string, ParcelAsset>
   prefixes: Record<string, ParcelAsset>
 }
@@ -62,16 +59,10 @@ export interface SpatialShard {
   parcels: Array<SpatialParcelTuple>
 }
 
-export type ParcelReference = [
-  municipalityCode: number,
-  cell: string,
-  parcelId: string,
-]
+export type ParcelReference = [municipalityCode: number, cell: string, parcelId: string]
 
 export interface PrefixShard {
-  references: Array<
-    [normalizedNumber: string, references: Array<ParcelReference>]
-  >
+  references: Array<[normalizedNumber: string, references: Array<ParcelReference>]>
 }
 
 interface BuildOptions {
@@ -110,12 +101,7 @@ function bbox(rings: ParcelRings): [number, number, number, number] {
   return [minX, minY, maxX, maxY]
 }
 
-function cellsForBbox([minX, minY, maxX, maxY]: [
-  number,
-  number,
-  number,
-  number,
-]): Array<string> {
+function cellsForBbox([minX, minY, maxX, maxY]: [number, number, number, number]): Array<string> {
   const cells: Array<string> = []
   for (
     let x = Math.floor(minX / PARCEL_CELL_SIZE_METRES);
@@ -151,9 +137,7 @@ function calculateDatasetVersion(
       schemaVersion: PARCEL_SCHEMA_VERSION,
       generatorVersion: PARCEL_GENERATOR_VERSION,
       sourceVersions,
-      cells: Object.fromEntries(
-        Object.entries(cells).map(([key, value]) => [key, value.sha256]),
-      ),
+      cells: Object.fromEntries(Object.entries(cells).map(([key, value]) => [key, value.sha256])),
       prefixes: Object.fromEntries(
         Object.entries(prefixes).map(([key, value]) => [key, value.sha256]),
       ),
@@ -168,9 +152,7 @@ export function buildParcelAssetsInMemory(
   const expected = [...PARCEL_MUNICIPALITIES]
   const actual = sources.map(({ municipalityCode }) => municipalityCode).sort()
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-    throw new Error(
-      `sources must cover municipality codes ${expected.join(', ')}`,
-    )
+    throw new Error(`sources must cover municipality codes ${expected.join(', ')}`)
   }
   if (sources.some(({ sourceVersion }) => !sourceVersion.trim())) {
     throw new Error('every municipality source must have a source version')
@@ -183,12 +165,7 @@ export function buildParcelAssetsInMemory(
 
   for (const source of sources) {
     sourceVersions[source.municipalityCode] = source.sourceVersion
-    let extent: [number, number, number, number] = [
-      Infinity,
-      Infinity,
-      -Infinity,
-      -Infinity,
-    ]
+    let extent: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity]
     source.parcels.forEach((parcel, index) => {
       const parcelId = `${source.municipalityCode}:${index}`
       const parcelBbox = bbox(parcel.rings)
@@ -224,11 +201,7 @@ export function buildParcelAssetsInMemory(
       for (const number of completeNumbers) {
         const references = numbers.get(number) ?? []
         references.push(
-          ...cells.map((cell): ParcelReference => [
-            source.municipalityCode,
-            cell,
-            parcelId,
-          ]),
+          ...cells.map((cell): ParcelReference => [source.municipalityCode, cell, parcelId]),
         )
         numbers.set(number, references)
       }
@@ -244,9 +217,7 @@ export function buildParcelAssetsInMemory(
 
   const files = new Map<string, Uint8Array>()
   const cells: Record<string, ParcelAsset> = {}
-  for (const [cell, parcels] of [...spatial].sort(([a], [b]) =>
-    a.localeCompare(b),
-  )) {
+  for (const [cell, parcels] of [...spatial].sort(([a], [b]) => a.localeCompare(b))) {
     const bytes = encodeAsset({ parcels } satisfies SpatialShard)
     const file = assetPath('cells', cell)
     files.set(file, bytes)
@@ -259,9 +230,7 @@ export function buildParcelAssetsInMemory(
   }
 
   const prefixGroups = new Map<string, PrefixShard['references']>()
-  for (const [number, references] of [...numbers].sort(([a], [b]) =>
-    a.localeCompare(b),
-  )) {
+  for (const [number, references] of [...numbers].sort(([a], [b]) => a.localeCompare(b))) {
     const prefix = number.slice(0, 4)
     const entries = prefixGroups.get(prefix) ?? []
     entries.push([number, references])
@@ -307,9 +276,7 @@ export async function buildParcelAssets(
     await mkdir(path.dirname(destination), { recursive: true })
     await writeFile(destination, bytes)
   }
-  return JSON.parse(
-    Buffer.from(files.get('manifest.json')!).toString(),
-  ) as ParcelManifest
+  return JSON.parse(Buffer.from(files.get('manifest.json')!).toString()) as ParcelManifest
 }
 
 export async function validateParcelAssets(
@@ -333,17 +300,13 @@ export async function validateParcelAssets(
   }
 
   const knownParcels = new Map<string, Map<string, SpatialParcelTuple>>()
-  let totalBytes = (await stat(path.join(outputDirectory, 'manifest.json')))
-    .size
+  let totalBytes = (await stat(path.join(outputDirectory, 'manifest.json'))).size
   for (const [cell, asset] of Object.entries(manifest.cells)) {
-    const bytes = await readFile(path.join(outputDirectory, asset.path)).catch(
-      () => {
-        throw new Error(`missing asset ${asset.path}`)
-      },
-    )
+    const bytes = await readFile(path.join(outputDirectory, asset.path)).catch(() => {
+      throw new Error(`missing asset ${asset.path}`)
+    })
     totalBytes += bytes.byteLength
-    if (sha256(bytes) !== asset.sha256)
-      throw new Error(`checksum mismatch for asset ${asset.path}`)
+    if (sha256(bytes) !== asset.sha256) throw new Error(`checksum mismatch for asset ${asset.path}`)
     let shard: SpatialShard
     try {
       shard = JSON.parse(gunzipSync(bytes).toString()) as SpatialShard
@@ -353,15 +316,10 @@ export async function validateParcelAssets(
     if (shard.parcels.length !== asset.parcelCount) {
       throw new Error(`parcel count mismatch in ${asset.path}`)
     }
-    if (
-      new Set(shard.parcels.map(([id]) => id)).size !== shard.parcels.length
-    ) {
+    if (new Set(shard.parcels.map(([id]) => id)).size !== shard.parcels.length) {
       throw new Error(`duplicate parcel in ${asset.path}`)
     }
-    knownParcels.set(
-      cell,
-      new Map(shard.parcels.map((parcel) => [parcel[0], parcel])),
-    )
+    knownParcels.set(cell, new Map(shard.parcels.map((parcel) => [parcel[0], parcel])))
   }
 
   const expectedReferences = new Map<string, Set<string>>()
@@ -401,14 +359,11 @@ export async function validateParcelAssets(
   }
   const actualReferences = new Map<string, Set<string>>()
   for (const [prefix, asset] of Object.entries(manifest.prefixes)) {
-    const bytes = await readFile(path.join(outputDirectory, asset.path)).catch(
-      () => {
-        throw new Error(`missing asset ${asset.path}`)
-      },
-    )
+    const bytes = await readFile(path.join(outputDirectory, asset.path)).catch(() => {
+      throw new Error(`missing asset ${asset.path}`)
+    })
     totalBytes += bytes.byteLength
-    if (sha256(bytes) !== asset.sha256)
-      throw new Error(`checksum mismatch for asset ${asset.path}`)
+    if (sha256(bytes) !== asset.sha256) throw new Error(`checksum mismatch for asset ${asset.path}`)
     let shard: PrefixShard
     try {
       shard = JSON.parse(gunzipSync(bytes).toString()) as PrefixShard
@@ -416,19 +371,13 @@ export async function validateParcelAssets(
       throw new Error(`corrupt gzip asset ${asset.path}`)
     }
     for (const [number, references] of shard.references) {
-      if (
-        number.length < 4 ||
-        number.slice(0, 4) !== prefix ||
-        references.length === 0
-      ) {
+      if (number.length < 4 || number.slice(0, 4) !== prefix || references.length === 0) {
         throw new Error(`broken number reference ${number}`)
       }
       const actual = actualReferences.get(number) ?? new Set<string>()
       for (const [municipalityCode, cell, parcelId] of references) {
         const parcel = knownParcels.get(cell)?.get(parcelId)
-        const parcelNumbers = parcel
-          ? [parcel[1], parcel[2]].map(normalizeNumber)
-          : []
+        const parcelNumbers = parcel ? [parcel[1], parcel[2]].map(normalizeNumber) : []
         if (
           !parcel ||
           Number(parcelId.split(':')[0]) !== municipalityCode ||
@@ -438,9 +387,7 @@ export async function validateParcelAssets(
         }
         const reference = `${municipalityCode}/${cell}/${parcelId}`
         if (actual.has(reference)) {
-          throw new Error(
-            `duplicate reference ${number} -> ${cell}/${parcelId}`,
-          )
+          throw new Error(`duplicate reference ${number} -> ${cell}/${parcelId}`)
         }
         actual.add(reference)
       }
@@ -464,18 +411,12 @@ export async function validateParcelAssets(
   }
   if (
     manifest.datasetVersion !==
-    calculateDatasetVersion(
-      manifest.sourceVersions,
-      manifest.cells,
-      manifest.prefixes,
-    )
+    calculateDatasetVersion(manifest.sourceVersions, manifest.cells, manifest.prefixes)
   ) {
     throw new Error('dataset version mismatch for source/package manifest')
   }
   if (totalBytes > (options.maxTotalBytes ?? 1_000_000_000)) {
-    throw new Error(
-      `parcel assets exceed Pages size limit: ${totalBytes} bytes`,
-    )
+    throw new Error(`parcel assets exceed Pages size limit: ${totalBytes} bytes`)
   }
 
   const files = await readdir(outputDirectory, { recursive: true })
@@ -485,8 +426,7 @@ export async function validateParcelAssets(
     ...Object.values(manifest.prefixes).map(({ path: file }) => file),
   ])
   for (const expected of expectedPaths) {
-    if (!files.includes(expected))
-      throw new Error(`missing manifest asset ${expected}`)
+    if (!files.includes(expected)) throw new Error(`missing manifest asset ${expected}`)
   }
   return manifest
 }

@@ -23,18 +23,12 @@ describe('livability service', () => {
     expect(fetcher).toHaveBeenCalledOnce()
     expect(result.shop?.name).toBe('Shop')
     expect(result.school).not.toBeNull()
-    expect(result.badNeighbours.map((item) => item.kind)).toEqual([
-      'industrial',
-      'grave_yard',
-    ])
+    expect(result.badNeighbours.map((item) => item.kind)).toEqual(['industrial', 'grave_yard'])
   })
 
   it('rejects unavailable or malformed responses', async () => {
     await expect(
-      createLivabilityService(async () => new Response(null, { status: 429 }))(
-        54.7,
-        25.3,
-      ),
+      createLivabilityService(async () => new Response(null, { status: 429 }))(54.7, 25.3),
     ).rejects.toThrow('unavailable')
     await expect(
       createLivabilityService(async () => Response.json({}))(54.7, 25.3),

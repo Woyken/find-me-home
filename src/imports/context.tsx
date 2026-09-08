@@ -19,26 +19,20 @@ export function ImportProvider(props: ParentProps) {
   {
     const fragment = window.location.hash.match(/^#import=(.+)$/)?.[1]
     if (fragment) {
-      history.replaceState(
-        history.state,
-        '',
-        `${location.pathname}${location.search}`,
-      )
+      history.replaceState(history.state, '', `${location.pathname}${location.search}`)
       try {
         const imported = decodeImportTransportFragment(fragment)
         sessionStorage.setItem(STORAGE_KEY, JSON.stringify(imported))
         initialDraft = imported
       } catch {
         sessionStorage.removeItem(STORAGE_KEY)
-        initialError =
-          'This import could not be read. Run the Aruodas bookmarklet again.'
+        initialError = 'This import could not be read. Run the Aruodas bookmarklet again.'
       }
     } else {
       const stored = sessionStorage.getItem(STORAGE_KEY)
       if (stored) {
         try {
-          const parsed = JSON.parse(stored) as
-            ImportTransport | Record<string, unknown>
+          const parsed = JSON.parse(stored) as ImportTransport | Record<string, unknown>
           initialDraft =
             'kind' in parsed
               ? (parsed as ImportTransport)

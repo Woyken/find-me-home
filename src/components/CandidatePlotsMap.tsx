@@ -2,14 +2,7 @@ import { Show, createEffect, createSignal, onCleanup } from 'solid-js'
 import 'leaflet/dist/leaflet.css'
 import type * as Leaflet from 'leaflet'
 import type { CandidatePlotMapItem } from '../source-listings/map'
-import {
-  BLUE,
-  OSM_ATTRIBUTION,
-  OSM_TILES,
-  STAKE,
-  itemsBounds,
-  shapeLayer,
-} from './leaflet-shapes'
+import { BLUE, OSM_ATTRIBUTION, OSM_TILES, STAKE, itemsBounds, shapeLayer } from './leaflet-shapes'
 
 export type MapFocusRequest = { plotId: string; nonce: number }
 
@@ -41,9 +34,7 @@ export function CandidatePlotsMap(props: {
 
   const resolveLabelCollisions = () => {
     if (!map) return
-    const labels = [
-      ...map.getContainer().querySelectorAll<HTMLElement>('.fmh-label'),
-    ]
+    const labels = [...map.getContainer().querySelectorAll<HTMLElement>('.fmh-label')]
     labels.forEach((label) => (label.style.visibility = 'visible'))
     labels.sort((label) => (label.classList.contains('sel') ? -1 : 1))
     const visible: Array<DOMRect> = []
@@ -95,9 +86,7 @@ export function CandidatePlotsMap(props: {
       map = loaded.map(element, { zoomControl: false })
       plotLayer = loaded.layerGroup().addTo(map)
       householdLayer = loaded.layerGroup().addTo(map)
-      loaded
-        .tileLayer(OSM_TILES, { attribution: OSM_ATTRIBUTION, maxZoom: 19 })
-        .addTo(map)
+      loaded.tileLayer(OSM_TILES, { attribution: OSM_ATTRIBUTION, maxZoom: 19 }).addTo(map)
       loaded.control.zoom({ position: 'bottomright' }).addTo(map)
       draw(true, props.plots, props.selectedPlotId)
       map.on('zoomend moveend', resolveLabelCollisions)
@@ -150,10 +139,7 @@ export function CandidatePlotsMap(props: {
     locationWatch = navigator.geolocation.watchPosition(
       ({ coords }) => {
         if (disposed || !leaflet || !map || !householdLayer) return
-        const position: Leaflet.LatLngTuple = [
-          coords.latitude,
-          coords.longitude,
-        ]
+        const position: Leaflet.LatLngTuple = [coords.latitude, coords.longitude]
         if (accuracyCircle && locationMarker) {
           accuracyCircle.setLatLng(position).setRadius(coords.accuracy)
           locationMarker.setLatLng(position)
@@ -183,9 +169,7 @@ export function CandidatePlotsMap(props: {
           map.setView(position, Math.max(map.getZoom(), 16))
           centerOnFirstPosition = false
         }
-        setLocationMessage(
-          `Live location, give or take ${Math.round(coords.accuracy)} m`,
-        )
+        setLocationMessage(`Live location, give or take ${Math.round(coords.accuracy)} m`)
         setLocationState('tracking')
       },
       (error) => {
@@ -193,16 +177,11 @@ export function CandidatePlotsMap(props: {
         householdLayer?.clearLayers()
         locationMarker = undefined
         accuracyCircle = undefined
-        if (
-          error.code === error.PERMISSION_DENIED &&
-          locationWatch !== undefined
-        ) {
+        if (error.code === error.PERMISSION_DENIED && locationWatch !== undefined) {
           navigator.geolocation.clearWatch(locationWatch)
           locationWatch = undefined
         }
-        setLocationState(
-          error.code === error.PERMISSION_DENIED ? 'unavailable' : 'locating',
-        )
+        setLocationState(error.code === error.PERMISSION_DENIED ? 'unavailable' : 'locating')
         setLocationMessage(
           error.code === error.PERMISSION_DENIED
             ? 'Location access was denied. The map still works.'
@@ -228,9 +207,7 @@ export function CandidatePlotsMap(props: {
 
   if (typeof document !== 'undefined') {
     document.addEventListener('fullscreenchange', onFullscreenChange)
-    onCleanup(() =>
-      document.removeEventListener('fullscreenchange', onFullscreenChange),
-    )
+    onCleanup(() => document.removeEventListener('fullscreenchange', onFullscreenChange))
   }
 
   return (
@@ -245,11 +222,7 @@ export function CandidatePlotsMap(props: {
         >
           {locationState() === 'locating' ? 'Finding you…' : 'Where am I'}
         </button>
-        <button
-          class="btn sm"
-          type="button"
-          onClick={() => void toggleFullscreen()}
-        >
+        <button class="btn sm" type="button" onClick={() => void toggleFullscreen()}>
           {fullscreen() ? 'Exit full screen' : 'Full screen'}
         </button>
       </div>

@@ -24,20 +24,15 @@ const openSeededListing = async (page: Page, listing: E2eListingSeed) => {
   await page.goto(appUrl(`?e2e=${e2eNamespace}`), {
     waitUntil: 'domcontentloaded',
   })
-  await expect
-    .poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__)))
-    .toBe(true)
+  await expect.poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__))).toBe(true)
   const result = await seed(page, [listing])
-  await page.goto(
-    appUrl(`source-listings/${result.sourceListingIds[0]}?e2e=${e2eNamespace}`),
-    { waitUntil: 'domcontentloaded' },
-  )
+  await page.goto(appUrl(`source-listings/${result.sourceListingIds[0]}?e2e=${e2eNamespace}`), {
+    waitUntil: 'domcontentloaded',
+  })
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
     listing.title ?? `E2E plot ${listing.id}`,
   )
-  await expect(
-    page.locator('.check').filter({ hasText: 'Noise' }),
-  ).toContainText('Quiet')
+  await expect(page.locator('.check').filter({ hasText: 'Noise' })).toContainText('Quiet')
 }
 
 test('presents complete listing details, gallery, marked areas, edits and ratings', async ({
@@ -86,10 +81,7 @@ test('presents complete listing details, gallery, marked areas, edits and rating
     .getByRole('group', { name: 'Feel of the area' })
     .getByRole('button', { name: '3 of 5' })
     .click()
-  await area
-    .getByRole('group', { name: 'View' })
-    .getByRole('button', { name: '5 of 5' })
-    .click()
+  await area.getByRole('group', { name: 'View' }).getByRole('button', { name: '5 of 5' }).click()
   await area.getByRole('button', { name: 'Save this area' }).click()
   await expect(area.getByLabel('Price (€)')).toHaveValue('40500.5')
 
@@ -97,18 +89,12 @@ test('presents complete listing details, gallery, marked areas, edits and rating
   await expect(page.locator('article.area')).toHaveCount(2)
   const secondArea = page.locator('article.area').nth(1)
   await secondArea.getByLabel('Find it by').selectOption('address')
-  await secondArea
-    .getByRole('textbox', { name: 'Address' })
-    .fill('Second field 2')
+  await secondArea.getByRole('textbox', { name: 'Address' }).fill('Second field 2')
   await secondArea.getByRole('button', { name: 'Save this area' }).click()
-  await expect(
-    secondArea.getByRole('textbox', { name: 'Address' }),
-  ).toHaveValue('Second field 2')
+  await expect(secondArea.getByRole('textbox', { name: 'Address' })).toHaveValue('Second field 2')
 })
 
-test('validates numeric and location clue inputs at boundaries', async ({
-  page,
-}) => {
+test('validates numeric and location clue inputs at boundaries', async ({ page }) => {
   await openSeededListing(page, { id: '102', title: 'Validation fixture' })
   const area = page.locator('article.area').first()
   await area.getByLabel('Price (€)').fill('not-a-number')
@@ -118,9 +104,7 @@ test('validates numeric and location clue inputs at boundaries', async ({
   await area.getByLabel('Price (€)').fill('0')
   await area.getByLabel('Area (ares)').fill('-0.1')
   await area.getByRole('button', { name: 'Save this area' }).click()
-  await expect(area.locator('.status-text')).toContainText(
-    'Area must be a positive number',
-  )
+  await expect(area.locator('.status-text')).toContainText('Area must be a positive number')
 
   await area.getByLabel('Find it by').selectOption('coordinates')
   await area.getByLabel('Price (€)').fill('0')
@@ -135,9 +119,7 @@ test('validates numeric and location clue inputs at boundaries', async ({
 
   await area.getByLabel('Longitude').fill('180.1')
   await area.getByRole('button', { name: 'Save this area' }).click()
-  await expect(area.locator('.status-text')).toContainText(
-    'Longitude must be between -180 and 180',
-  )
+  await expect(area.locator('.status-text')).toContainText('Longitude must be between -180 and 180')
   await area.getByLabel('Longitude').fill('')
   await area.getByRole('button', { name: 'Save this area' }).click()
   await expect(area.locator('.status-text')).toContainText(
@@ -152,42 +134,28 @@ test('reports resolution and service failures, then retries deterministically', 
   await page.goto(appUrl(`?e2e=${e2eNamespace}`), {
     waitUntil: 'domcontentloaded',
   })
-  await expect
-    .poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__)))
-    .toBe(true)
+  await expect.poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__))).toBe(true)
   await page.evaluate(() => window.__FMH_E2E__?.setFailure('location'))
   const result = await seed(page, [{ id: '103', title: 'Retry fixture' }])
-  await page.goto(
-    appUrl(`source-listings/${result.sourceListingIds[0]}?e2e=${e2eNamespace}`),
-    { waitUntil: 'domcontentloaded' },
-  )
+  await page.goto(appUrl(`source-listings/${result.sourceListingIds[0]}?e2e=${e2eNamespace}`), {
+    waitUntil: 'domcontentloaded',
+  })
   const area = page.locator('article.area').first()
-  await expect(
-    area.getByText('The location service could not be reached.'),
-  ).toBeVisible()
+  await expect(area.getByText('The location service could not be reached.')).toBeVisible()
   await expect(area.getByText('What went wrong')).toBeVisible()
   await page.evaluate(() => window.__FMH_E2E__?.setFailure(null))
   await area.getByRole('button', { name: 'Look up again' }).click()
-  await expect(
-    area.getByText('Exact shape from the land registry.'),
-  ).toBeVisible()
+  await expect(area.getByText('Exact shape from the land registry.')).toBeVisible()
 
   await page.evaluate(() => window.__FMH_E2E__?.setFailure('noise'))
   await area.getByRole('button', { name: /Check again|Run checks/ }).click()
-  await expect(
-    area.locator('.check').filter({ hasText: 'Noise' }),
-  ).toContainText('Unavailable')
+  await expect(area.locator('.check').filter({ hasText: 'Noise' })).toContainText('Unavailable')
   await page.evaluate(() => window.__FMH_E2E__?.setFailure(null))
   await area.getByRole('button', { name: 'Check again' }).click()
-  await expect(
-    area.locator('.check').filter({ hasText: 'Noise' }),
-  ).toContainText('Quiet')
+  await expect(area.locator('.check').filter({ hasText: 'Noise' })).toContainText('Quiet')
 })
 
-test('supports map controls and visit-plan transitions', async ({
-  page,
-  context,
-}) => {
+test('supports map controls and visit-plan transitions', async ({ page, context }) => {
   await context.grantPermissions(['geolocation'])
   await context.setGeolocation({
     latitude: 54.7,
@@ -201,18 +169,14 @@ test('supports map controls and visit-plan transitions', async ({
   await page.getByRole('button', { name: 'Where am I' }).click()
   await expect(page.locator('.bigmap > .status')).toContainText('Live location')
   await page.getByRole('button', { name: 'Full screen' }).click()
-  await expect(
-    page.getByRole('button', { name: 'Exit full screen' }),
-  ).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Exit full screen' })).toBeVisible()
   await page.getByRole('button', { name: 'Exit full screen' }).click()
 
   await page.getByRole('button', { name: 'Go see it' }).click()
   await expect(page.getByRole('button', { name: 'Going to see' })).toBeVisible()
   await page.getByRole('button', { name: 'Mark as visited' }).click()
   await expect(page).toHaveURL(/visit-plan/)
-  await expect(
-    page.getByRole('heading', { name: 'No visits planned yet' }),
-  ).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'No visits planned yet' })).toBeVisible()
 })
 
 test('removes a listing and restores the saved area when the advert is saved again', async ({
@@ -222,14 +186,9 @@ test('removes a listing and restores the saved area when the advert is saved aga
   await openSeededListing(page, listing)
   const area = page.locator('article.area').first()
   await area.getByLabel('Name for this area').fill('Keep this note')
-  await area
-    .getByRole('group', { name: 'View' })
-    .getByRole('button', { name: '4 of 5' })
-    .click()
+  await area.getByRole('group', { name: 'View' }).getByRole('button', { name: '4 of 5' }).click()
   await area.getByRole('button', { name: 'Save this area' }).click()
-  await expect(area.getByLabel('Name for this area')).toHaveValue(
-    'Keep this note',
-  )
+  await expect(area.getByLabel('Name for this area')).toHaveValue('Keep this note')
 
   page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('button', { name: 'Remove plot' }).click()
@@ -240,19 +199,12 @@ test('removes a listing and restores the saved area when the advert is saved aga
     if (!window.__FMH_E2E__) throw new Error('E2E API is unavailable')
     return window.__FMH_E2E__.resaveListing(input)
   }, listing)
-  await page.goto(
-    appUrl(
-      `source-listings/${restored.sourceListingIds[0]}?e2e=${namespace()}`,
-    ),
-    { waitUntil: 'domcontentloaded' },
-  )
+  await page.goto(appUrl(`source-listings/${restored.sourceListingIds[0]}?e2e=${namespace()}`), {
+    waitUntil: 'domcontentloaded',
+  })
   const restoredArea = page.locator('article.area').first()
-  await expect(restoredArea.getByLabel('Name for this area')).toHaveValue(
-    'Keep this note',
-  )
+  await expect(restoredArea.getByLabel('Name for this area')).toHaveValue('Keep this note')
   await expect(
-    restoredArea
-      .getByRole('group', { name: 'View' })
-      .getByRole('button', { name: '4 of 5' }),
+    restoredArea.getByRole('group', { name: 'View' }).getByRole('button', { name: '4 of 5' }),
   ).toHaveAttribute('aria-pressed', 'true')
 })

@@ -40,10 +40,8 @@ export const smokeWorker = async ({
     },
     (response) =>
       response.status === 204 &&
-      response.headers.get('Access-Control-Allow-Origin') ===
-        productionOrigin &&
-      response.headers.get('Access-Control-Allow-Methods')?.includes('POST') ===
-        true,
+      response.headers.get('Access-Control-Allow-Origin') === productionOrigin &&
+      response.headers.get('Access-Control-Allow-Methods')?.includes('POST') === true,
   )
   await check(
     'foreign-origin rejection',
@@ -55,9 +53,7 @@ export const smokeWorker = async ({
         'Access-Control-Request-Method': 'POST',
       },
     },
-    (response) =>
-      response.status === 403 &&
-      !response.headers.has('Access-Control-Allow-Origin'),
+    (response) => response.status === 403 && !response.headers.has('Access-Control-Allow-Origin'),
   )
   await check(
     'valid operation',
@@ -104,8 +100,7 @@ const isMain = process.argv[1]?.endsWith('/worker-smoke.ts')
 if (isMain) {
   const endpoint = process.argv[2]
   const productionOrigin = process.argv[3] ?? 'https://woyken.github.io'
-  if (!endpoint)
-    throw new Error('Usage: pnpm smoke:worker -- <endpoint> [origin]')
+  if (!endpoint) throw new Error('Usage: pnpm smoke:worker -- <endpoint> [origin]')
   const checks = await smokeWorker({ endpoint, productionOrigin })
   for (const check of checks) console.log(`PASS ${check}`)
 }

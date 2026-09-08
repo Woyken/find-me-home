@@ -9,9 +9,7 @@ import type { CandidatePlotRecord } from './source-listings/model'
 import type { RegisteredParcel } from './parcels/repository'
 import parcelFixture from './test-fixtures/registered-parcel.json'
 
-const plot = (
-  overrides: Partial<CandidatePlotRecord>,
-): CandidatePlotRecord => ({
+const plot = (overrides: Partial<CandidatePlotRecord>): CandidatePlotRecord => ({
   id: 'plot',
   householdId: 'household',
   sourceListingId: 'source',
@@ -80,9 +78,7 @@ describe('Candidate Plot REGIA link', () => {
 
   it('does not link unresolved addresses or parcel numbers', () => {
     expect(candidatePlotRegiaUrl(plot({ addressClue: 'Vilnius' }))).toBeNull()
-    expect(
-      candidatePlotRegiaUrl(plot({ parcelNumberClue: '4400-1234-5678' })),
-    ).toBeNull()
+    expect(candidatePlotRegiaUrl(plot({ parcelNumberClue: '4400-1234-5678' }))).toBeNull()
   })
 
   it.each([
@@ -92,24 +88,19 @@ describe('Candidate Plot REGIA link', () => {
     [latitude, Infinity],
     [91, longitude],
     [latitude, -181],
-  ])(
-    'rejects invalid coordinate pairs (%s, %s)',
-    (latitudeClue, longitudeClue) => {
-      expect(
-        candidatePlotRegiaUrl(plot({ latitudeClue, longitudeClue })),
-      ).toBeNull()
-      expect(
-        candidatePlotRegiaUrl(
-          plot({
-            resolvedLatitude: latitudeClue,
-            resolvedLongitude: longitudeClue,
-            latitudeClue: latitude,
-            longitudeClue: longitude,
-          }),
-        ),
-      ).toBe(sharedUrl)
-    },
-  )
+  ])('rejects invalid coordinate pairs (%s, %s)', (latitudeClue, longitudeClue) => {
+    expect(candidatePlotRegiaUrl(plot({ latitudeClue, longitudeClue }))).toBeNull()
+    expect(
+      candidatePlotRegiaUrl(
+        plot({
+          resolvedLatitude: latitudeClue,
+          resolvedLongitude: longitudeClue,
+          latitudeClue: latitude,
+          longitudeClue: longitude,
+        }),
+      ),
+    ).toBe(sharedUrl)
+  })
 
   it('does not mix incomplete resolved and direct coordinate pairs', () => {
     expect(
@@ -246,9 +237,7 @@ describe('Candidate Plot location resolution', () => {
       locationResolutionState: 'unavailable',
       effectiveLocationSource: null,
     })
-    expect((failure as LocationResolutionError).diagnostic).toContain(
-      'Failed: Worker unavailable',
-    )
+    expect((failure as LocationResolutionError).diagnostic).toContain('Failed: Worker unavailable')
     expect(searchAddress).toHaveBeenCalledOnce()
     error.mockRestore()
   })
@@ -310,11 +299,11 @@ describe('Candidate Plot location resolution', () => {
       reverseAddress: async () => null,
     })
 
-    await expect(
-      resolver.resolve(plot({ addressClue: 'Unknown road 99' })),
-    ).resolves.toMatchObject({
-      locationResolutionState: 'no-result',
-      resolvedLatitude: null,
-    })
+    await expect(resolver.resolve(plot({ addressClue: 'Unknown road 99' }))).resolves.toMatchObject(
+      {
+        locationResolutionState: 'no-result',
+        resolvedLatitude: null,
+      },
+    )
   })
 })

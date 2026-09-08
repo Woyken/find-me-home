@@ -1,8 +1,4 @@
-import type {
-  HouseholdRoom,
-  Manifest,
-  RecordKey,
-} from '../households/synchronization'
+import type { HouseholdRoom, Manifest, RecordKey } from '../households/synchronization'
 import type { E2eSyncEvent } from './support'
 
 export type E2eRoomEnvelope =
@@ -30,18 +26,13 @@ declare global {
 /** A test-only room transport whose relay is installed by Playwright before boot. */
 export const createE2eRoomFactory = (
   onEvent?: (event: E2eSyncEvent) => void,
-): ((options: {
-  householdId: string
-  roomPassword: string
-}) => HouseholdRoom) => {
+): ((options: { householdId: string; roomPassword: string }) => HouseholdRoom) => {
   let nextPeer = 0
   return ({ householdId, roomPassword }) => {
     const relay = window.__FMH_E2E_RELAY__
     const channel = relay
       ? undefined
-      : new BroadcastChannel(
-          `find-me-home-e2e-room:${householdId}:${roomPassword}`,
-        )
+      : new BroadcastChannel(`find-me-home-e2e-room:${householdId}:${roomPassword}`)
     const peerId = `e2e-peer-${++nextPeer}-${crypto.randomUUID()}`
     const peers = new Set<string>()
     const joins = new Set<(id: string) => void>()
@@ -57,8 +48,7 @@ export const createE2eRoomFactory = (
     }
     const handleMessage = (message: E2eRoomEnvelope) => {
       if (message.peerId === peerId) return
-      if ('target' in message && message.target && message.target !== peerId)
-        return
+      if ('target' in message && message.target && message.target !== peerId) return
       switch (message.type) {
         case 'join':
           if (peers.has(message.peerId)) {
@@ -75,15 +65,11 @@ export const createE2eRoomFactory = (
           break
         case 'manifest':
           onEvent?.({ direction: 'received', type: 'manifest' })
-          manifests.forEach((listener) =>
-            listener(message.value, message.peerId),
-          )
+          manifests.forEach((listener) => listener(message.value, message.peerId))
           break
         case 'request':
           onEvent?.({ direction: 'received', type: 'request' })
-          requests.forEach((listener) =>
-            listener(message.value, message.peerId),
-          )
+          requests.forEach((listener) => listener(message.value, message.peerId))
           break
         case 'records':
           onEvent?.({
@@ -97,9 +83,7 @@ export const createE2eRoomFactory = (
     const onMessage = (event: Event) =>
       handleMessage((event as CustomEvent<E2eRoomEnvelope>).detail)
     if (relay) window.addEventListener('fmh-e2e-room-message', onMessage)
-    else
-      channel!.onmessage = ({ data }: MessageEvent<E2eRoomEnvelope>) =>
-        handleMessage(data)
+    else channel!.onmessage = ({ data }: MessageEvent<E2eRoomEnvelope>) => handleMessage(data)
     // Let the runtime register its synchronization listeners before announcing
     // the peer. The relay can deliver responses synchronously across contexts.
     queueMicrotask(() => post({ type: 'join', peerId }))

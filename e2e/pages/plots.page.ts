@@ -12,9 +12,7 @@ export class PlotsPage {
   }
 
   row(title: string) {
-    return new PlotRow(
-      this.savedPlots.getByRole('article').filter({ hasText: title }),
-    )
+    return new PlotRow(this.savedPlots.getByRole('article').filter({ hasText: title }))
   }
 
   async expectEmpty() {
@@ -26,5 +24,4 @@ export class PlotsPage {
   }
 }
 
-const pageHeading = (page: Page, name: string) =>
-  page.getByRole('heading', { name })
+const pageHeading = (page: Page, name: string) => page.getByRole('heading', { name })

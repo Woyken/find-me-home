@@ -14,9 +14,7 @@ const open = async (page: Page, namespace: string) => {
   await page.goto(appUrl(`?e2e=${namespace}`), {
     waitUntil: 'domcontentloaded',
   })
-  await expect
-    .poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__)))
-    .toBe(true)
+  await expect.poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__))).toBe(true)
   await page.evaluate(async () => {
     const api = window.__FMH_E2E__
     if (!api) throw new Error('E2E runtime is unavailable')
@@ -31,8 +29,7 @@ const seed = async (page: Page, listings: E2eSeed['listings']) =>
     return api.seed({ listings: value })
   }, listings)
 
-const plannedTitles = (page: Page) =>
-  page.locator('[aria-label^="Stop "] .t').allTextContents()
+const plannedTitles = (page: Page) => page.locator('[aria-label^="Stop "] .t').allTextContents()
 
 test.describe('visit plan', () => {
   test('covers the empty state and the Google Maps route only appears for located stops', async ({
@@ -44,12 +41,8 @@ test.describe('visit plan', () => {
     await page.goto(appUrl(`visit-plan?e2e=${namespace}`), {
       waitUntil: 'domcontentloaded',
     })
-    await expect(
-      page.getByRole('heading', { name: 'No visits planned yet' }),
-    ).toBeVisible()
-    await expect(
-      page.getByRole('link', { name: 'Open route in Google Maps' }),
-    ).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'No visits planned yet' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Open route in Google Maps' })).toHaveCount(0)
 
     const result = await page.evaluate(async () => {
       const api = window.__FMH_E2E__
@@ -77,9 +70,10 @@ test.describe('visit plan', () => {
     await expect(route).toHaveAttribute('rel', 'noreferrer')
     await expect(route).toHaveAttribute('href', /destination=54.7%2C25.3/)
     await expect(page.getByText('not on the map')).toBeVisible()
-    await expect(
-      page.getByRole('link', { name: 'Located plot', exact: true }),
-    ).toHaveAttribute('href', new RegExp(result.sourceListingIds[0]))
+    await expect(page.getByRole('link', { name: 'Located plot', exact: true })).toHaveAttribute(
+      'href',
+      new RegExp(result.sourceListingIds[0]),
+    )
   })
 
   test('retains driving order across reloads and supports keyboard-operable reordering and removal', async ({
@@ -103,21 +97,13 @@ test.describe('visit plan', () => {
       waitUntil: 'domcontentloaded',
     })
 
-    await expect
-      .poll(() => plannedTitles(page))
-      .toEqual(['First', 'Second', 'Third'])
+    await expect.poll(() => plannedTitles(page)).toEqual(['First', 'Second', 'Third'])
     const moveThirdUp = page.getByRole('button', { name: 'Move Third up' })
     await moveThirdUp.focus()
     await page.keyboard.press('Enter')
-    await expect
-      .poll(() => plannedTitles(page))
-      .toEqual(['First', 'Third', 'Second'])
-    await expect(
-      page.getByRole('button', { name: 'Move First up' }),
-    ).toBeDisabled()
-    await page
-      .getByRole('button', { name: 'Remove Third from the list' })
-      .click()
+    await expect.poll(() => plannedTitles(page)).toEqual(['First', 'Third', 'Second'])
+    await expect(page.getByRole('button', { name: 'Move First up' })).toBeDisabled()
+    await page.getByRole('button', { name: 'Remove Third from the list' }).click()
     await expect.poll(() => plannedTitles(page)).toEqual(['First', 'Second'])
     await page.reload()
     await expect.poll(() => plannedTitles(page)).toEqual(['First', 'Second'])
@@ -125,19 +111,14 @@ test.describe('visit plan', () => {
     const view = page.getByRole('group', { name: 'View' })
     await view.getByRole('button', { name: 'Map' }).focus()
     await page.keyboard.press('Enter')
-    await expect(view.getByRole('button', { name: 'Map' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
+    await expect(view.getByRole('button', { name: 'Map' })).toHaveAttribute('aria-pressed', 'true')
     await expect(view.getByRole('button', { name: 'List' })).toHaveAttribute(
       'aria-pressed',
       'false',
     )
     await page.keyboard.press('Shift+Tab')
     await page.keyboard.press('Enter')
-    await expect(
-      page.getByRole('list', { name: 'Visit stops in driving order' }),
-    ).toBeVisible()
+    await expect(page.getByRole('list', { name: 'Visit stops in driving order' })).toBeVisible()
 
     const fitsViewport = await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -145,25 +126,20 @@ test.describe('visit plan', () => {
     expect(fitsViewport).toBe(true)
   })
 
-  test('shows a failed storage write without changing the visit plan', async ({
-    page,
-  }) => {
+  test('shows a failed storage write without changing the visit plan', async ({ page }) => {
     const namespace = uniqueNamespace('visit-error')
     await open(page, namespace)
     await seed(page, [{ id: '301', title: 'Cannot save' }])
-    await page.evaluate(() =>
-      window.__FMH_E2E__?.setFailure('visit-plan-storage'),
-    )
+    await page.evaluate(() => window.__FMH_E2E__?.setFailure('visit-plan-storage'))
     await page.getByRole('button', { name: 'Go see it' }).click()
     await expect(page.getByRole('alert')).toContainText('IndexedDB transaction')
-    await expect(
-      page.getByRole('button', { name: 'Go see it' }),
-    ).toHaveAttribute('aria-pressed', 'false')
+    await expect(page.getByRole('button', { name: 'Go see it' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
   })
 
-  test('keeps plan references safe when a listing disappears', async ({
-    page,
-  }) => {
+  test('keeps plan references safe when a listing disappears', async ({ page }) => {
     const namespace = uniqueNamespace('visit-missing')
     await open(page, namespace)
     const result = await seed(page, [{ id: '401', title: 'Gone soon' }])
@@ -176,9 +152,7 @@ test.describe('visit plan', () => {
     await page.goto(appUrl(`visit-plan?e2e=${namespace}`), {
       waitUntil: 'domcontentloaded',
     })
-    await expect(
-      page.getByRole('heading', { name: 'No visits planned yet' }),
-    ).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'No visits planned yet' })).toBeVisible()
   })
 })
 
@@ -216,13 +190,9 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
     invitation.searchParams.set('e2e', namespace)
     invitation.searchParams.set('e2e-device', 'second')
     await second.goto(invitation.toString(), { waitUntil: 'domcontentloaded' })
-    await expect(
-      second.getByRole('link', { name: 'Going to see' }),
-    ).toContainText('2')
+    await expect(second.getByRole('link', { name: 'Going to see' })).toContainText('2')
     await second.getByRole('link', { name: 'Going to see' }).click()
-    await expect
-      .poll(() => plannedTitles(second))
-      .toEqual(['Shared first', 'Shared second'])
+    await expect.poll(() => plannedTitles(second)).toEqual(['Shared first', 'Shared second'])
     await expect
       .poll(() => first.evaluate(() => window.__FMH_E2E__?.syncEvents()))
       .toEqual(
@@ -246,16 +216,11 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
     await first.goto(appUrl(`visit-plan?e2e=${namespace}&e2e-device=first`), {
       waitUntil: 'domcontentloaded',
     })
-    await expect
-      .poll(() => plannedTitles(first))
-      .toEqual(['Shared second', 'Shared first'])
+    await expect.poll(() => plannedTitles(first)).toEqual(['Shared second', 'Shared first'])
     await first.evaluate(() => window.__FMH_E2E__?.captureInbox('503'))
-    await second.goto(
-      appUrl(`import-inbox?e2e=${namespace}&e2e-device=second`),
-      {
-        waitUntil: 'domcontentloaded',
-      },
-    )
+    await second.goto(appUrl(`import-inbox?e2e=${namespace}&e2e-device=second`), {
+      waitUntil: 'domcontentloaded',
+    })
     await expect(second.getByText('E2E inbox 503')).toBeVisible()
     await first.evaluate((id) => {
       const api = window.__FMH_E2E__
@@ -277,17 +242,13 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
     await expect.poll(() => plannedTitles(first)).toEqual([])
 
     await first.goto(
-      appUrl(
-        `source-listings/${result.sourceListingIds[0]}?e2e=${namespace}&e2e-device=first`,
-      ),
+      appUrl(`source-listings/${result.sourceListingIds[0]}?e2e=${namespace}&e2e-device=first`),
       {
         waitUntil: 'domcontentloaded',
       },
     )
     await first.getByRole('button', { name: 'Go see it' }).click()
-    await expect(
-      first.getByRole('button', { name: 'Going to see' }),
-    ).toBeVisible()
+    await expect(first.getByRole('button', { name: 'Going to see' })).toBeVisible()
 
     await second.close()
     const rejoined = await secondContext.newPage()
@@ -295,9 +256,7 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
       await rejoined.goto(invitation.toString(), {
         waitUntil: 'domcontentloaded',
       })
-      await expect(
-        rejoined.getByRole('link', { name: 'Going to see' }),
-      ).toContainText('1')
+      await expect(rejoined.getByRole('link', { name: 'Going to see' })).toContainText('1')
       await rejoined.getByRole('link', { name: 'Going to see' }).click()
       await expect.poll(() => plannedTitles(rejoined)).toEqual(['Shared first'])
     } finally {

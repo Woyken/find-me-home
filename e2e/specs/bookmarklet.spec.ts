@@ -16,9 +16,7 @@ import { appUrl } from '../support/app-url.ts'
 
 const app = async (page: PlaywrightPage, namespace: string) => {
   await page.goto(appUrl(`?e2e=${namespace}`))
-  await expect
-    .poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__)))
-    .toBe(true)
+  await expect.poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__))).toBe(true)
   await page.evaluate(async () => {
     const api = window.__FMH_E2E__
     if (!api) throw new Error('E2E runtime is unavailable')
@@ -51,22 +49,13 @@ for (const scenario of importableAdverts) {
     const href = await addPlotDialogBookmarkletHref(page)
     const sourcePage = createAruodasSourcePage(scenario)
     await openSourcePage(page, sourcePage)
-    await runAddPlotDialogBookmarklet(
-      page,
-      href,
-      await actualBookmarkletSource(page),
-    )
+    await runAddPlotDialogBookmarklet(page, href, await actualBookmarkletSource(page))
     const review = new ImportReviewPage(page)
     await review.expectListing(scenario.listingId)
     if (scenario.lazyPhotos)
-      await expect(page.locator('aside img')).toHaveAttribute(
-        'src',
-        /fixture-lazy/,
-      )
+      await expect(page.locator('aside img')).toHaveAttribute('src', /fixture-lazy/)
     if (scenario.missing)
-      await expect(
-        page.getByText('No address came with the advert'),
-      ).toBeVisible()
+      await expect(page.getByText('No address came with the advert')).toBeVisible()
   })
 }
 
@@ -80,40 +69,26 @@ for (const scenario of [
     const href = await addPlotDialogBookmarkletHref(page)
     await openSourcePage(page, createAruodasSourcePage(scenario))
     page.once('dialog', (dialog) => dialog.accept())
-    await runAddPlotDialogBookmarklet(
-      page,
-      href,
-      await actualBookmarkletSource(page),
-      { expectImport: false },
-    )
+    await runAddPlotDialogBookmarklet(page, href, await actualBookmarkletSource(page), {
+      expectImport: false,
+    })
     await expect(page).toHaveURL(createAruodasSourcePage(scenario).url)
   })
 }
 
-test('imports an advert when unrelated JSON-LD is malformed', async ({
-  page,
-}) => {
+test('imports an advert when unrelated JSON-LD is malformed', async ({ page }) => {
   await app(page, 'malformed-advert')
   const href = await addPlotDialogBookmarkletHref(page)
   const fixture = createAruodasSourcePage(aruodasScenarios.malformedAdvert)
   await openSourcePage(page, fixture)
-  await runAddPlotDialogBookmarklet(
-    page,
-    href,
-    await actualBookmarkletSource(page),
-  )
+  await runAddPlotDialogBookmarklet(page, href, await actualBookmarkletSource(page))
   await new ImportReviewPage(page).expectListing('11-424242')
 })
 
-test('does not manufacture coordinates from malformed Aruodas map data', async ({
-  page,
-}) => {
+test('does not manufacture coordinates from malformed Aruodas map data', async ({ page }) => {
   await app(page, 'malformed-coordinates')
   const href = await addPlotDialogBookmarkletHref(page)
-  await openSourcePage(
-    page,
-    createAruodasSourcePage(aruodasScenarios.malformedCoordinatesAdvert),
-  )
+  await openSourcePage(page, createAruodasSourcePage(aruodasScenarios.malformedCoordinatesAdvert))
   const { destination } = await runAddPlotDialogBookmarklet(
     page,
     href,
@@ -124,16 +99,12 @@ test('does not manufacture coordinates from malformed Aruodas map data', async (
     kind: 'listing',
     payload: { locationConfidence: 'unknown' },
   })
-  expect(
-    decodeBookmarkletPayload(destination?.fragment ?? ''),
-  ).not.toMatchObject({
+  expect(decodeBookmarkletPayload(destination?.fragment ?? '')).not.toMatchObject({
     payload: { lat: expect.any(Number) },
   })
 })
 
-test('uses the loader fetch fallback and alerts when the scraper cannot load', async ({
-  page,
-}) => {
+test('uses the loader fetch fallback and alerts when the scraper cannot load', async ({ page }) => {
   await app(page, 'load-fallback')
   const href = await addPlotDialogBookmarkletHref(page)
   const fixture = createAruodasSourcePage(aruodasScenarios.desktopAdvert)
@@ -148,9 +119,7 @@ test('uses the loader fetch fallback and alerts when the scraper cannot load', a
   await new ImportReviewPage(page).expectListing('11-424242')
 })
 
-test('alerts when both loader paths cannot load the scraper', async ({
-  page,
-}) => {
+test('alerts when both loader paths cannot load the scraper', async ({ page }) => {
   await app(page, 'load-failure')
   const href = await addPlotDialogBookmarkletHref(page)
   const fixture = createAruodasSourcePage(aruodasScenarios.desktopAdvert)
@@ -168,9 +137,7 @@ test('alerts when both loader paths cannot load the scraper', async ({
   expect(alert.message()).toContain('could not load the import script')
 })
 
-test('keeps a return marker through advert review and save', async ({
-  page,
-}) => {
+test('keeps a return marker through advert review and save', async ({ page }) => {
   await app(page, 'return-marker')
   const href = await addPlotDialogBookmarkletHref(page)
   const fixture = createAruodasSourcePage(aruodasScenarios.desktopAdvert)
@@ -178,39 +145,24 @@ test('keeps a return marker through advert review and save', async ({
     ...fixture,
     url: `${fixture.url}#find-me-home-return=import-inbox`,
   })
-  await runAddPlotDialogBookmarklet(
-    page,
-    href,
-    await actualBookmarkletSource(page),
-  )
+  await runAddPlotDialogBookmarklet(page, href, await actualBookmarkletSource(page))
   const review = new ImportReviewPage(page)
   await review.save()
   await expect(page).toHaveURL(/\/import-inbox$/)
 })
 
-for (const scenario of [
-  aruodasScenarios.desktopAdvert,
-  aruodasScenarios.mobileAdvert,
-]) {
+for (const scenario of [aruodasScenarios.desktopAdvert, aruodasScenarios.mobileAdvert]) {
   test(`saves ${scenario.name}, opens its detail, and persists it after reload`, async ({
     page,
   }) => {
     await app(page, `save-${scenario.name}`)
     const href = await addPlotDialogBookmarkletHref(page)
     await openSourcePage(page, createAruodasSourcePage(scenario))
-    await runAddPlotDialogBookmarklet(
-      page,
-      href,
-      await actualBookmarkletSource(page),
-    )
+    await runAddPlotDialogBookmarklet(page, href, await actualBookmarkletSource(page))
     await new ImportReviewPage(page).save()
     await expect(page).toHaveURL(/\/source-listings\//)
-    await expect(page.getByRole('heading', { level: 1 })).toContainText(
-      'Kauno r. sav., Fixture g.',
-    )
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Kauno r. sav., Fixture g.')
     await page.reload()
-    await expect(page.getByRole('heading', { level: 1 })).toContainText(
-      'Kauno r. sav., Fixture g.',
-    )
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Kauno r. sav., Fixture g.')
   })
 }

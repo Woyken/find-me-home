@@ -20,27 +20,18 @@ export const formatEur = (value: number | null | undefined) =>
   value === null || value === undefined ? null : eurFormat.format(value)
 
 export const formatAres = (value: number | null | undefined) =>
-  value === null || value === undefined
-    ? null
-    : `${numberFormat.format(value)} a`
+  value === null || value === undefined ? null : `${numberFormat.format(value)} a`
 
 export const formatPerAre = (
   priceEur: number | null | undefined,
   areaAres: number | null | undefined,
-) =>
-  priceEur && areaAres
-    ? `${wholeNumberFormat.format(priceEur / areaAres)} €/a`
-    : null
+) => (priceEur && areaAres ? `${wholeNumberFormat.format(priceEur / areaAres)} €/a` : null)
 
 export const formatDateShort = (value: number | null | undefined) =>
-  value === null || value === undefined
-    ? null
-    : dateShortFormat.format(new Date(value))
+  value === null || value === undefined ? null : dateShortFormat.format(new Date(value))
 
 export const formatDateLong = (value: number | null | undefined) =>
-  value === null || value === undefined
-    ? 'Not yet'
-    : dateLongFormat.format(new Date(value))
+  value === null || value === undefined ? 'Not yet' : dateLongFormat.format(new Date(value))
 
 export const formatAgo = (timestamp: number | null | undefined) => {
   if (timestamp === null || timestamp === undefined) return 'unknown'

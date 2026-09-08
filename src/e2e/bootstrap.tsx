@@ -20,10 +20,7 @@ const namespaceFromLocation = () => {
   return 'default'
 }
 
-const resolvedLocation = (
-  latitude: number,
-  longitude: number,
-): ResolvedLocationData => ({
+const resolvedLocation = (latitude: number, longitude: number): ResolvedLocationData => ({
   resolvedLatitude: latitude,
   resolvedLongitude: longitude,
   resolvedAddress: 'E2E resolved address',
@@ -39,8 +36,7 @@ const resolvedLocation = (
 const boot = () => {
   const namespace = namespaceFromLocation()
   const device = new URLSearchParams(location.search).get('e2e-device')
-  if (device && !/^[A-Za-z0-9_-]{1,80}$/.test(device))
-    throw new Error('Invalid E2E device')
+  if (device && !/^[A-Za-z0-9_-]{1,80}$/.test(device)) throw new Error('Invalid E2E device')
   const storageNamespace = `${namespace}-${device ?? 'default'}`
   const failureKey = `find-me-home-e2e-failure-${namespace}`
   let tick = 1_735_689_600_000
@@ -55,10 +51,7 @@ const boot = () => {
       if (failure === 'location')
         throw new LocationResolutionError(
           {
-            ...resolvedLocation(
-              plot.latitudeClue ?? 54.6872,
-              plot.longitudeClue ?? 25.2797,
-            ),
+            ...resolvedLocation(plot.latitudeClue ?? 54.6872, plot.longitudeClue ?? 25.2797),
             locationResolutionState: 'unavailable',
           },
           ['E2E location lookup'],
@@ -81,9 +74,11 @@ const boot = () => {
     },
     async legalFlags() {
       failWhen('legalFlags')
-      return ['protected area', 'flood zone', 'heritage', 'state forest'].map(
-        (name) => ({ name, flag: false, detail: 'E2E clear' }),
-      )
+      return ['protected area', 'flood zone', 'heritage', 'state forest'].map((name) => ({
+        name,
+        flag: false,
+        detail: 'E2E clear',
+      }))
     },
     async walkToStop() {
       failWhen('walkToStop')
@@ -157,12 +152,9 @@ const boot = () => {
   const seed = async (seedInput: E2eSeed) => {
     await reset()
     await runtime.createHousehold()
-    if (seedInput.householdName)
-      await runtime.renameActiveHousehold(seedInput.householdName)
+    if (seedInput.householdName) await runtime.renameActiveHousehold(seedInput.householdName)
     const results = await Promise.all(
-      seedInput.listings.map((listing) =>
-        runtime.saveReviewedImport(e2eReview(listing)),
-      ),
+      seedInput.listings.map((listing) => runtime.saveReviewedImport(e2eReview(listing))),
     )
     if (seedInput.inbox?.length)
       await runtime.captureImportInbox(
@@ -177,23 +169,18 @@ const boot = () => {
       )
     if (seedInput.plannedListingIds?.length) {
       const bySeedId = new Map(
-        seedInput.listings.map((listing, index) => [
-          listing.id,
-          results[index].sourceListingId,
-        ]),
+        seedInput.listings.map((listing, index) => [listing.id, results[index].sourceListingId]),
       )
       await runtime.setVisitPlan(
         seedInput.plannedListingIds.map((id) => {
           const sourceListingId = bySeedId.get(id)
-          if (!sourceListingId)
-            throw new Error(`Unknown planned E2E listing ${id}`)
+          if (!sourceListingId) throw new Error(`Unknown planned E2E listing ${id}`)
           return sourceListingId
         }),
       )
     }
     const state = runtime.state()
-    if (state.status !== 'active')
-      throw new Error('E2E household did not activate')
+    if (state.status !== 'active') throw new Error('E2E household did not activate')
     return {
       householdId: state.access.householdId,
       sourceListingIds: results.map((result) => result.sourceListingId),
@@ -214,8 +201,7 @@ const boot = () => {
       await ready()
       const result = await runtime.saveReviewedImport(e2eReview(listing))
       const state = runtime.state()
-      if (state.status !== 'active')
-        throw new Error('E2E household did not activate')
+      if (state.status !== 'active') throw new Error('E2E household did not activate')
       return {
         householdId: state.access.householdId,
         sourceListingIds: [result.sourceListingId],

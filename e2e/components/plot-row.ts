@@ -9,8 +9,6 @@ export class PlotRow {
   }
 
   async toggleGoSee() {
-    await this.row
-      .getByRole('button', { name: /Go see it|Going to see/ })
-      .click()
+    await this.row.getByRole('button', { name: /Go see it|Going to see/ }).click()
   }
 }

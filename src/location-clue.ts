@@ -18,10 +18,7 @@ export function chooseImportedLocationClue(input: {
     coordinateCluePrecision,
     addressClue: input.address ?? null,
   }
-  if (
-    input.uniqueRegistryNumber &&
-    /^\d{4}-\d{4}-\d{4}$/.test(input.uniqueRegistryNumber)
-  ) {
+  if (input.uniqueRegistryNumber && /^\d{4}-\d{4}-\d{4}$/.test(input.uniqueRegistryNumber)) {
     return {
       kind: 'registry' as const,
       ...clues,
@@ -31,11 +28,7 @@ export function chooseImportedLocationClue(input: {
     kind: 'coordinates' as const,
     ...clues,
   }
-  if (
-    input.precision === 'exact' &&
-    input.latitude != null &&
-    input.longitude != null
-  ) {
+  if (input.precision === 'exact' && input.latitude != null && input.longitude != null) {
     return coordinates
   }
   if (input.address && /\d/.test(input.address)) {

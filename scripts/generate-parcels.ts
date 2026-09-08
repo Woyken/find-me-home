@@ -54,8 +54,7 @@ interface RcProperties {
 async function download(url: string, destination: string): Promise<string> {
   const response = await fetch(url, {
     headers: {
-      'User-Agent':
-        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36',
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36',
     },
   })
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`)
@@ -69,9 +68,7 @@ async function download(url: string, destination: string): Promise<string> {
   return hash.digest('hex')
 }
 
-async function zipEntry(
-  zipPath: string,
-): Promise<{ start: number; size: number }> {
+async function zipEntry(zipPath: string): Promise<{ start: number; size: number }> {
   const file = await open(zipPath, 'r')
   try {
     const header = Buffer.alloc(30)
@@ -132,12 +129,7 @@ function bbox(rings: ParcelRings): [number, number, number, number] {
   return [minX, minY, maxX, maxY]
 }
 
-function cellsForBbox([minX, minY, maxX, maxY]: [
-  number,
-  number,
-  number,
-  number,
-]): Array<string> {
+function cellsForBbox([minX, minY, maxX, maxY]: [number, number, number, number]): Array<string> {
   const cells: Array<string> = []
   for (
     let x = Math.floor(minX / PARCEL_CELL_SIZE_METRES);
@@ -160,21 +152,14 @@ function normalizeNumber(value: string | null): string | null {
   return normalized.length >= 4 ? normalized : null
 }
 
-async function flushSpool(
-  directory: string,
-  batches: Map<string, Array<string>>,
-): Promise<void> {
+async function flushSpool(directory: string, batches: Map<string, Array<string>>): Promise<void> {
   for (const [key, lines] of batches) {
     await appendFile(path.join(directory, key), `${lines.join('\n')}\n`)
   }
   batches.clear()
 }
 
-function batchLine(
-  batches: Map<string, Array<string>>,
-  key: string,
-  line: string,
-): void {
+function batchLine(batches: Map<string, Array<string>>, key: string, line: string): void {
   const lines = batches.get(key) ?? []
   lines.push(line)
   batches.set(key, lines)
@@ -197,26 +182,19 @@ async function spoolMunicipality(
   })
   const cellBatches = new Map<string, Array<string>>()
   const prefixBatches = new Map<string, Array<string>>()
-  let extent: [number, number, number, number] = [
-    Infinity,
-    Infinity,
-    -Infinity,
-    -Infinity,
-  ]
+  let extent: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity]
   let parcelCount = 0
   for await (const line of lines) {
     const feature = parseFeature(line)
     if (!feature?.geometry) continue
     const areaHa =
-      feature.properties.skl_plotas === null ||
-      feature.properties.skl_plotas === undefined
+      feature.properties.skl_plotas === null || feature.properties.skl_plotas === undefined
         ? null
         : Number(feature.properties.skl_plotas)
     const purposeId = Number(feature.properties.pask_tipas)
     const cadastralNumber = feature.properties.kadastro_nr ?? null
     const uniqueNumber =
-      feature.properties.unikalus_nr === null ||
-      feature.properties.unikalus_nr === undefined
+      feature.properties.unikalus_nr === null || feature.properties.unikalus_nr === undefined
         ? null
         : String(feature.properties.unikalus_nr)
     let parcelBbox: [number, number, number, number]
@@ -237,9 +215,7 @@ async function spoolMunicipality(
       parcelId,
       cadastralNumber,
       uniqueNumber,
-      areaHa !== null && Number.isFinite(areaHa)
-        ? Math.round(areaHa * 10_000)
-        : null,
+      areaHa !== null && Number.isFinite(areaHa) ? Math.round(areaHa * 10_000) : null,
       purposes.get(purposeId) ?? null,
       feature.geometry.coordinates,
       parcelBbox,
@@ -256,16 +232,8 @@ async function spoolMunicipality(
       throw new Error(`orphan parcel ${parcelId} has no complete number`)
     }
     for (const number of completeNumbers) {
-      const references = cells.map((cell): ParcelReference => [
-        municipalityCode,
-        cell,
-        parcelId,
-      ])
-      batchLine(
-        prefixBatches,
-        number.slice(0, 4),
-        JSON.stringify([number, references]),
-      )
+      const references = cells.map((cell): ParcelReference => [municipalityCode, cell, parcelId])
+      batchLine(prefixBatches, number.slice(0, 4), JSON.stringify([number, references]))
     }
     parcelCount++
     if (parcelCount % SPOOL_BATCH_SIZE === 0) {
@@ -305,11 +273,7 @@ async function writeCompressedJson(
   chunks: AsyncIterable<string> | Iterable<string>,
 ): Promise<ParcelAsset> {
   await mkdir(path.dirname(destination), { recursive: true })
-  await pipeline(
-    Readable.from(chunks),
-    createGzip({ level: 9 }),
-    createWriteStream(destination),
-  )
+  await pipeline(Readable.from(chunks), createGzip({ level: 9 }), createWriteStream(destination))
   const hash = createHash('sha256')
   for await (const chunk of createReadStream(destination)) hash.update(chunk)
   return {
@@ -320,10 +284,7 @@ async function writeCompressedJson(
   }
 }
 
-async function* spatialJson(
-  spoolPath: string,
-  onParcel: () => void,
-): AsyncGenerator<string> {
+async function* spatialJson(spoolPath: string, onParcel: () => void): AsyncGenerator<string> {
   yield '{"parcels":['
   let first = true
   for await (const line of createInterface({
@@ -338,19 +299,14 @@ async function* spatialJson(
   yield ']}'
 }
 
-async function readPrefixSpool(
-  spoolPath: string,
-): Promise<PrefixShard['references']> {
+async function readPrefixSpool(spoolPath: string): Promise<PrefixShard['references']> {
   const grouped = new Map<string, Array<ParcelReference>>()
   for await (const line of createInterface({
     input: createReadStream(spoolPath),
     crlfDelay: Infinity,
   })) {
     if (!line) continue
-    const [number, references] = JSON.parse(line) as [
-      string,
-      Array<ParcelReference>,
-    ]
+    const [number, references] = JSON.parse(line) as [string, Array<ParcelReference>]
     const existing = grouped.get(number) ?? []
     existing.push(...references)
     grouped.set(number, existing)
@@ -369,9 +325,7 @@ function calculateDatasetVersion(
         schemaVersion: PARCEL_SCHEMA_VERSION,
         generatorVersion: PARCEL_GENERATOR_VERSION,
         sourceVersions,
-        cells: Object.fromEntries(
-          Object.entries(cells).map(([key, value]) => [key, value.sha256]),
-        ),
+        cells: Object.fromEntries(Object.entries(cells).map(([key, value]) => [key, value.sha256])),
         prefixes: Object.fromEntries(
           Object.entries(prefixes).map(([key, value]) => [key, value.sha256]),
         ),
@@ -389,9 +343,7 @@ async function finalizeAssets(
 ): Promise<ParcelManifest> {
   const cells: Record<string, ParcelAsset> = {}
   const cellSpoolDirectory = path.join(spoolDirectory, 'cells')
-  for (const cell of (await readdir(cellSpoolDirectory)).sort((a, b) =>
-    a.localeCompare(b),
-  )) {
+  for (const cell of (await readdir(cellSpoolDirectory)).sort((a, b) => a.localeCompare(b))) {
     const relativePath = `cells/${cell}.json.gz`
     let parcelCount = 0
     const asset = await writeCompressedJson(
@@ -403,17 +355,12 @@ async function finalizeAssets(
 
   const prefixes: Record<string, ParcelAsset> = {}
   const prefixSpoolDirectory = path.join(spoolDirectory, 'prefixes')
-  for (const prefix of (await readdir(prefixSpoolDirectory)).sort((a, b) =>
-    a.localeCompare(b),
-  )) {
-    const references = await readPrefixSpool(
-      path.join(prefixSpoolDirectory, prefix),
-    )
+  for (const prefix of (await readdir(prefixSpoolDirectory)).sort((a, b) => a.localeCompare(b))) {
+    const references = await readPrefixSpool(path.join(prefixSpoolDirectory, prefix))
     const relativePath = `prefixes/${prefix}.json.gz`
-    const asset = await writeCompressedJson(
-      path.join(publicationDirectory, relativePath),
-      [JSON.stringify({ references } satisfies PrefixShard)],
-    )
+    const asset = await writeCompressedJson(path.join(publicationDirectory, relativePath), [
+      JSON.stringify({ references } satisfies PrefixShard),
+    ])
     prefixes[prefix] = {
       ...asset,
       path: relativePath,
@@ -432,23 +379,15 @@ async function finalizeAssets(
     cells,
     prefixes,
   }
-  await writeFile(
-    path.join(publicationDirectory, 'manifest.json'),
-    JSON.stringify(manifest),
-  )
+  await writeFile(path.join(publicationDirectory, 'manifest.json'), JSON.stringify(manifest))
   return manifest
 }
 
 async function main(): Promise<void> {
-  const workingDirectory = await mkdtemp(
-    path.join(tmpdir(), 'find-me-home-parcels-'),
-  )
+  const workingDirectory = await mkdtemp(path.join(tmpdir(), 'find-me-home-parcels-'))
   await mkdir(path.dirname(outputDirectory), { recursive: true })
   const publicationDirectory = await mkdtemp(
-    path.join(
-      path.dirname(outputDirectory),
-      `.${path.basename(outputDirectory)}-staging-`,
-    ),
+    path.join(path.dirname(outputDirectory), `.${path.basename(outputDirectory)}-staging-`),
   )
   try {
     const purposesPath = path.join(workingDirectory, 'purposes.csv')
@@ -481,12 +420,7 @@ async function main(): Promise<void> {
         prefixesDirectory,
       )
     }
-    await finalizeAssets(
-      spoolDirectory,
-      publicationDirectory,
-      sourceVersions,
-      municipalities,
-    )
+    await finalizeAssets(spoolDirectory, publicationDirectory, sourceVersions, municipalities)
     const manifest = await validateParcelAssets(publicationDirectory)
     await writeFile(
       path.join(publicationDirectory, 'NOTICE.txt'),

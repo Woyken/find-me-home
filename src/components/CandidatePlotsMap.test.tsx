@@ -60,24 +60,14 @@ const mount = async () => {
   const container = document.createElement('div')
   document.body.append(container)
   dispose = render(
-    () => (
-      <CandidatePlotsMap
-        plots={[]}
-        selectedPlotId={undefined}
-        onSelect={() => {}}
-      />
-    ),
+    () => <CandidatePlotsMap plots={[]} selectedPlotId={undefined} onSelect={() => {}} />,
     container,
   )
   await vi.waitFor(() => expect(leaflet.map).toHaveBeenCalledOnce())
   return document.querySelector('button')!
 }
 
-const position = (
-  latitude: number,
-  longitude: number,
-  accuracy: number,
-): GeolocationPosition => ({
+const position = (latitude: number, longitude: number, accuracy: number): GeolocationPosition => ({
   coords: {
     latitude,
     longitude,
@@ -108,24 +98,17 @@ it('starts on click and updates the marker and accuracy without repeatedly recen
   const button = await mount()
   expect(watchPosition).not.toHaveBeenCalled()
   button.click()
-  expect(watchPosition).toHaveBeenCalledWith(
-    expect.any(Function),
-    expect.any(Function),
-    {
-      enableHighAccuracy: true,
-      timeout: 10_000,
-      maximumAge: 0,
-    },
-  )
+  expect(watchPosition).toHaveBeenCalledWith(expect.any(Function), expect.any(Function), {
+    enableHighAccuracy: true,
+    timeout: 10_000,
+    maximumAge: 0,
+  })
   const success = watchPosition.mock.calls[0][0]
   const map = leaflet.map.mock.results[0].value
   map.setView.mockClear()
 
   success(position(54, 25, 20))
-  expect(leaflet.circleMarker).toHaveBeenCalledWith(
-    [54, 25],
-    expect.any(Object),
-  )
+  expect(leaflet.circleMarker).toHaveBeenCalledWith([54, 25], expect.any(Object))
   expect(map.setView).toHaveBeenCalledExactlyOnceWith([54, 25], 17)
   success(position(55, 26, 5))
   expect(leaflet.circleMarker).toHaveBeenCalledOnce()
@@ -159,21 +142,15 @@ it('keeps watching after a timeout and removes the stale location until recovery
   success(position(54, 25, 20))
   error?.(locationError(3))
   expect(clearWatch).not.toHaveBeenCalled()
-  expect(
-    leaflet.layerGroup.mock.results[1].value.clearLayers,
-  ).toHaveBeenCalledOnce()
+  expect(leaflet.layerGroup.mock.results[1].value.clearLayers).toHaveBeenCalledOnce()
   await vi.waitFor(() =>
-    expect(document.querySelector('[role="status"]')?.textContent).toContain(
-      'Still trying',
-    ),
+    expect(document.querySelector('[role="status"]')?.textContent).toContain('Still trying'),
   )
   expect(button.disabled).toBe(true)
   success(position(55, 26, 5))
   expect(leaflet.circleMarker).toHaveBeenCalledTimes(2)
   await vi.waitFor(() =>
-    expect(document.querySelector('[role="status"]')?.textContent).toContain(
-      'Live location',
-    ),
+    expect(document.querySelector('[role="status"]')?.textContent).toContain('Live location'),
   )
 })
 

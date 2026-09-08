@@ -5,14 +5,11 @@ const appUrl: string =
   (window as { __fmhAppUrl?: string }).__fmhAppUrl ??
   new URL('.', (document.currentScript as HTMLScriptElement).src).href
 
-const clean = (value: string | null | undefined) =>
-  value?.replace(/\s+/g, ' ').trim() || undefined
+const clean = (value: string | null | undefined) => value?.replace(/\s+/g, ' ').trim() || undefined
 
 const numberFrom = (value: string | null | undefined) => {
   const matched = clean(value)?.match(/[\d\s]+(?:[,.]\d+)?/)
-  return matched
-    ? Number(matched[0].replace(/\s/g, '').replace(',', '.'))
-    : undefined
+  return matched ? Number(matched[0].replace(/\s/g, '').replace(',', '.')) : undefined
 }
 
 const definition = (label: string) => {
@@ -22,13 +19,10 @@ const definition = (label: string) => {
   return clean(term?.nextElementSibling?.textContent)
 }
 
-const elementText = (selector: string) =>
-  clean(document.querySelector(selector)?.textContent)
+const elementText = (selector: string) => clean(document.querySelector(selector)?.textContent)
 
 const mapCoordinates = () => {
-  const streetView = document.querySelector<HTMLAnchorElement>(
-    'a[href*="viewpoint="]',
-  )?.href
+  const streetView = document.querySelector<HTMLAnchorElement>('a[href*="viewpoint="]')?.href
   const inlineMapSetup = [...document.scripts]
     .map((script) => script.textContent || '')
     .find((source) => /(?:coordinates\s*=|\[lat,\s*lng\]\s*=)/.test(source))
@@ -43,11 +37,7 @@ const hasExactMapPoint = () =>
   )
 
 const jsonLd = () =>
-  [
-    ...document.querySelectorAll<HTMLScriptElement>(
-      'script[type="application/ld+json"]',
-    ),
-  ]
+  [...document.querySelectorAll<HTMLScriptElement>('script[type="application/ld+json"]')]
     .map((node) => {
       try {
         return JSON.parse(node.textContent || '') as Record<string, unknown>
@@ -89,8 +79,7 @@ const isLandAdvertPath = (pathname: string) => {
   if (!id) return false
   return pathname.startsWith('/sklypai') || id.startsWith('11-')
 }
-const returnTo =
-  url.hash === '#find-me-home-return=import-inbox' ? 'import-inbox' : undefined
+const returnTo = url.hash === '#find-me-home-return=import-inbox' ? 'import-inbox' : undefined
 url.search = ''
 url.hash = ''
 
@@ -130,10 +119,7 @@ const showCrash = (error: unknown) => {
       : String(error),
   ].join('\n')
   const panel = document.createElement('div')
-  panel.setAttribute(
-    'style',
-    `${panelStyle};top:12px;max-height:80vh;overflow:auto`,
-  )
+  panel.setAttribute('style', `${panelStyle};top:12px;max-height:80vh;overflow:auto`)
   const heading = document.createElement('div')
   heading.setAttribute('style', 'font-weight:700;margin-bottom:8px')
   heading.textContent = 'Find Me Home could not import this page'
@@ -193,9 +179,7 @@ const run = () => {
     let unreadable = 0
     const seen = new Set<string>()
     const items = [
-      ...document.querySelectorAll<HTMLElement>(
-        '.list-row-container, .result-item-big-thumb',
-      ),
+      ...document.querySelectorAll<HTMLElement>('.list-row-container, .result-item-big-thumb'),
     ].flatMap((card) => {
       const id =
         card.id.match(/^objectRow(\d{1,3}-\d+)$/)?.[1] ??
@@ -222,8 +206,7 @@ const run = () => {
       const image = card.querySelector<HTMLImageElement>(
         '.list-img img, .object-image-link-big_thumbs img',
       )
-      const thumbnail =
-        image?.currentSrc || image?.src || image?.dataset.src || undefined
+      const thumbnail = image?.currentSrc || image?.src || image?.dataset.src || undefined
       const details = [...card.querySelectorAll('.desc-img-txt')]
         .map((node) => clean(node.textContent))
         .filter(Boolean)
@@ -233,14 +216,9 @@ const run = () => {
           sourceId: id,
           title: firstText(card, 'h3 a', '.item-address-v4'),
           description: firstText(card, '.description') ?? clean(details),
-          priceEur: numberFrom(
-            firstText(card, '.rememb-item-price', '.price-main'),
-          ),
-          areaAres: numberFrom(
-            firstText(card, '.description', '.desc-AreaOverall .desc-img-txt'),
-          ),
-          thumbnail:
-            thumbnail && allowedPhoto(thumbnail) ? thumbnail : undefined,
+          priceEur: numberFrom(firstText(card, '.rememb-item-price', '.price-main')),
+          areaAres: numberFrom(firstText(card, '.description', '.desc-AreaOverall .desc-img-txt')),
+          thumbnail: thumbnail && allowedPhoto(thumbnail) ? thumbnail : undefined,
         },
       ]
     })
@@ -255,16 +233,11 @@ const run = () => {
       const bytes = new TextEncoder().encode(text)
       let binary = ''
       for (const byte of bytes) binary += String.fromCharCode(byte)
-      const encoded = btoa(binary)
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '')
+      const encoded = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
       window.location.href = appDestination('import-inbox', `import=${encoded}`)
     }
   } else if (!isLandAdvertPath(url.pathname)) {
-    fail(
-      'Open an individual Aruodas land advertisement or your favorites page before importing.',
-    )
+    fail('Open an individual Aruodas land advertisement or your favorites page before importing.')
   } else if (
     document.querySelector(
       '.action-bar-advert-always-sticky .advert-is-passive, .obj-header .advert-is-passive, .advert-is-passive[data-advert-status], .action-bar-advert-always-sticky .list-sold-lt, .obj-header .list-sold-lt, .list-sold-lt[data-advert-status]',
@@ -273,15 +246,11 @@ const run = () => {
     fail('This Aruodas advertisement is no longer active.')
   } else {
     const structured = jsonLd()
-    const offer = structured
-      .map((item) => item.offers ?? item.Offers)
-      .find(Boolean) as { price?: string | number } | undefined
+    const offer = structured.map((item) => item.offers ?? item.Offers).find(Boolean) as
+      | { price?: string | number }
+      | undefined
     const description =
-      clean(
-        document
-          .querySelector('meta[name="description"]')
-          ?.getAttribute('content'),
-      ) ||
+      clean(document.querySelector('meta[name="description"]')?.getAttribute('content')) ||
       [...document.querySelectorAll('div, p')]
         .map((node) => clean(node.textContent))
         .filter((text): text is string =>
@@ -294,23 +263,17 @@ const run = () => {
         Boolean(
           text &&
           text.length < 500 &&
-          /elektr|vand|kanaliz|nuotek|duj|statyb|geodezin|privažiav/i.test(
-            text,
-          ),
+          /elektr|vand|kanaliz|nuotek|duj|statyb|geodezin|privažiav/i.test(text),
         ),
       )
     const utility = (pattern: RegExp) =>
-      pattern.test(`${description} ${featureText.join(' ')}`)
-        ? 'mentioned by Aruodas'
-        : undefined
+      pattern.test(`${description} ${featureText.join(' ')}`) ? 'mentioned by Aruodas' : undefined
     const listedCoordinates = clean(definition('Koordinatės'))?.match(
       /(5[3-6](?:\.\d+)?)\D+(2[3-7](?:\.\d+)?)/,
     )
     const coordinates = listedCoordinates ?? mapCoordinates()
     const listedAddress =
-      definition('Adresas') ??
-      definition('Gyvenvietė') ??
-      elementText('.obj-header-text-address')
+      definition('Adresas') ?? definition('Gyvenvietė') ?? elementText('.obj-header-text-address')
     const plotNumber = definition('Sklypo numeris')
     const address =
       listedAddress && plotNumber && !/\d/.test(listedAddress)
@@ -323,26 +286,17 @@ const run = () => {
         elementText('.obj-header-text-details') ??
         document.title,
       address,
-      priceEur:
-        numberFrom(String(offer?.price ?? '')) ??
-        numberFrom(definition('Kaina')),
+      priceEur: numberFrom(String(offer?.price ?? '')) ?? numberFrom(definition('Kaina')),
       areaAres: numberFrom(definition('Plotas')),
       purposeText: definition('Paskirtis'),
       uniqueRegistryNumber: definition('Unikalus numeris'),
       lat: coordinates ? Number(coordinates[1]) : undefined,
       lng: coordinates ? Number(coordinates[2]) : undefined,
-      locationConfidence: coordinates
-        ? hasExactMapPoint()
-          ? 'exact'
-          : 'approx'
-        : 'unknown',
+      locationConfidence: coordinates ? (hasExactMapPoint() ? 'exact' : 'approx') : 'unknown',
       description,
       photos: [...document.images]
         .map((image) => image.currentSrc || image.src || image.dataset.src)
-        .filter(
-          (source): source is string =>
-            typeof source === 'string' && allowedPhoto(source),
-        )
+        .filter((source): source is string => typeof source === 'string' && allowedPhoto(source))
         .slice(0, 50),
       features: featureText,
       utilities: {
@@ -364,10 +318,7 @@ const run = () => {
       const bytes = new TextEncoder().encode(text)
       let binary = ''
       for (const byte of bytes) binary += String.fromCharCode(byte)
-      const encoded = btoa(binary)
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '')
+      const encoded = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
       window.location.href = `${appUrl}#import=${encoded}`
     }
   }

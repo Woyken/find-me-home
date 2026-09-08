@@ -20,12 +20,8 @@ const cachedResponse = async (key: string) => {
   const database = await openCache()
   try {
     return await new Promise<string | undefined>((resolve, reject) => {
-      const request = database
-        .transaction('responses')
-        .objectStore('responses')
-        .get(key)
-      request.onsuccess = () =>
-        resolve((request.result as { value?: string } | undefined)?.value)
+      const request = database.transaction('responses').objectStore('responses').get(key)
+      request.onsuccess = () => resolve((request.result as { value?: string } | undefined)?.value)
       request.onerror = () => reject(request.error)
     })
   } finally {
@@ -61,9 +57,7 @@ const rateLimitedFetch = async (url: string) => {
   return request
 }
 
-export const searchRegiaAddress = async (
-  address: string,
-): Promise<AddressResult | null> => {
+export const searchRegiaAddress = async (address: string): Promise<AddressResult | null> => {
   if (!WORKER_URL) throw new Error('Regia address service is not configured')
   const key = `find-me-home:regia:address:${address.trim().toLocaleLowerCase('lt-LT').replace(/\s+/g, ' ')}`
   const cached = await cachedResponse(key)
@@ -71,8 +65,7 @@ export const searchRegiaAddress = async (
   const response = await fetch(
     `${WORKER_URL.replace(/\/$/, '')}/regia/address-search?query=${encodeURIComponent(address)}`,
   )
-  if (!response.ok)
-    throw new Error(`Regia address service: HTTP ${response.status}`)
+  if (!response.ok) throw new Error(`Regia address service: HTTP ${response.status}`)
   const candidates = (await response.json()) as AddressResult[]
   const candidate = candidates.at(0) ?? null
   if (candidate) await cacheResponse(key, JSON.stringify(candidate))
@@ -104,8 +97,7 @@ export const reverseNominatimAddress = async (
 export const createBrowserLocationResolver = () =>
   createLocationResolver({
     parcels: new ParcelRepository(
-      new URL('parcels/', new URL(import.meta.env.BASE_URL, location.href))
-        .href,
+      new URL('parcels/', new URL(import.meta.env.BASE_URL, location.href)).href,
     ),
     searchAddress: searchRegiaAddress,
     reverseAddress: reverseNominatimAddress,

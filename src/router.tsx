@@ -1,8 +1,6 @@
 import { createRouter, defineRoute } from '@solidjs/router'
 import Home, { preloadHome } from './routes/index'
-import SourceListingPage, {
-  preloadSourceListing,
-} from './routes/source-listings.$sourceListingId'
+import SourceListingPage, { preloadSourceListing } from './routes/source-listings.$sourceListingId'
 import VisitPlanPage, { preloadVisitPlan } from './routes/visit-plan'
 import ImportInboxPage, { preloadImportInbox } from './routes/import-inbox'
 import { paths } from './paths'

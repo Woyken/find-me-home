@@ -23,9 +23,7 @@ export function CheckStrip(props: {
       aria-label={`Automatic checks: ${describe(props.checks)}`}
     >
       <For each={checkCells(props.checks)}>
-        {(cell) => (
-          <i class={cell.status} title={`${cell.label}: ${cell.value}`} />
-        )}
+        {(cell) => <i class={cell.status} title={`${cell.label}: ${cell.value}`} />}
       </For>
     </span>
   )

@@ -110,8 +110,7 @@ export type VisitPlanRecord = {
   deletedAt?: number
 }
 
-export type SourceListingSharedRecord =
-  SourceListingRecord | CandidatePlotRecord | VisitPlanRecord
+export type SourceListingSharedRecord = SourceListingRecord | CandidatePlotRecord | VisitPlanRecord
 
 export type SourceListingDetail = SourceListingRecord & {
   candidatePlots: CandidatePlotRecord[]

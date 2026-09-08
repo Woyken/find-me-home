@@ -9,8 +9,7 @@ export type PlaywrightPage = Page
 export type PlaywrightRoute = Route
 
 export const bookmarkletAssetPath = appPath('aruodas-bookmarklet.js')
-const escapeRegExp = (value: string) =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /** Executes the exact loader URL rendered in the application's Add a plot dialog. */
 export const addPlotDialogBookmarkletHref = (appPage: PlaywrightPage) =>
@@ -18,13 +17,10 @@ export const addPlotDialogBookmarkletHref = (appPage: PlaywrightPage) =>
 
 /** Reads the scraper asset the running application actually exposes. */
 export const actualBookmarkletSource = (appPage: PlaywrightPage) =>
-  appPage.request
-    .get(appUrl('aruodas-bookmarklet.js'))
-    .then(async (response) => {
-      if (!response.ok())
-        throw new Error(`Could not fetch scraper: ${response.status()}`)
-      return response.text()
-    })
+  appPage.request.get(appUrl('aruodas-bookmarklet.js')).then(async (response) => {
+    if (!response.ok()) throw new Error(`Could not fetch scraper: ${response.status()}`)
+    return response.text()
+  })
 
 const testLoaderHref = (href: string) => {
   const productionOrigin = JSON.stringify(appBaseUrl.href)
@@ -52,27 +48,24 @@ export const runAddPlotDialogBookmarklet = async (
   const fixtureAsset = new RegExp(
     `^${escapeRegExp(findMeHomeHttpsFixtureOrigin)}${bookmarkletAssetPath.replace('.', '\\.')}(?:\\?.*)?$`,
   )
-  await sourcePage.route(
-    `${findMeHomeHttpsFixtureOrigin}/**/*`,
-    async (route) => {
-      if (route.request().isNavigationRequest()) {
-        await route.fulfill({
-          contentType: 'text/html',
-          body: `<script>location.replace(${JSON.stringify(appOrigin)}+location.pathname+location.search+location.hash)</script>`,
-        })
-        return
-      }
-      const fixtureUrl = new URL(route.request().url())
-      const response = await sourcePage.request.get(
-        new URL(`${fixtureUrl.pathname}${fixtureUrl.search}`, appOrigin).href,
-      )
+  await sourcePage.route(`${findMeHomeHttpsFixtureOrigin}/**/*`, async (route) => {
+    if (route.request().isNavigationRequest()) {
       await route.fulfill({
-        status: response.status(),
-        contentType: response.headers()['content-type'],
-        body: await response.body(),
+        contentType: 'text/html',
+        body: `<script>location.replace(${JSON.stringify(appOrigin)}+location.pathname+location.search+location.hash)</script>`,
       })
-    },
-  )
+      return
+    }
+    const fixtureUrl = new URL(route.request().url())
+    const response = await sourcePage.request.get(
+      new URL(`${fixtureUrl.pathname}${fixtureUrl.search}`, appOrigin).href,
+    )
+    await route.fulfill({
+      status: response.status(),
+      contentType: response.headers()['content-type'],
+      body: await response.body(),
+    })
+  })
   let requests = 0
   await sourcePage.route(fixtureAsset, async (route) => {
     requests += 1
@@ -109,8 +102,7 @@ export const runAddPlotDialogBookmarklet = async (
     return { requests }
   }
   if (options?.expectImport === false) return { requests }
-  if (!destination)
-    throw new Error('Bookmarklet import navigation was not set up')
+  if (!destination) throw new Error('Bookmarklet import navigation was not set up')
   const frame = await destination
   return {
     requests,
@@ -153,9 +145,7 @@ export type CapturedNavigation = {
 }
 
 /** Reads navigation state after source code assigns window.location.href. */
-export const captureNavigation = async (
-  page: PlaywrightPage,
-): Promise<CapturedNavigation> =>
+export const captureNavigation = async (page: PlaywrightPage): Promise<CapturedNavigation> =>
   page.evaluate(() => {
     const url = window.location.href
     const fragment = new URL(url).hash.match(/^#import=(.+)$/)?.[1]
@@ -163,13 +153,11 @@ export const captureNavigation = async (
   }, undefined)
 
 export const decodeBookmarkletPayload = (fragment: string) => {
-  if (!/^[A-Za-z0-9_-]+$/.test(fragment))
-    throw new Error('Invalid import fragment')
+  if (!/^[A-Za-z0-9_-]+$/.test(fragment)) throw new Error('Invalid import fragment')
   const binary = atob(fragment.replace(/-/g, '+').replace(/_/g, '/'))
   const text = new TextDecoder('utf-8', { fatal: true }).decode(
     Uint8Array.from(binary, (character) => character.charCodeAt(0)),
   )
-  if (text.length > 100_000)
-    throw new Error('Import payload exceeds 100,000 characters')
+  if (text.length > 100_000) throw new Error('Import payload exceeds 100,000 characters')
   return JSON.parse(text) as unknown
 }

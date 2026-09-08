@@ -1,7 +1,4 @@
-import {
-  renderAruodasScenario,
-  scenarioPath,
-} from '../../data/aruodas/scenarios.ts'
+import { renderAruodasScenario, scenarioPath } from '../../data/aruodas/scenarios.ts'
 import type { AruodasScenario } from '../../data/aruodas/scenarios.ts'
 
 export const aruodasDesktopOrigin = 'https://www.aruodas.lt'
@@ -17,9 +14,7 @@ export type SourcePageFixture = {
 }
 
 /** A complete synthetic source document. No fixture requests reach Aruodas. */
-export const createAruodasSourcePage = (
-  scenario: AruodasScenario,
-): SourcePageFixture => ({
+export const createAruodasSourcePage = (scenario: AruodasScenario): SourcePageFixture => ({
   scenario,
   url: new URL(
     scenarioPath(scenario),

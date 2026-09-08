@@ -5,26 +5,17 @@ import type * as Leaflet from 'leaflet'
 import { routes } from '../paths'
 import type { SourceListingDetail } from '../source-listings/model'
 import { sourceListingMapLocation } from '../source-listings/map'
-import {
-  OSM_ATTRIBUTION,
-  OSM_TILES,
-  STAKE,
-  itemsBounds,
-  shapeLayer,
-} from './leaflet-shapes'
+import { OSM_ATTRIBUTION, OSM_TILES, STAKE, itemsBounds, shapeLayer } from './leaflet-shapes'
 
 /** The trip on a map: every located stop as an orange numbered marker. */
-export function VisitPlanMap(props: {
-  sourceListings: Array<SourceListingDetail>
-}) {
+export function VisitPlanMap(props: { sourceListings: Array<SourceListingDetail> }) {
   const navigate = useNavigate()
   let map: Leaflet.Map | undefined
   let stopLayer: Leaflet.LayerGroup | undefined
   let leaflet: typeof Leaflet | undefined
   let resizeObserver: ResizeObserver | undefined
   let disposed = false
-  const located = () =>
-    props.sourceListings.filter((listing) => sourceListingMapLocation(listing))
+  const located = () => props.sourceListings.filter((listing) => sourceListingMapLocation(listing))
 
   const draw = (sourceListings: Array<SourceListingDetail>) => {
     if (!leaflet || !map || !stopLayer) return
@@ -62,9 +53,7 @@ export function VisitPlanMap(props: {
       leaflet = loaded
       map = loaded.map(element, { zoomControl: false })
       stopLayer = loaded.layerGroup().addTo(map)
-      loaded
-        .tileLayer(OSM_TILES, { attribution: OSM_ATTRIBUTION, maxZoom: 19 })
-        .addTo(map)
+      loaded.tileLayer(OSM_TILES, { attribution: OSM_ATTRIBUTION, maxZoom: 19 }).addTo(map)
       loaded.control.zoom({ position: 'bottomright' }).addTo(map)
       draw(props.sourceListings)
       resizeObserver = new ResizeObserver(() => map?.invalidateSize())
@@ -89,12 +78,7 @@ export function VisitPlanMap(props: {
         when={located().length > 0}
         fallback={<p class="nomap">None of these plots is on the map yet.</p>}
       >
-        <div
-          ref={init}
-          class="canvas"
-          role="region"
-          aria-label="Map of the stops"
-        />
+        <div ref={init} class="canvas" role="region" aria-label="Map of the stops" />
       </Show>
     </div>
   )

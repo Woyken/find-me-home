@@ -13,8 +13,6 @@ export class AddPlotDialog {
       name: 'Add a plot from Aruodas',
     })
     await expect(dialog).toBeVisible()
-    return dialog
-      .getByRole('link', { name: 'Save to Find Me Home' })
-      .getAttribute('href')
+    return dialog.getByRole('link', { name: 'Save to Find Me Home' }).getAttribute('href')
   }
 }

@@ -22,17 +22,9 @@ interface RepositoryOptions {
   cacheStorage?: CacheStorage
 }
 
-function pointInRing(
-  x: number,
-  y: number,
-  ring: Array<[number, number]>,
-): boolean {
+function pointInRing(x: number, y: number, ring: Array<[number, number]>): boolean {
   let inside = false
-  for (
-    let index = 0, previous = ring.length - 1;
-    index < ring.length;
-    previous = index++
-  ) {
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
     const [x1, y1] = ring[index]
     const [x2, y2] = ring[previous]
     if (y1 > y !== y2 > y && x < ((x2 - x1) * (y - y1)) / (y2 - y1) + x1) {
@@ -42,11 +34,7 @@ function pointInRing(
   return inside
 }
 
-function containsPoint(
-  x: number,
-  y: number,
-  rings: Array<Array<[number, number]>>,
-): boolean {
+function containsPoint(x: number, y: number, rings: Array<Array<[number, number]>>): boolean {
   return (
     rings.length > 0 &&
     pointInRing(x, y, rings[0]) &&
@@ -66,10 +54,9 @@ async function decompressJson<T>(bytes: Uint8Array, label: string): Promise<T> {
     const stream = body.pipeThrough(new DecompressionStream('gzip'))
     text = await new Response(stream).text()
   } catch (error) {
-    throw new Error(
-      `${label}: gzip decompression failed (${bytes.byteLength} bytes)`,
-      { cause: error },
-    )
+    throw new Error(`${label}: gzip decompression failed (${bytes.byteLength} bytes)`, {
+      cause: error,
+    })
   }
   try {
     return JSON.parse(text) as T
@@ -118,12 +105,9 @@ export class ParcelRepository {
       })
       .then(async (response) => {
         if (!response.ok)
-          throw new Error(
-            `parcel manifest ${manifestUrl.href}: HTTP ${response.status}`,
-          )
+          throw new Error(`parcel manifest ${manifestUrl.href}: HTTP ${response.status}`)
         const manifest = (await response.json()) as ParcelManifest
-        if (manifest.schemaVersion !== 1)
-          throw new Error('unsupported parcel schema')
+        if (manifest.schemaVersion !== 1) throw new Error('unsupported parcel schema')
         this.datasetVersion = manifest.datasetVersion
         console.info('[location] parcel manifest loaded', {
           datasetVersion: manifest.datasetVersion,
@@ -183,8 +167,7 @@ export class ParcelRepository {
       const response = await this.#fetch(request).catch((error: unknown) => {
         throw new Error(`${request.url}: network error`, { cause: error })
       })
-      if (!response.ok)
-        throw new Error(`${request.url}: HTTP ${response.status}`)
+      if (!response.ok) throw new Error(`${request.url}: HTTP ${response.status}`)
       const bytes = new Uint8Array(await response.clone().arrayBuffer())
       const parsed = await decompressJson<T>(bytes, assetPath)
       await cache?.put(request, response.clone()).catch(() => undefined)
@@ -193,10 +176,7 @@ export class ParcelRepository {
         const names = await this.#cacheStorage.keys().catch(() => [])
         await Promise.allSettled(
           names
-            .filter(
-              (name) =>
-                name.startsWith('registered-parcels-') && name !== current,
-            )
+            .filter((name) => name.startsWith('registered-parcels-') && name !== current)
             .map(async (name) => {
               const staleCache = await this.#cacheStorage!.open(name)
               await staleCache.delete(request)
@@ -210,9 +190,7 @@ export class ParcelRepository {
     return loading
   }
 
-  async #spatialParcel(
-    reference: ParcelReference,
-  ): Promise<RegisteredParcel | null> {
+  async #spatialParcel(reference: ParcelReference): Promise<RegisteredParcel | null> {
     const [municipalityCode, cell, parcelId] = reference
     const manifest = await this.#getManifest()
     const asset = manifest.cells[cell] as ParcelAsset | undefined
@@ -222,12 +200,8 @@ export class ParcelRepository {
     return tuple ? this.#toParcel(tuple, municipalityCode) : null
   }
 
-  #toParcel(
-    tuple: SpatialParcelTuple,
-    municipalityCode: number,
-  ): RegisteredParcel {
-    const [id, cadastralNumber, uniqueNumber, areaM2, purposeText, rings] =
-      tuple
+  #toParcel(tuple: SpatialParcelTuple, municipalityCode: number): RegisteredParcel {
+    const [id, cadastralNumber, uniqueNumber, areaM2, purposeText, rings] = tuple
     return {
       id,
       municipalityCode,
@@ -243,20 +217,14 @@ export class ParcelRepository {
     const normalized = number.replace(/\D/g, '')
     if (normalized.length < 4) return []
     const manifest = await this.#getManifest()
-    const asset = manifest.prefixes[normalized.slice(0, 4)] as
-      ParcelAsset | undefined
+    const asset = manifest.prefixes[normalized.slice(0, 4)] as ParcelAsset | undefined
     if (!asset) return []
     const shard = await this.#loadCompressed<PrefixShard>(asset.path)
-    const references =
-      shard.references.find(([value]) => value === normalized)?.[1] ?? []
-    const parcels = await Promise.all(
-      references.map((reference) => this.#spatialParcel(reference)),
-    )
+    const references = shard.references.find(([value]) => value === normalized)?.[1] ?? []
+    const parcels = await Promise.all(references.map((reference) => this.#spatialParcel(reference)))
     return [
       ...new Map(
-        parcels
-          .filter((parcel) => parcel !== null)
-          .map((parcel) => [parcel.id, parcel]),
+        parcels.filter((parcel) => parcel !== null).map((parcel) => [parcel.id, parcel]),
       ).values(),
     ]
   }
@@ -275,14 +243,7 @@ export class ParcelRepository {
     let bestArea = Infinity
     for (const tuple of shard.parcels) {
       const [, , , areaM2, , rings, [minX, minY, maxX, maxY]] = tuple
-      if (
-        x < minX ||
-        x > maxX ||
-        y < minY ||
-        y > maxY ||
-        !containsPoint(x, y, rings)
-      )
-        continue
+      if (x < minX || x > maxX || y < minY || y > maxY || !containsPoint(x, y, rings)) continue
       const area = areaM2 ?? Infinity
       if (best === null || area < bestArea) {
         best = this.#toParcel(tuple, Number(tuple[0].split(':')[0]))

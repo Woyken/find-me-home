@@ -32,10 +32,7 @@ const distanceKm = (left: Coordinate, right: Coordinate) => {
 }
 
 export const createLivabilityService = (fetcher: typeof fetch = fetch) =>
-  async function livability(
-    latitude: number,
-    longitude: number,
-  ): Promise<LivabilityResult> {
+  async function livability(latitude: number, longitude: number): Promise<LivabilityResult> {
     const query = `[out:json][timeout:25];(
       nwr[shop~"^(supermarket|convenience)$"](around:5000,${latitude},${longitude});
       nwr[amenity~"^(school|kindergarten)$"](around:5000,${latitude},${longitude});
@@ -74,19 +71,13 @@ export const createLivabilityService = (fetcher: typeof fetch = fetch) =>
         },
       ]
     })
-    const nearest = (
-      predicate: (tags: Record<string, string | undefined>) => boolean,
-    ) =>
+    const nearest = (predicate: (tags: Record<string, string | undefined>) => boolean) =>
       features
         .filter((feature) => predicate(feature.tags))
         .sort((left, right) => left.distanceKm - right.distanceKm)
         .at(0)
-    const shop = nearest((tags) =>
-      /^(supermarket|convenience)$/.test(tags.shop ?? ''),
-    )
-    const school = nearest((tags) =>
-      /^(school|kindergarten)$/.test(tags.amenity ?? ''),
-    )
+    const shop = nearest((tags) => /^(supermarket|convenience)$/.test(tags.shop ?? ''))
+    const school = nearest((tags) => /^(school|kindergarten)$/.test(tags.amenity ?? ''))
     const badNeighbours = features
       .flatMap((feature) => {
         const kind = feature.tags.landuse ?? feature.tags.amenity
@@ -102,12 +93,8 @@ export const createLivabilityService = (fetcher: typeof fetch = fetch) =>
       })
       .sort((left, right) => left.distanceMeters - right.distanceMeters)
     return {
-      shop: shop
-        ? { name: shop.tags.name ?? null, distanceKm: shop.distanceKm }
-        : null,
-      school: school
-        ? { name: school.tags.name ?? null, distanceKm: school.distanceKm }
-        : null,
+      shop: shop ? { name: shop.tags.name ?? null, distanceKm: shop.distanceKm } : null,
+      school: school ? { name: school.tags.name ?? null, distanceKm: school.distanceKm } : null,
       badNeighbours,
     }
   }

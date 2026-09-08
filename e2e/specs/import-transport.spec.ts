@@ -1,8 +1,5 @@
 import { expect, test } from '@playwright/test'
-import {
-  aruodasScenarios,
-  renderAruodasScenario,
-} from '../data/aruodas/scenarios.ts'
+import { aruodasScenarios, renderAruodasScenario } from '../data/aruodas/scenarios.ts'
 import { createAruodasSourcePage } from '../fixtures/aruodas/source-page.ts'
 import { ImportInboxPage } from '../pages/import-inbox.page.ts'
 import { ImportReviewPage } from '../pages/import-review.page.ts'
@@ -16,14 +13,11 @@ import {
 import type { PlaywrightPage } from '../support/bookmarklet-source.ts'
 import { appPathPattern, appUrl } from '../support/app-url.ts'
 
-const encode = (value: unknown) =>
-  Buffer.from(JSON.stringify(value), 'utf8').toString('base64url')
+const encode = (value: unknown) => Buffer.from(JSON.stringify(value), 'utf8').toString('base64url')
 
 const app = async (page: PlaywrightPage, namespace: string) => {
   await page.goto(appUrl(`?e2e=${namespace}`))
-  await expect
-    .poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__)))
-    .toBe(true)
+  await expect.poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__))).toBe(true)
   await page.evaluate(async () => {
     const api = window.__FMH_E2E__
     if (!api) throw new Error('E2E runtime is unavailable')
@@ -34,8 +28,7 @@ const app = async (page: PlaywrightPage, namespace: string) => {
 }
 
 const favoritesPayload = (fragment: string | undefined) => {
-  if (!fragment)
-    throw new Error('Bookmarklet did not produce an import fragment')
+  if (!fragment) throw new Error('Bookmarklet did not produce an import fragment')
   return decodeBookmarkletPayload(fragment)
 }
 
@@ -44,10 +37,7 @@ test('moves favorites to the IndexedDB inbox, then returns after saving an adver
 }) => {
   await app(page, 'favorites-journey')
   const href = await addPlotDialogBookmarkletHref(page)
-  await openSourcePage(
-    page,
-    createAruodasSourcePage(aruodasScenarios.desktopFavorites),
-  )
+  await openSourcePage(page, createAruodasSourcePage(aruodasScenarios.desktopFavorites))
   const { destination } = await runAddPlotDialogBookmarklet(
     page,
     href,
@@ -75,29 +65,17 @@ test('moves favorites to the IndexedDB inbox, then returns after saving an adver
   await expect(page.getByText(/1\s*skipped, not land/)).toBeVisible()
   await expect(page.getByText(/2\s*skipped, sold/)).toBeVisible()
   await expect(page.getByText(/1\s*could not be read/)).toBeVisible()
-  await expect(page.locator('.upnext img')).toHaveAttribute(
-    'src',
-    /favorite-lazy/,
-  )
+  await expect(page.locator('.upnext img')).toHaveAttribute('src', /favorite-lazy/)
 
-  await page.route(
-    /https:\/\/www\.aruodas\.lt\/11-424242\/.*/,
-    async (route) => {
-      await route.fulfill({
-        contentType: 'text/html',
-        body: renderAruodasScenario(aruodasScenarios.desktopAdvert),
-      })
-    },
-  )
+  await page.route(/https:\/\/www\.aruodas\.lt\/11-424242\/.*/, async (route) => {
+    await route.fulfill({
+      contentType: 'text/html',
+      body: renderAruodasScenario(aruodasScenarios.desktopAdvert),
+    })
+  })
   await inbox.openAdvert()
-  await page.waitForURL(
-    /https:\/\/www\.aruodas\.lt\/11-424242\/#find-me-home-return/,
-  )
-  await runAddPlotDialogBookmarklet(
-    page,
-    href,
-    await actualBookmarkletSource(page),
-  )
+  await page.waitForURL(/https:\/\/www\.aruodas\.lt\/11-424242\/#find-me-home-return/)
+  await runAddPlotDialogBookmarklet(page, href, await actualBookmarkletSource(page))
   const review = new ImportReviewPage(page)
   await review.expectListing('11-424242')
   await review.save()
@@ -105,15 +83,10 @@ test('moves favorites to the IndexedDB inbox, then returns after saving an adver
   await inbox.expectClippings(1)
 })
 
-test('moves mobile Aruodas favorites through the inbox with lazy thumbnails', async ({
-  page,
-}) => {
+test('moves mobile Aruodas favorites through the inbox with lazy thumbnails', async ({ page }) => {
   await app(page, 'mobile-favorites-journey')
   const href = await addPlotDialogBookmarkletHref(page)
-  await openSourcePage(
-    page,
-    createAruodasSourcePage(aruodasScenarios.mobileFavorites),
-  )
+  await openSourcePage(page, createAruodasSourcePage(aruodasScenarios.mobileFavorites))
   const { destination } = await runAddPlotDialogBookmarklet(
     page,
     href,
@@ -140,10 +113,7 @@ test('moves mobile Aruodas favorites through the inbox with lazy thumbnails', as
   const inbox = new ImportInboxPage(page)
   await inbox.expectClippings(2)
   await expect(page.getByText(/1\s*skipped, sold/)).toBeVisible()
-  await expect(page.locator('.upnext img')).toHaveAttribute(
-    'src',
-    /favorite-lazy/,
-  )
+  await expect(page.locator('.upnext img')).toHaveAttribute('src', /favorite-lazy/)
 })
 
 test('accepts v1 and v2 fragments and removes the fragment after storing a session draft', async ({
@@ -158,9 +128,7 @@ test('accepts v1 and v2 fragments and removes the fragment after storing a sessi
   await page.goto(appUrl(`#import=${encode({ version: 1, payload })}`))
   await new ImportReviewPage(page).expectListing('11-999999')
   await expect(page).toHaveURL(appPathPattern())
-  await page.goto(
-    appUrl(`#import=${encode({ version: 2, kind: 'listing', payload })}`),
-  )
+  await page.goto(appUrl(`#import=${encode({ version: 2, kind: 'listing', payload })}`))
   await new ImportReviewPage(page).expectListing('11-999999')
   await page.reload()
   await new ImportReviewPage(page).expectListing('11-999999')

@@ -8,8 +8,7 @@ export const appBaseUrl = new URL(
 )
 
 /** Resolves a route or asset inside the application deployment's base path. */
-export const appUrl = (path = '') =>
-  new URL(path.replace(/^\//, ''), appBaseUrl).href
+export const appUrl = (path = '') => new URL(path.replace(/^\//, ''), appBaseUrl).href
 
 export const appOrigin = appBaseUrl.origin
 export const appPath = (path = '') => new URL(appUrl(path)).pathname

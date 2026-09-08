@@ -3,9 +3,7 @@ import { checkCells, checkTroubleScore, summarizeChecks } from './check-summary'
 
 describe('check cells and summary', () => {
   it('always yields 13 cells in canonical order, filling gaps with unknown', () => {
-    const cells = checkCells([
-      { key: 'noise', status: 'pass', value: 'Quiet', detail: null },
-    ])
+    const cells = checkCells([{ key: 'noise', status: 'pass', value: 'Quiet', detail: null }])
     expect(cells).toHaveLength(13)
     expect(cells[0].key).toBe('price')
     expect(cells[0].status).toBe('unknown')
@@ -75,13 +73,9 @@ describe('check cells and summary', () => {
       { key: 'price', status: 'warning', value: '', detail: null },
       { key: 'area', status: 'pass', value: '', detail: null },
     ])
-    const clean = checkCells([
-      { key: 'price', status: 'pass', value: '', detail: null },
-    ])
+    const clean = checkCells([{ key: 'price', status: 'pass', value: '', detail: null }])
     expect(checkTroubleScore(clean)).toBeLessThan(checkTroubleScore(warn))
     expect(checkTroubleScore(warn)).toBeLessThan(checkTroubleScore(fail))
-    expect(checkTroubleScore(checkCells(null))).toBeGreaterThan(
-      checkTroubleScore(warn),
-    )
+    expect(checkTroubleScore(checkCells(null))).toBeGreaterThan(checkTroubleScore(warn))
   })
 })

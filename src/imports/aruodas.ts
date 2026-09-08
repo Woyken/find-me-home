@@ -22,29 +22,19 @@ const payloadSchema = v.strictObject({
   url: v.pipe(v.string(), v.url()),
   title: optionalText,
   address: optionalText,
-  priceEur: v.optional(
-    v.pipe(v.number(), v.minValue(0), v.maxValue(100_000_000)),
-  ),
+  priceEur: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(100_000_000))),
   areaAres: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(100_000))),
   purposeText: optionalText,
-  uniqueRegistryNumber: v.optional(
-    v.pipe(v.string(), v.regex(/^\d{4}-\d{4}-\d{4}$/)),
-  ),
+  uniqueRegistryNumber: v.optional(v.pipe(v.string(), v.regex(/^\d{4}-\d{4}-\d{4}$/))),
   lat: v.optional(v.pipe(v.number(), v.minValue(53.5), v.maxValue(56))),
   lng: v.optional(v.pipe(v.number(), v.minValue(23), v.maxValue(27))),
-  locationConfidence: v.optional(
-    v.picklist(['exact', 'approx', 'unknown']),
-    'unknown',
-  ),
+  locationConfidence: v.optional(v.picklist(['exact', 'approx', 'unknown']), 'unknown'),
   description: optionalText,
   photos: v.optional(
     v.pipe(v.array(photo), v.maxLength(50, 'Import photos are limited to 50')),
     [],
   ),
-  features: v.optional(
-    v.pipe(v.array(v.pipe(v.string(), v.maxLength(500))), v.maxLength(100)),
-    [],
-  ),
+  features: v.optional(v.pipe(v.array(v.pipe(v.string(), v.maxLength(500))), v.maxLength(100)), []),
   utilities: v.optional(
     v.strictObject({
       electricity: optionalText,
@@ -64,9 +54,7 @@ const favoriteSchema = v.strictObject({
   sourceId: v.pipe(v.string(), v.regex(/^11-\d+$/)),
   title: optionalText,
   description: optionalText,
-  priceEur: v.optional(
-    v.pipe(v.number(), v.minValue(0), v.maxValue(100_000_000)),
-  ),
+  priceEur: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(100_000_000))),
   areaAres: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(100_000))),
   thumbnail: v.optional(photo),
 })
@@ -83,12 +71,8 @@ const transportEnvelopeSchema = v.variant('kind', [
     kind: v.literal('favorites'),
     payload: v.strictObject({
       items: v.array(favoriteSchema),
-      skippedNonLand: v.optional(
-        v.pipe(v.number(), v.integer(), v.minValue(0)),
-      ),
-      skippedInactive: v.optional(
-        v.pipe(v.number(), v.integer(), v.minValue(0)),
-      ),
+      skippedNonLand: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
+      skippedInactive: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
       unreadable: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
     }),
   }),
@@ -153,28 +137,18 @@ export const parseAruodasImport = (input: unknown): AruodasImport => {
     sourceId,
     url: url.toString(),
     ...(payload.title === undefined ? {} : { title: payload.title.trim() }),
-    ...(payload.address === undefined
-      ? {}
-      : { address: payload.address.trim() }),
+    ...(payload.address === undefined ? {} : { address: payload.address.trim() }),
     ...(payload.priceEur === undefined ? {} : { priceEur: payload.priceEur }),
     ...(payload.areaAres === undefined ? {} : { areaAres: payload.areaAres }),
-    ...(payload.purposeText === undefined
-      ? {}
-      : { purposeText: payload.purposeText.trim() }),
+    ...(payload.purposeText === undefined ? {} : { purposeText: payload.purposeText.trim() }),
     ...(payload.uniqueRegistryNumber === undefined
       ? {}
       : { uniqueRegistryNumber: payload.uniqueRegistryNumber }),
-    ...(payload.lat === undefined
-      ? {}
-      : { lat: payload.lat, lng: payload.lng }),
+    ...(payload.lat === undefined ? {} : { lat: payload.lat, lng: payload.lng }),
     locationConfidence: payload.locationConfidence,
-    ...(payload.description === undefined
-      ? {}
-      : { description: payload.description.trim() }),
+    ...(payload.description === undefined ? {} : { description: payload.description.trim() }),
     photos: [...new Set(payload.photos)],
-    ...(payload.utilities === undefined
-      ? {}
-      : { utilities: payload.utilities }),
+    ...(payload.utilities === undefined ? {} : { utilities: payload.utilities }),
     raw: {
       importedBy: 'aruodas-bookmarklet',
       features: payload.features,
@@ -190,8 +164,7 @@ const toBase64Url = (text: string) => {
 }
 
 const fromBase64Url = (value: string) => {
-  if (!/^[A-Za-z0-9_-]+$/.test(value))
-    throw new Error('Invalid import fragment')
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error('Invalid import fragment')
   const binary = atob(value.replace(/-/g, '+').replace(/_/g, '/'))
   return new TextDecoder('utf-8', { fatal: true }).decode(
     Uint8Array.from(binary, (character) => character.charCodeAt(0)),
@@ -216,9 +189,7 @@ export const decodeImportFragment = (fragment: string) => {
   return transport.imported
 }
 
-export const decodeImportTransportFragment = (
-  fragment: string,
-): ImportTransport => {
+export const decodeImportTransportFragment = (fragment: string): ImportTransport => {
   try {
     const text = fromBase64Url(fragment)
     if (text.length > MAX_IMPORT_TEXT_LENGTH) {

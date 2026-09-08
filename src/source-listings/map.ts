@@ -36,9 +36,7 @@ export const candidatePlotMapItem = (
   }
 }
 
-export const sourceListingMapLocation = (
-  sourceListing: SourceListingDetail,
-) => {
+export const sourceListingMapLocation = (sourceListing: SourceListingDetail) => {
   for (const candidatePlot of sourceListing.candidatePlots) {
     const item = candidatePlotMapItem(
       candidatePlot,
@@ -61,17 +59,12 @@ export const sourceListingMapItems = (sourceListing: SourceListingDetail) =>
   sourceListing.candidatePlots.flatMap((candidatePlot, index) => {
     const item = candidatePlotMapItem(
       candidatePlot,
-      candidatePlotName(
-        candidatePlot,
-        index,
-        sourceListing.candidatePlots.length,
-      ),
+      candidatePlotName(candidatePlot, index, sourceListing.candidatePlots.length),
     )
     return item ? [item] : []
   })
 
-export type SourceListingLocationState =
-  'exact' | 'approx' | 'problem' | 'unknown'
+export type SourceListingLocationState = 'exact' | 'approx' | 'problem' | 'unknown'
 
 /**
  * How well we know where the listing is, judged by its first Candidate Plot:
@@ -80,8 +73,7 @@ export type SourceListingLocationState =
 export const sourceListingLocationState = (
   sourceListing: SourceListingDetail,
 ): SourceListingLocationState => {
-  const primary = sourceListing.candidatePlots[0] as
-    CandidatePlotRecord | undefined
+  const primary = sourceListing.candidatePlots[0] as CandidatePlotRecord | undefined
   if (!primary) return 'unknown'
   if (primary.locationResolutionState === 'resolved')
     return primary.resolvedPrecision === 'exact' ? 'exact' : 'approx'

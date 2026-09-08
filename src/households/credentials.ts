@@ -24,10 +24,7 @@ export const invitationSecretFrom = (text: string) => {
 const encodeBase64Url = (bytes: Uint8Array) => {
   let value = ''
   for (const byte of bytes) value += String.fromCharCode(byte)
-  return btoa(value)
-    .replaceAll('+', '-')
-    .replaceAll('/', '_')
-    .replace(/=+$/, '')
+  return btoa(value).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
 }
 
 const decodeBase64Url = (value: string) => {
@@ -43,19 +40,11 @@ const decodeBase64Url = (value: string) => {
   return bytes
 }
 
-const deriveValue = async (
-  cryptoApi: Crypto,
-  secret: Uint8Array,
-  context: string,
-) => {
-  const input = new Uint8Array(
-    secret.byteLength + encoder.encode(context).byteLength,
-  )
+const deriveValue = async (cryptoApi: Crypto, secret: Uint8Array, context: string) => {
+  const input = new Uint8Array(secret.byteLength + encoder.encode(context).byteLength)
   input.set(secret)
   input.set(encoder.encode(context), secret.byteLength)
-  return encodeBase64Url(
-    new Uint8Array(await cryptoApi.subtle.digest('SHA-256', input)),
-  )
+  return encodeBase64Url(new Uint8Array(await cryptoApi.subtle.digest('SHA-256', input)))
 }
 
 export const createHouseholdCredentialSource = (dependencies: {
@@ -69,11 +58,7 @@ export const createHouseholdCredentialSource = (dependencies: {
     const secret = decodeBase64Url(invitationSecret)
     const [householdId, roomPassword] = await Promise.all([
       deriveValue(dependencies.crypto, secret, 'find-me-home/household-id/v1'),
-      deriveValue(
-        dependencies.crypto,
-        secret,
-        'find-me-home/trystero-room-password/v1',
-      ),
+      deriveValue(dependencies.crypto, secret, 'find-me-home/trystero-room-password/v1'),
     ])
     return { invitationSecret, householdId, roomPassword }
   },

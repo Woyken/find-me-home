@@ -10,10 +10,8 @@ export default function ImportReview() {
   const imports = useImport()
   const household = useHousehold()
   const transport = imports.draft()
-  const imported =
-    transport?.kind === 'listing' ? transport.imported : undefined
-  const fromInbox =
-    transport?.kind === 'listing' && transport.returnTo === 'import-inbox'
+  const imported = transport?.kind === 'listing' ? transport.imported : undefined
+  const fromInbox = transport?.kind === 'listing' && transport.returnTo === 'import-inbox'
   const clue = imported
     ? chooseImportedLocationClue({
         uniqueRegistryNumber: imported.uniqueRegistryNumber,
@@ -54,8 +52,7 @@ export default function ImportReview() {
             }
           : {
               title: 'No location came with the advert',
-              detail:
-                'Add a location hint on the plot page and we will look it up.',
+              detail: 'Add a location hint on the plot page and we will look it up.',
             }
     }
   }
@@ -80,9 +77,7 @@ export default function ImportReview() {
       })
       imports.clear()
       window.location.assign(
-        fromInbox
-          ? paths.importInbox
-          : paths.sourceListing(result.sourceListingId),
+        fromInbox ? paths.importInbox : paths.sourceListing(result.sourceListingId),
       )
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
@@ -95,26 +90,18 @@ export default function ImportReview() {
       <Show
         when={imported}
         fallback={
-          <div
-            class="panel empty"
-            style={{ 'max-width': '560px', margin: '40px auto' }}
-          >
+          <div class="panel empty" style={{ 'max-width': '560px', margin: '40px auto' }}>
             <h2>We couldn't read that advert</h2>
             <p role="alert">
-              {imports.error() ||
-                'The bookmark sent something this version does not understand.'}{' '}
-              Try the bookmark again on the advert page, or update the bookmark
-              from the Add a plot step.
+              {imports.error() || 'The bookmark sent something this version does not understand.'}{' '}
+              Try the bookmark again on the advert page, or update the bookmark from the Add a plot
+              step.
             </p>
             <div class="rowline" style={{ 'justify-content': 'center' }}>
               <button class="btn" type="button" onClick={imports.clear}>
                 Back to plots
               </button>
-              <button
-                class="btn ghost"
-                type="button"
-                onClick={openAddPlotDialog}
-              >
+              <button class="btn ghost" type="button" onClick={openAddPlotDialog}>
                 Update the bookmark
               </button>
             </div>
@@ -127,22 +114,16 @@ export default function ImportReview() {
               <span class="tag blue">Aruodas {value().sourceId}</span>
               <h1>Check what we found, then save</h1>
               <p>
-                We read this from the advert. Fix anything that looks wrong; you
-                can change all of it later.
-                {fromInbox
-                  ? ' After saving you go back to your clippings.'
-                  : ''}
+                We read this from the advert. Fix anything that looks wrong; you can change all of
+                it later.
+                {fromInbox ? ' After saving you go back to your clippings.' : ''}
               </p>
             </header>
             <div class="review-cols">
               <aside class="panel advert">
-                <Show when={value().photos[0]}>
-                  {(photo) => <img src={photo()} alt="" />}
-                </Show>
+                <Show when={value().photos[0]}>{(photo) => <img src={photo()} alt="" />}</Show>
                 <h2>{value().title ?? 'Land advert with no title'}</h2>
-                <div class="p">
-                  {value().address ?? 'No address came with the advert'}
-                </div>
+                <div class="p">{value().address ?? 'No address came with the advert'}</div>
                 <Show when={value().description}>
                   <p class="small" style={{ 'margin-top': '10px' }}>
                     {value().description}
@@ -173,9 +154,7 @@ export default function ImportReview() {
               </aside>
               <form class="panel form" onSubmit={(event) => void save(event)}>
                 <h2>The plot</h2>
-                <p class="hint">
-                  Price and area are used by the automatic checks.
-                </p>
+                <p class="hint">Price and area are used by the automatic checks.</p>
                 <div class="grid2">
                   <label class="f">
                     Price (€)
@@ -234,8 +213,7 @@ export default function ImportReview() {
                   </a>
                 </div>
                 <p class="small muted" style={{ 'margin-top': '12px' }}>
-                  After saving we look up the location and run the 13 checks
-                  automatically.
+                  After saving we look up the location and run the 13 checks automatically.
                 </p>
               </form>
             </div>

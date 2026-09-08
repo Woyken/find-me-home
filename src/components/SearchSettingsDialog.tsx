@@ -8,10 +8,7 @@ import { showToast } from './Toast'
  * "Our search" settings: rename, invite another device, and switch or remove
  * the searches kept on this device.
  */
-export function SearchSettingsDialog(props: {
-  open: boolean
-  onClose: () => void
-}) {
+export function SearchSettingsDialog(props: { open: boolean; onClose: () => void }) {
   const household = useHousehold()
   const activeName = () => {
     const state = household.state()
@@ -69,12 +66,7 @@ export function SearchSettingsDialog(props: {
     }
   }
   const remove = () => {
-    if (
-      !window.confirm(
-        'Remove this search from this device? It stays on other devices.',
-      )
-    )
-      return
+    if (!window.confirm('Remove this search from this device? It stays on other devices.')) return
     void run(async () => {
       await household.removeHousehold(activeId())
       props.onClose()
@@ -101,8 +93,8 @@ export function SearchSettingsDialog(props: {
 
       <h3>Invite someone</h3>
       <p>
-        Show this to your partner or open the link on another device. Anyone
-        with it can edit — it can't be taken back.
+        Show this to your partner or open the link on another device. Anyone with it can edit — it
+        can't be taken back.
       </p>
       <Show when={qrCode()}>
         {(source) => <img class="qr" src={source()} alt="Invitation QR code" />}
@@ -149,12 +141,7 @@ export function SearchSettingsDialog(props: {
         )}
       </For>
       <div class="rowline">
-        <button
-          class="btn danger"
-          type="button"
-          disabled={busy()}
-          onClick={remove}
-        >
+        <button class="btn danger" type="button" disabled={busy()} onClick={remove}>
           Remove this search from this device
         </button>
       </div>

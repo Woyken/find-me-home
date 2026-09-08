@@ -74,8 +74,7 @@ export type E2eApi = {
 }
 
 const safeSourceId = (id: string) => {
-  if (!/^\d+$/.test(id))
-    throw new Error('E2E listing id must contain digits only')
+  if (!/^\d+$/.test(id)) throw new Error('E2E listing id must contain digits only')
   return `11-${id}`
 }
 
@@ -93,8 +92,7 @@ export const e2eReview = (seed: E2eListingSeed): ReviewedImport => {
       url: `https://www.aruodas.lt/sklypai/e2e-${sourceId}/`,
       title: seed.title ?? `E2E plot ${seed.id}`,
       address: seed.address ?? 'Vilnius district',
-      description:
-        seed.description ?? 'E2E fixture with local water and sewage.',
+      description: seed.description ?? 'E2E fixture with local water and sewage.',
       photos: seed.photos ?? [],
       utilities: { water: 'local water', sewage: 'local sewage' },
       locationConfidence: latitude === null ? 'unknown' : 'exact',
@@ -107,8 +105,7 @@ export const e2eReview = (seed: E2eListingSeed): ReviewedImport => {
     parcelNumberClue: seed.parcelNumberClue ?? null,
     latitudeClue: latitude,
     longitudeClue: longitude,
-    coordinateCluePrecision:
-      latitude === null ? null : (seed.coordinatePrecision ?? 'exact'),
+    coordinateCluePrecision: latitude === null ? null : (seed.coordinatePrecision ?? 'exact'),
     addressClue: seed.addressClue ?? null,
   }
 }

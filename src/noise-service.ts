@@ -1,7 +1,6 @@
 import type { Coordinate, TransportNoise } from './external-service-client'
 
-const CITY_URL =
-  'https://www.geoportal.lt/mapproxy/vilnius_m_aplinkosauga/MapServer'
+const CITY_URL = 'https://www.geoportal.lt/mapproxy/vilnius_m_aplinkosauga/MapServer'
 const CITY_CENTER = { latitude: 54.6872, longitude: 25.2797 }
 const AIRPORT = { latitude: 54.6369, longitude: 25.2858 }
 const LAYERS = [
@@ -31,9 +30,7 @@ const distanceKm = (left: Coordinate, right: Coordinate) => {
   const rightLatitude = (right.latitude * Math.PI) / 180
   const value =
     Math.sin(latitudeDelta / 2) ** 2 +
-    Math.cos(leftLatitude) *
-      Math.cos(rightLatitude) *
-      Math.sin(longitudeDelta / 2) ** 2
+    Math.cos(leftLatitude) * Math.cos(rightLatitude) * Math.sin(longitudeDelta / 2) ** 2
   return 6_371 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value))
 }
 
@@ -44,8 +41,7 @@ const bearing = (from: Coordinate, to: Coordinate) => {
   return (
     ((Math.atan2(
       Math.sin(longitude) * Math.cos(second),
-      Math.cos(first) * Math.sin(second) -
-        Math.sin(first) * Math.cos(second) * Math.cos(longitude),
+      Math.cos(first) * Math.sin(second) - Math.sin(first) * Math.cos(second) * Math.cos(longitude),
     ) *
       180) /
       Math.PI +
@@ -56,10 +52,7 @@ const bearing = (from: Coordinate, to: Coordinate) => {
 
 export const createNoiseService =
   (
-    transportNoise: (
-      latitude: number,
-      longitude: number,
-    ) => Promise<TransportNoise>,
+    transportNoise: (latitude: number, longitude: number) => Promise<TransportNoise>,
     fetcher: typeof fetch = fetch,
   ) =>
   async (latitude: number, longitude: number): Promise<NoiseResult> => {
@@ -113,25 +106,18 @@ export const createNoiseService =
       distanceMeters: number
       note?: string
     }> = []
-    if (
-      transport.railwayDistanceMeters !== null &&
-      transport.railwayDistanceMeters < 300
-    )
+    if (transport.railwayDistanceMeters !== null && transport.railwayDistanceMeters < 300)
       sources.push({
         kind: 'railway',
         distanceMeters: transport.railwayDistanceMeters,
       })
-    if (
-      transport.majorRoadDistanceMeters !== null &&
-      transport.majorRoadDistanceMeters < 300
-    )
+    if (transport.majorRoadDistanceMeters !== null && transport.majorRoadDistanceMeters < 300)
       sources.push({
         kind: 'major road',
         distanceMeters: transport.majorRoadDistanceMeters,
       })
     const airportDistance = Math.round(distanceKm(point, AIRPORT) * 1000)
-    if (airportDistance < 3_000)
-      sources.push({ kind: 'airport', distanceMeters: airportDistance })
+    if (airportDistance < 3_000) sources.push({ kind: 'airport', distanceMeters: airportDistance })
     else if (airportDistance < 5_000) {
       const heading = bearing(AIRPORT, point)
       const axisDifference = Math.min(
@@ -147,7 +133,5 @@ export const createNoiseService =
           note: 'under the runway approach corridor',
         })
     }
-    return sources.length
-      ? { mode: 'proxy-warn', sources }
-      : { mode: 'proxy-quiet' }
+    return sources.length ? { mode: 'proxy-warn', sources } : { mode: 'proxy-quiet' }
   }

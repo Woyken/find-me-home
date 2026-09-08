@@ -27,9 +27,7 @@ const [
 ] = await Promise.all([
   expectOk(new URL('.', pagesUrl)),
   fetch(new URL('visit-plan', pagesUrl)),
-  fetch(
-    new URL('#household=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', pagesUrl),
-  ),
+  fetch(new URL('#household=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', pagesUrl)),
   fetch(new URL('#import=invalid', pagesUrl)),
   expectOk(new URL('manifest.webmanifest', pagesUrl)),
   expectOk(new URL('service-worker.js', pagesUrl)),
@@ -64,9 +62,7 @@ if (
   bookmarkletScript.headers.get('access-control-allow-origin') !== '*' ||
   !bookmarkletScriptText.includes('#import=')
 ) {
-  throw new Error(
-    'Pages does not serve the Aruodas bookmarklet script for cross-origin loading',
-  )
+  throw new Error('Pages does not serve the Aruodas bookmarklet script for cross-origin loading')
 }
 
 if (!homeHtml.includes('<title>Find Me Home</title>')) {
@@ -79,21 +75,16 @@ if (invitationHtml !== homeHtml || importedHtml !== homeHtml) {
   throw new Error('Invitation or import fragments do not retain the app shell')
 }
 if (manifest.name !== 'Find Me Home' || manifest.scope !== pagesUrl.pathname) {
-  throw new Error(
-    'Production manifest is not scoped to the Pages repository path',
-  )
+  throw new Error('Production manifest is not scoped to the Pages repository path')
 }
 if (!serviceWorkerText.includes('find-me-home-shell-')) {
-  throw new Error(
-    'Production service worker does not contain a versioned shell',
-  )
+  throw new Error('Production service worker does not contain a versioned shell')
 }
 if (!parcelManifest.datasetVersion) {
   throw new Error('Production parcel manifest has no dataset version')
 }
 const firstParcelAsset = Object.values(parcelManifest.cells ?? {}).at(0)
-if (firstParcelAsset === undefined)
-  throw new Error('Production parcel manifest has no shards')
+if (firstParcelAsset === undefined) throw new Error('Production parcel manifest has no shards')
 await expectOk(new URL(`parcels/${firstParcelAsset.path}`, pagesUrl))
 
 const cors = await fetch(workerUrl, {
@@ -112,10 +103,7 @@ const operation = await fetch(
   new URL('/trafi/nearby-stops?latitude=54.6872&longitude=25.2797', workerUrl),
   { headers: { Origin: pagesUrl.origin } },
 )
-if (
-  !operation.ok ||
-  operation.headers.get('access-control-allow-origin') !== pagesUrl.origin
-) {
+if (!operation.ok || operation.headers.get('access-control-allow-origin') !== pagesUrl.origin) {
   throw new Error('Production Worker operation failed from the Pages origin')
 }
 

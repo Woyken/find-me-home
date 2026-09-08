@@ -1,11 +1,4 @@
-import {
-  For,
-  Show,
-  createEffect,
-  createMemo,
-  createSignal,
-  onSettled,
-} from 'solid-js'
+import { For, Show, createEffect, createMemo, createSignal, onSettled } from 'solid-js'
 import { CheckIcon } from '../components/icons'
 import { useHousehold } from '../households/context'
 import type { ImportInboxRecord } from '../imports/inbox-model'
@@ -30,10 +23,7 @@ type Captured = {
  * Keeps the household's inbox in a local sorting order: new clippings join at
  * the back, "skip" rotates the top one to the back, "bring" pulls one forward.
  */
-export const reconcileDeckOrder = (
-  order: Array<string>,
-  ids: Array<string>,
-) => {
+export const reconcileDeckOrder = (order: Array<string>, ids: Array<string>) => {
   const present = new Set(ids)
   const kept = order.filter((id) => present.has(id))
   const known = new Set(kept)
@@ -122,9 +112,7 @@ export default function ImportInboxPage() {
   const retry = () => setAttempt((current) => current + 1)
 
   const skip = () =>
-    setOrder((current) =>
-      current.length > 1 ? [...current.slice(1), current[0]] : current,
-    )
+    setOrder((current) => (current.length > 1 ? [...current.slice(1), current[0]] : current))
   const bring = (id: string) =>
     setOrder((current) => [id, ...current.filter((other) => other !== id)])
   const drop = async (id: string) => {
@@ -149,9 +137,7 @@ export default function ImportInboxPage() {
         {(numbers) => (
           <div class="panel blue captured">
             <div>
-              <div class="lead">
-                Brought over from your Aruodas favourites just now
-              </div>
+              <div class="lead">Brought over from your Aruodas favourites just now</div>
               <div class="nums">
                 <span>
                   <b>{numbers().added}</b>new
@@ -179,11 +165,7 @@ export default function ImportInboxPage() {
                 </Show>
               </div>
             </div>
-            <button
-              class="btn ghost sm"
-              type="button"
-              onClick={() => setCaptured(undefined)}
-            >
+            <button class="btn ghost sm" type="button" onClick={() => setCaptured(undefined)}>
               OK
             </button>
           </div>
@@ -194,12 +176,7 @@ export default function ImportInboxPage() {
           {error()}
           <Show when={pile()}>
             {' '}
-            <button
-              class="btn ghost sm"
-              type="button"
-              disabled={capturing()}
-              onClick={retry}
-            >
+            <button class="btn ghost sm" type="button" disabled={capturing()} onClick={retry}>
               Try again
             </button>
           </Show>
@@ -212,45 +189,25 @@ export default function ImportInboxPage() {
           <Show
             when={!pile()}
             fallback={
-              <div
-                class="panel done"
-                aria-busy={capturing() ? 'true' : 'false'}
-              >
+              <div class="panel done" aria-busy={capturing() ? 'true' : 'false'}>
                 <Show
                   when={!error()}
                   fallback={
                     <>
-                      <h2 style={{ 'margin-top': '14px' }}>
-                        Your favourites did not come through
-                      </h2>
-                      <p
-                        class="muted"
-                        style={{ 'max-width': '44ch', margin: '8px auto 18px' }}
-                      >
-                        {pile()!.items.length} clippings from Aruodas are still
-                        waiting to be brought over. Try again, or reload this
-                        page.
+                      <h2 style={{ 'margin-top': '14px' }}>Your favourites did not come through</h2>
+                      <p class="muted" style={{ 'max-width': '44ch', margin: '8px auto 18px' }}>
+                        {pile()!.items.length} clippings from Aruodas are still waiting to be
+                        brought over. Try again, or reload this page.
                       </p>
-                      <button
-                        class="btn"
-                        type="button"
-                        disabled={capturing()}
-                        onClick={retry}
-                      >
+                      <button class="btn" type="button" disabled={capturing()} onClick={retry}>
                         Try again
                       </button>
                     </>
                   }
                 >
-                  <h2 style={{ 'margin-top': '14px' }}>
-                    Bringing over your Aruodas favourites…
-                  </h2>
-                  <p
-                    class="muted"
-                    style={{ 'max-width': '44ch', margin: '8px auto 18px' }}
-                  >
-                    {pile()!.items.length} clippings are on their way. This only
-                    takes a moment.
+                  <h2 style={{ 'margin-top': '14px' }}>Bringing over your Aruodas favourites…</h2>
+                  <p class="muted" style={{ 'max-width': '44ch', margin: '8px auto 18px' }}>
+                    {pile()!.items.length} clippings are on their way. This only takes a moment.
                   </p>
                 </Show>
               </div>
@@ -261,13 +218,9 @@ export default function ImportInboxPage() {
                 <CheckIcon />
               </span>
               <h2 style={{ 'margin-top': '14px' }}>All sorted</h2>
-              <p
-                class="muted"
-                style={{ 'max-width': '44ch', margin: '8px auto 18px' }}
-              >
-                Nothing waiting from Aruodas. Next time you're on your
-                favourites page there, click the Find Me Home bookmark to bring
-                over a new pile.
+              <p class="muted" style={{ 'max-width': '44ch', margin: '8px auto 18px' }}>
+                Nothing waiting from Aruodas. Next time you're on your favourites page there, click
+                the Find Me Home bookmark to bring over a new pile.
               </p>
               <a class="btn" href={paths.home}>
                 Back to plots
@@ -282,9 +235,7 @@ export default function ImportInboxPage() {
               <div>
                 <h2>Clippings from Aruodas</h2>
                 <p>
-                  {deck().length === 1
-                    ? 'Last one.'
-                    : `${deck().length} to go — one at a time.`}
+                  {deck().length === 1 ? 'Last one.' : `${deck().length} to go — one at a time.`}
                 </p>
               </div>
               <span class="tag blue">
@@ -293,9 +244,7 @@ export default function ImportInboxPage() {
             </div>
             <div class="progress" aria-hidden="true">
               <For each={Array.from({ length: total() }, (_, i) => i)}>
-                {(i) => (
-                  <i class={i < done() ? 'done' : i === done() ? 'now' : ''} />
-                )}
+                {(i) => <i class={i < done() ? 'done' : i === done() ? 'now' : ''} />}
               </For>
             </div>
             <div class="stack">
@@ -324,10 +273,7 @@ export default function ImportInboxPage() {
                         title={item.title || item.sourceId}
                         onClick={() => bring(item.id)}
                       >
-                        <Show
-                          when={item.thumbnail}
-                          fallback={<div class="ph" />}
-                        >
+                        <Show when={item.thumbnail} fallback={<div class="ph" />}>
                           {(thumbnail) => <img src={thumbnail()} alt="" />}
                         </Show>
                         <span>{item.title || item.sourceId}</span>
@@ -363,10 +309,7 @@ function Clipping(props: {
 
   return (
     <article class="card">
-      <Show
-        when={props.item.thumbnail}
-        fallback={<div class="ph">The advert had no photo</div>}
-      >
+      <Show when={props.item.thumbnail} fallback={<div class="ph">The advert had no photo</div>}>
         {(thumbnail) => <img src={thumbnail()} alt="" />}
       </Show>
       <h3>{props.item.title || 'Land advert with no title'}</h3>
@@ -380,9 +323,7 @@ function Clipping(props: {
           <small>area</small>
         </span>
         <span>
-          <b>
-            {orDash(formatPerAre(props.item.priceEur, props.item.areaAres))}
-          </b>
+          <b>{orDash(formatPerAre(props.item.priceEur, props.item.areaAres))}</b>
           <small>per are</small>
         </span>
         <span class="tag">Aruodas {props.item.sourceId}</span>
@@ -422,9 +363,8 @@ function Clipping(props: {
           ?
         </span>
         <span>
-          <b>What happens:</b> the advert opens on aruodas.lt. Click the Find Me
-          Home bookmark there, check the price and area, save — and you land
-          back here on the next clipping.
+          <b>What happens:</b> the advert opens on aruodas.lt. Click the Find Me Home bookmark
+          there, check the price and area, save — and you land back here on the next clipping.
         </span>
       </div>
     </article>

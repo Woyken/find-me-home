@@ -13,8 +13,7 @@ beforeAll(() => {
       ...process.env,
       GITHUB_ACTIONS: 'true',
       GITHUB_REPOSITORY: 'Woyken/find-me-home',
-      VITE_WORKER_URL:
-        'https://find-me-home-operations.karolis-uzkuraitis.workers.dev',
+      VITE_WORKER_URL: 'https://find-me-home-operations.karolis-uzkuraitis.workers.dev',
     },
     stdio: 'pipe',
   })
@@ -41,22 +40,15 @@ describe('production Pages artifact', () => {
       start_url: '/find-me-home/',
       scope: '/find-me-home/',
     })
-    expect(
-      manifest.icons.some(({ purpose }) => purpose === 'any maskable'),
-    ).toBe(true)
+    expect(manifest.icons.some(({ purpose }) => purpose === 'any maskable')).toBe(true)
     for (const icon of manifest.icons) {
-      expect(
-        readFileSync(path.join(clientDirectory, icon.src)),
-      ).not.toHaveLength(0)
+      expect(readFileSync(path.join(clientDirectory, icon.src))).not.toHaveLength(0)
     }
   })
 
   it('reloads history routes and retains invitation or import fragments', () => {
     const index = readFileSync(path.join(clientDirectory, 'index.html'), 'utf8')
-    const fallback = readFileSync(
-      path.join(clientDirectory, '404.html'),
-      'utf8',
-    )
+    const fallback = readFileSync(path.join(clientDirectory, '404.html'), 'utf8')
 
     expect(fallback).toBe(index)
     expect(fallback).not.toContain('location.hash =')
@@ -64,10 +56,7 @@ describe('production Pages artifact', () => {
   })
 
   it('precaches only the versioned app shell and serves navigation offline', () => {
-    const serviceWorker = readFileSync(
-      path.join(clientDirectory, 'service-worker.js'),
-      'utf8',
-    )
+    const serviceWorker = readFileSync(path.join(clientDirectory, 'service-worker.js'), 'utf8')
 
     expect(serviceWorker).toMatch(/find-me-home-shell-[a-f0-9]+/)
     expect(serviceWorker).toContain("caches.match('/find-me-home/index.html')")
@@ -79,19 +68,11 @@ describe('production Pages artifact', () => {
 
   it('ships the base-scoped deep-route, service worker, and bookmarklet assets without E2E transport', () => {
     const index = readFileSync(path.join(clientDirectory, 'index.html'), 'utf8')
-    const serviceWorker = readFileSync(
-      path.join(clientDirectory, 'service-worker.js'),
-      'utf8',
-    )
-    const bookmarklet = readFileSync(
-      path.join(clientDirectory, 'aruodas-bookmarklet.js'),
-      'utf8',
-    )
+    const serviceWorker = readFileSync(path.join(clientDirectory, 'service-worker.js'), 'utf8')
+    const bookmarklet = readFileSync(path.join(clientDirectory, 'aruodas-bookmarklet.js'), 'utf8')
     const appAssets = readdirSync(path.join(clientDirectory, 'assets'))
       .filter((file) => file.endsWith('.js'))
-      .map((file) =>
-        readFileSync(path.join(clientDirectory, 'assets', file), 'utf8'),
-      )
+      .map((file) => readFileSync(path.join(clientDirectory, 'assets', file), 'utf8'))
       .join('\n')
 
     expect(index).toContain('/find-me-home/assets/')
@@ -107,10 +88,7 @@ describe('production Pages artifact', () => {
     expect(() => readdirSync(path.join(root, 'dist/server'))).toThrow()
 
     const packageJson = readFileSync(path.join(root, 'package.json'), 'utf8')
-    const workspace = readFileSync(
-      path.join(root, 'pnpm-workspace.yaml'),
-      'utf8',
-    )
+    const workspace = readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8')
     expect(packageJson).not.toContain('better-sqlite3')
     expect(workspace).not.toContain('better-sqlite3')
     expect(packageJson).not.toContain('@solidjs/start')

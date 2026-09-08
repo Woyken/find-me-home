@@ -5,14 +5,7 @@ import type * as Leaflet from 'leaflet'
 import { routes } from '../paths'
 import type { SourceListingDetail } from '../source-listings/model'
 import { sourceListingMapLocation } from '../source-listings/map'
-import {
-  BLUE,
-  OSM_ATTRIBUTION,
-  OSM_TILES,
-  STAKE,
-  itemsBounds,
-  shapeLayer,
-} from './leaflet-shapes'
+import { BLUE, OSM_ATTRIBUTION, OSM_TILES, STAKE, itemsBounds, shapeLayer } from './leaflet-shapes'
 
 /** A listing that can be drawn, with whether we're going to see it. */
 export type PlotsMapStop = {
@@ -53,9 +46,7 @@ export function PlotsMap(props: {
   let leaflet: typeof Leaflet | undefined
   let resizeObserver: ResizeObserver | undefined
   let disposed = false
-  const stops = createMemo(() =>
-    plotsMapStops(props.sourceListings, props.goingIds),
-  )
+  const stops = createMemo(() => plotsMapStops(props.sourceListings, props.goingIds))
   const offMap = () => props.sourceListings.length - stops().length
 
   const draw = (drawn: Array<PlotsMapStop>) => {
@@ -90,9 +81,7 @@ export function PlotsMap(props: {
       leaflet = loaded
       map = loaded.map(element, { zoomControl: false })
       plotLayer = loaded.layerGroup().addTo(map)
-      loaded
-        .tileLayer(OSM_TILES, { attribution: OSM_ATTRIBUTION, maxZoom: 19 })
-        .addTo(map)
+      loaded.tileLayer(OSM_TILES, { attribution: OSM_ATTRIBUTION, maxZoom: 19 }).addTo(map)
       loaded.control.zoom({ position: 'bottomright' }).addTo(map)
       draw(stops())
       resizeObserver = new ResizeObserver(() => map?.invalidateSize())
@@ -123,8 +112,8 @@ export function PlotsMap(props: {
       </div>
       <Show when={stops().length > 0 && offMap() > 0}>
         <p class="small muted">
-          {offMap()} {offMap() === 1 ? 'plot is' : 'plots are'} not on the map
-          yet: no location recorded.
+          {offMap()} {offMap() === 1 ? 'plot is' : 'plots are'} not on the map yet: no location
+          recorded.
         </p>
       </Show>
     </>

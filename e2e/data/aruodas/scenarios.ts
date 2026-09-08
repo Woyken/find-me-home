@@ -8,9 +8,7 @@ export type AdvertScenario = {
   listingId: string
   land: boolean
   state: AdvertState
-  missing?: ReadonlyArray<
-    'address' | 'price' | 'area' | 'coordinates' | 'description'
-  >
+  missing?: ReadonlyArray<'address' | 'price' | 'area' | 'coordinates' | 'description'>
   malformed?: 'json-ld' | 'coordinates'
   lazyPhotos?: boolean
   relatedSoldCard?: boolean
@@ -145,10 +143,7 @@ export const aruodasScenarios = {
 } as const satisfies Record<string, AruodasScenario>
 
 const html = (strings: TemplateStringsArray, ...values: Array<string>) =>
-  strings.reduce(
-    (result, string, index) => result + string + (values[index] ?? ''),
-    '',
-  )
+  strings.reduce((result, string, index) => result + string + (values[index] ?? ''), '')
 
 const escapeHtml = (value: string) =>
   value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
@@ -215,15 +210,8 @@ const advertHtml = (scenario: AdvertScenario) => {
     </html>`
 }
 
-const favoriteCardHtml = (
-  card: FavoriteCard,
-  index: number,
-  viewport: AruodasViewport,
-) => {
-  const id =
-    card.duplicateOf ??
-    card.id ??
-    `${card.land === false ? '1' : '11'}-${424242 + index}`
+const favoriteCardHtml = (card: FavoriteCard, index: number, viewport: AruodasViewport) => {
+  const id = card.duplicateOf ?? card.id ?? `${card.land === false ? '1' : '11'}-${424242 + index}`
   const state = card.state ?? 'active'
   const image = card.lazyPhoto
     ? '<img data-src="https://img.aruodas.lt/favorite-lazy.jpg" alt="lazy">'
@@ -231,21 +219,15 @@ const favoriteCardHtml = (
   const desktop = viewport === 'desktop'
   const container = desktop ? 'list-row-container' : 'result-item-big-thumb'
   const title = desktop ? '<h3><a' : '<a class="item-address-v4"'
-  const titleEnd = desktop
-    ? '>Fixture address</a></h3>'
-    : '>Fixture address</a>'
+  const titleEnd = desktop ? '>Fixture address</a></h3>' : '>Fixture address</a>'
   return html`<article
     id="${escapeHtml(id ? `objectRow${id}` : '')}"
     class="${container} ${state === 'inactive' ? 'inactive-saved' : ''}"
   >
     ${title} href="/${id}/"${titleEnd}
     <div class="${desktop ? 'description' : 'desc-AreaOverall'}">12,5 a</div>
-    <div class="${desktop ? 'rememb-item-price' : 'price-main'}">
-      125 000 EUR
-    </div>
-    <a class="${desktop ? 'list-img' : 'object-image-link-big_thumbs'}"
-      >${image}</a
-    >
+    <div class="${desktop ? 'rememb-item-price' : 'price-main'}">125 000 EUR</div>
+    <a class="${desktop ? 'list-img' : 'object-image-link-big_thumbs'}">${image}</a>
     ${state === 'sold' ? '<span class="list-sold-lt">Parduotas</span>' : ''}
   </article>`
 }
@@ -258,9 +240,7 @@ const favoritesHtml = (scenario: FavoritesScenario) =>
       </head>
       <body data-fixture="${scenario.name}">
         ${scenario.cards
-          .map((card, index) =>
-            favoriteCardHtml(card, index, scenario.viewport),
-          )
+          .map((card, index) => favoriteCardHtml(card, index, scenario.viewport))
           .join('')}
       </body>
     </html>`

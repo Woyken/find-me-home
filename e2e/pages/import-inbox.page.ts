@@ -5,11 +5,8 @@ export class ImportInboxPage {
   constructor(private readonly page: Page) {}
 
   async expectClippings(count: number) {
-    await expect(
-      this.page.getByRole('heading', { name: 'Clippings from Aruodas' }),
-    ).toBeVisible()
-    if (count === 1)
-      await expect(this.page.getByText('Last one.')).toBeVisible()
+    await expect(this.page.getByRole('heading', { name: 'Clippings from Aruodas' })).toBeVisible()
+    if (count === 1) await expect(this.page.getByText('Last one.')).toBeVisible()
     else await expect(this.page.getByText(`${count} to go`)).toBeVisible()
   }
 

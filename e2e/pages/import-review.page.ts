@@ -10,9 +10,7 @@ export class ImportReviewPage {
         name: 'Check what we found, then save',
       }),
     ).toBeVisible()
-    await expect(
-      this.page.getByText(`Aruodas ${sourceId}`, { exact: true }),
-    ).toBeVisible()
+    await expect(this.page.getByText(`Aruodas ${sourceId}`, { exact: true })).toBeVisible()
   }
 
   async save() {

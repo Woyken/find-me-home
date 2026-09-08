@@ -57,11 +57,7 @@ const stops = (value: unknown): Stop[] | null => {
   })
 }
 
-const fetchJson = async (
-  url: string,
-  options: WorkerOptions,
-  init?: RequestInit,
-) => {
+const fetchJson = async (url: string, options: WorkerOptions, init?: RequestInit) => {
   const response = await (options.fetch ?? fetch)(url, init)
   if (!response.ok) throw new Error('Trafi unavailable')
   return response.json()
@@ -105,18 +101,12 @@ const walkingDirections = async (url: URL, options: WorkerOptions) => {
     'end.Lat': end.latitude.toFixed(6),
     'end.Lng': end.longitude.toFixed(6),
   })
-  const value = (await fetchJson(
-    `${BASE_URL}/v1/directions/walking?${query}`,
-    options,
-    { headers: headers() },
-  )) as Record<string, any>
-  const durationSeconds =
-    value.path?.duration?.seconds ?? value.durationSeconds ?? value.duration
+  const value = (await fetchJson(`${BASE_URL}/v1/directions/walking?${query}`, options, {
+    headers: headers(),
+  })) as Record<string, any>
+  const durationSeconds = value.path?.duration?.seconds ?? value.durationSeconds ?? value.duration
   const distanceMeters =
-    value.path?.distance?.meters ??
-    value.distanceMeters ??
-    value.meters ??
-    value.distance
+    value.path?.distance?.meters ?? value.distanceMeters ?? value.meters ?? value.distance
   if (
     typeof durationSeconds !== 'number' ||
     !Number.isFinite(durationSeconds) ||
@@ -126,9 +116,7 @@ const walkingDirections = async (url: URL, options: WorkerOptions) => {
   return {
     durationSeconds,
     distanceMeters:
-      typeof distanceMeters === 'number' && Number.isFinite(distanceMeters)
-        ? distanceMeters
-        : null,
+      typeof distanceMeters === 'number' && Number.isFinite(distanceMeters) ? distanceMeters : null,
   }
 }
 
@@ -182,35 +170,28 @@ const routeSearch = async (request: Request, options: WorkerOptions) => {
   })) as Record<string, unknown>
   if (!Array.isArray(upstream.routes)) throw new Error('Trafi unavailable')
   return upstream.routes.map((route) => {
-    if (!route || typeof route !== 'object')
-      throw new Error('Trafi unavailable')
+    if (!route || typeof route !== 'object') throw new Error('Trafi unavailable')
     const record = route as Record<string, any>
     const startTime = record.startTime
     const endTime = record.endTime
     if (typeof startTime !== 'string' || typeof endTime !== 'string')
       throw new Error('Trafi unavailable')
-    const derivedDuration = Math.round(
-      (Date.parse(endTime) - Date.parse(startTime)) / 1000,
-    )
-    const durationSeconds =
-      typeof record.duration === 'number' ? record.duration : derivedDuration
+    const derivedDuration = Math.round((Date.parse(endTime) - Date.parse(startTime)) / 1000)
+    const durationSeconds = typeof record.duration === 'number' ? record.duration : derivedDuration
     if (!Number.isFinite(durationSeconds) || durationSeconds < 0)
       throw new Error('Trafi unavailable')
     const segments = Array.isArray(record.segments)
       ? record.segments.map((segment: unknown) => {
-          if (!segment || typeof segment !== 'object')
-            throw new Error('Trafi unavailable')
+          if (!segment || typeof segment !== 'object') throw new Error('Trafi unavailable')
           const item = segment as Record<string, any>
           const normalized: {
             mode: string
             name?: string
             durationSeconds?: number
           } = { mode: typeof item.mode === 'string' ? item.mode : '?' }
-          const name =
-            item.transit?.schedule?.name ?? item.transit?.scheduleName
+          const name = item.transit?.schedule?.name ?? item.transit?.scheduleName
           if (typeof name === 'string') normalized.name = name
-          if (typeof item.duration === 'number')
-            normalized.durationSeconds = item.duration
+          if (typeof item.duration === 'number') normalized.durationSeconds = item.duration
           return normalized
         })
       : []
@@ -218,10 +199,7 @@ const routeSearch = async (request: Request, options: WorkerOptions) => {
   })
 }
 
-export const handleTrafiRequest = async (
-  request: Request,
-  options: WorkerOptions,
-) => {
+export const handleTrafiRequest = async (request: Request, options: WorkerOptions) => {
   const cors = corsHeaders(request, options.productionOrigin)
   if (cors === null) return new Response('Origin not allowed', { status: 403 })
   const url = new URL(request.url)
@@ -240,31 +218,15 @@ export const handleTrafiRequest = async (
     let result: unknown | null
     if (request.method === 'GET' && url.pathname === '/trafi/nearby-stops')
       result = await nearbyStops(url, options)
-    else if (
-      request.method === 'GET' &&
-      url.pathname === '/trafi/walking-directions'
-    )
+    else if (request.method === 'GET' && url.pathname === '/trafi/walking-directions')
       result = await walkingDirections(url, options)
-    else if (
-      request.method === 'POST' &&
-      url.pathname === '/trafi/route-search'
-    )
+    else if (request.method === 'POST' && url.pathname === '/trafi/route-search')
       result = await routeSearch(request, options)
-    else
-      return Response.json(
-        { error: 'Not found' },
-        { status: 404, headers: cors },
-      )
+    else return Response.json({ error: 'Not found' }, { status: 404, headers: cors })
     return result === null
-      ? Response.json(
-          { error: 'Invalid input' },
-          { status: 400, headers: cors },
-        )
+      ? Response.json({ error: 'Invalid input' }, { status: 400, headers: cors })
       : Response.json(result, { headers: cors })
   } catch {
-    return Response.json(
-      { error: 'Trafi unavailable' },
-      { status: 502, headers: cors },
-    )
+    return Response.json({ error: 'Trafi unavailable' }, { status: 502, headers: cors })
   }
 }

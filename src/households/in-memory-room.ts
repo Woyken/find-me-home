@@ -52,35 +52,23 @@ export const createInMemoryRoomNetwork = () => {
       for (const peer of rooms.get(this.key) ?? []) {
         if (peer !== this && (!peerId || peer.id === peerId))
           queueMicrotask(() =>
-            peer.messages[type].forEach((listener) =>
-              listener(structuredClone(value), this.id),
-            ),
+            peer.messages[type].forEach((listener) => listener(structuredClone(value), this.id)),
           )
       }
     }
-    sendManifest(
-      value: Parameters<HouseholdRoom['sendManifest']>[0],
-      peerId: string,
-    ) {
+    sendManifest(value: Parameters<HouseholdRoom['sendManifest']>[0], peerId: string) {
       this.send('manifest', value, peerId)
     }
-    sendRequest(
-      value: Parameters<HouseholdRoom['sendRequest']>[0],
-      peerId: string,
-    ) {
+    sendRequest(value: Parameters<HouseholdRoom['sendRequest']>[0], peerId: string) {
       this.send('request', value, peerId)
     }
-    sendRecords(
-      value: Parameters<HouseholdRoom['sendRecords']>[0],
-      peerId?: string,
-    ) {
+    sendRecords(value: Parameters<HouseholdRoom['sendRecords']>[0], peerId?: string) {
       this.send('records', value, peerId)
     }
     leave() {
       const peers = rooms.get(this.key)
       peers?.delete(this)
-      for (const peer of peers ?? [])
-        peer.leaves.forEach((listener) => listener(this.id))
+      for (const peer of peers ?? []) peer.leaves.forEach((listener) => listener(this.id))
     }
   }
   return (options: { householdId: string; roomPassword: string }) =>

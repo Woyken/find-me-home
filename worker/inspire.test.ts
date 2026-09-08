@@ -15,9 +15,7 @@ const options = (fetcher: typeof fetch) => ({
 
 describe('INSPIRE Worker operations', () => {
   it('queries every fixed protected-area layer with EPSG:4258 axis order', async () => {
-    const fetcher = vi.fn<typeof fetch>(async () =>
-      Response.json(protectedFixture),
-    )
+    const fetcher = vi.fn<typeof fetch>(async () => Response.json(protectedFixture))
     const response = await handleWorkerRequest(
       request('/inspire/protected-area?latitude=54.7&longitude=25.3'),
       options(fetcher),
@@ -31,9 +29,7 @@ describe('INSPIRE Worker operations', () => {
     for (const [input] of fetcher.mock.calls) {
       const url = decodeURIComponent(String(input))
       expect(url).toContain('inspire-geoportal.lt/geoserver/ps/wfs?')
-      expect(url.replaceAll('+', ' ')).toContain(
-        'INTERSECTS(geometry,POINT(54.7 25.3))',
-      )
+      expect(url.replaceAll('+', ' ')).toContain('INTERSECTS(geometry,POINT(54.7 25.3))')
     }
   })
 
@@ -44,11 +40,7 @@ describe('INSPIRE Worker operations', () => {
     )
     const unavailable = await handleWorkerRequest(
       request('/inspire/flood?latitude=54.7&longitude=25.3'),
-      options(
-        vi.fn<typeof fetch>(
-          async () => new Response('failure', { status: 503 }),
-        ),
-      ),
+      options(vi.fn<typeof fetch>(async () => new Response('failure', { status: 503 }))),
     )
     expect(await noResult.json()).toEqual({
       flag: false,

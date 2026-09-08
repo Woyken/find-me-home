@@ -21,58 +21,40 @@ export const createBrowserHouseholdRuntime = (options?: {
   beforeRemoveCommit?: (transaction: IDBTransaction) => void
   beforeVisitCommit?: (transaction: IDBTransaction) => void
   beforeVisitPlanCommit?: (transaction: IDBTransaction) => void
-  roomFactory?: (options: {
-    householdId: string
-    roomPassword: string
-  }) => HouseholdRoom
+  roomFactory?: (options: { householdId: string; roomPassword: string }) => HouseholdRoom
   locationResolver?: LocationResolver
   automaticCheckServices?: AutomaticCheckServices
 }) => {
   const cryptoApi = options?.crypto ?? crypto
-  const sharedDatabasePrefix =
-    options?.sharedDatabasePrefix ?? 'find-me-home-shared'
+  const sharedDatabasePrefix = options?.sharedDatabasePrefix ?? 'find-me-home-shared'
   return createHouseholdRuntime({
-    accessStore: createIndexedDbHouseholdAccessStore(
-      options?.accessDatabaseName,
-    ),
+    accessStore: createIndexedDbHouseholdAccessStore(options?.accessDatabaseName),
     households: createIndexedDbHouseholdRepository(sharedDatabasePrefix),
-    sourceListings: createIndexedDbSourceListingRepository(
-      sharedDatabasePrefix,
-      {
-        now: options?.now ?? Date.now,
-        uuid: options?.uuid ?? (() => cryptoApi.randomUUID()),
-        beforeRemoveCommit: options?.beforeRemoveCommit,
-        beforeVisitCommit: options?.beforeVisitCommit,
-        beforeVisitPlanCommit: options?.beforeVisitPlanCommit,
-      },
-    ),
+    sourceListings: createIndexedDbSourceListingRepository(sharedDatabasePrefix, {
+      now: options?.now ?? Date.now,
+      uuid: options?.uuid ?? (() => cryptoApi.randomUUID()),
+      beforeRemoveCommit: options?.beforeRemoveCommit,
+      beforeVisitCommit: options?.beforeVisitCommit,
+      beforeVisitPlanCommit: options?.beforeVisitPlanCommit,
+    }),
     credentials: createHouseholdCredentialSource({ crypto: cryptoApi }),
     now: options?.now ?? Date.now,
     uuid: options?.uuid ?? (() => cryptoApi.randomUUID()),
     eraseHousehold: (householdId) =>
       new Promise<void>((resolve, reject) => {
-        const request = indexedDB.deleteDatabase(
-          `${sharedDatabasePrefix}-${householdId}`,
-        )
+        const request = indexedDB.deleteDatabase(`${sharedDatabasePrefix}-${householdId}`)
         request.onsuccess = () => resolve()
         request.onerror = () => reject(request.error)
       }),
     roomFactory:
       options?.roomFactory ??
-      (typeof RTCPeerConnection === 'undefined'
-        ? undefined
-        : createTrysteroHouseholdRoom),
-    invitationBaseUrl: () =>
-      new URL(import.meta.env.BASE_URL, window.location.origin).toString(),
+      (typeof RTCPeerConnection === 'undefined' ? undefined : createTrysteroHouseholdRoom),
+    invitationBaseUrl: () => new URL(import.meta.env.BASE_URL, window.location.origin).toString(),
     locationResolver:
       options?.locationResolver ??
-      (typeof window === 'undefined'
-        ? undefined
-        : createBrowserLocationResolver()),
+      (typeof window === 'undefined' ? undefined : createBrowserLocationResolver()),
     automaticCheckServices:
       options?.automaticCheckServices ??
-      (typeof window === 'undefined'
-        ? undefined
-        : createBrowserAutomaticCheckServices()),
+      (typeof window === 'undefined' ? undefined : createBrowserAutomaticCheckServices()),
   })
 }

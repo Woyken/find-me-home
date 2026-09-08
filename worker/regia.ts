@@ -49,23 +49,15 @@ const bootstrap = async (fetcher: typeof fetch) => {
   return headers
 }
 
-const search = async (
-  query: string,
-  headers: Record<string, string>,
-  fetcher: typeof fetch,
-) => {
+const search = async (query: string, headers: Record<string, string>, fetcher: typeof fetch) => {
   const encoded = encodeURIComponent(encodeURIComponent(query))
-  const response = await fetcher(
-    `${SEARCH_URL}?query=${encoded}&sav_id=-1&sav_adm_id=-1`,
-    { headers },
-  )
+  const response = await fetcher(`${SEARCH_URL}?query=${encoded}&sav_id=-1&sav_adm_id=-1`, {
+    headers,
+  })
   if (!response.ok) throw new Error(`Regia search: HTTP ${response.status}`)
   const body = (await response.json().catch(() => null)) as RegiaRow[] | null
-  if (!Array.isArray(body))
-    throw new Error('Regia search returned invalid JSON')
-  const rows = body.filter(
-    (row) => row.disabled !== 'true' && row.x != null && row.y != null,
-  )
+  if (!Array.isArray(body)) throw new Error('Regia search returned invalid JSON')
+  const rows = body.filter((row) => row.disabled !== 'true' && row.x != null && row.y != null)
   return rows.length ? rows : null
 }
 
@@ -85,9 +77,7 @@ export const searchRegia = async (query: string, fetcher: typeof fetch) => {
         {
           latitude,
           longitude,
-          address: [row.query?.trim(), row.desc?.trim()]
-            .filter(Boolean)
-            .join(' - '),
+          address: [row.query?.trim(), row.desc?.trim()].filter(Boolean).join(' - '),
         },
       ]
     })
@@ -111,18 +101,12 @@ export const handleRequest = async (
     return Response.json({ error: 'Not found' }, { status: 404, headers: cors })
   const query = url.searchParams.get('query')?.trim() ?? ''
   if (!query || query.length > 300)
-    return Response.json(
-      { error: 'Invalid query' },
-      { status: 400, headers: cors },
-    )
+    return Response.json({ error: 'Invalid query' }, { status: 400, headers: cors })
   try {
     return Response.json(await searchRegia(query, options.fetch ?? fetch), {
       headers: cors,
     })
   } catch {
-    return Response.json(
-      { error: 'Regia unavailable' },
-      { status: 502, headers: cors },
-    )
+    return Response.json({ error: 'Regia unavailable' }, { status: 502, headers: cors })
   }
 }

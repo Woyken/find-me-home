@@ -10,9 +10,7 @@ describe('browser noise service', () => {
         : Response.json({ features: [] }),
     )
 
-    await expect(
-      createNoiseService(transport, fetcher)(54.7, 25.3),
-    ).resolves.toEqual({
+    await expect(createNoiseService(transport, fetcher)(54.7, 25.3)).resolves.toEqual({
       mode: 'city-band',
       bands: [{ kind: 'railway', band: '65-69', ldenLow: 65 }],
       ldenLow: 65,

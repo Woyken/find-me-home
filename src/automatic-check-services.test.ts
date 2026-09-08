@@ -4,8 +4,7 @@ import { createBrowserAutomaticCheckServices } from './automatic-check-services'
 describe('browser Automatic Check service contracts', () => {
   it('routes to the configured city-centre coordinates', async () => {
     const fetcher = vi.fn<typeof fetch>(async (input) => {
-      if (String(input).endsWith('/trafi/route-search'))
-        return Response.json([])
+      if (String(input).endsWith('/trafi/route-search')) return Response.json([])
       return Response.json({ features: [] })
     })
     const services = createBrowserAutomaticCheckServices({
@@ -30,8 +29,7 @@ describe('browser Automatic Check service contracts', () => {
     const previousFetch = globalThis.fetch
     const fetcher = vi.fn<typeof fetch>(async (input) => {
       const url = String(input)
-      if (url.includes('/inspire/'))
-        return Response.json({ flag: false, detail: 'not mapped' })
+      if (url.includes('/inspire/')) return Response.json({ flag: false, detail: 'not mapped' })
       return Response.json({ features: [] })
     })
     globalThis.fetch = fetcher

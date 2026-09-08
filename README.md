@@ -22,6 +22,16 @@ pnpm lint
 pnpm check
 ```
 
+`pnpm lint` uses Oxlint and `pnpm check` verifies Oxfmt formatting. Strict
+TypeScript checks continue to run separately for both application and E2E
+projects. Oxlint's type-aware companion, `oxlint-tsgolint`, does not publish
+an Android binary, so its typed rules cannot run in Termux. The migration
+preserves the native equivalent rules and `tsc` coverage; the unavailable
+ESLint equivalents are `@typescript-eslint/naming-convention` and
+`node/prefer-node-protocol`. The project intentionally uses the direct Oxc
+tools rather than Vite+ because Vite+ does not publish an Android/Termux
+binary; Oxlint and Oxfmt do and are validated by the Termux E2E workflow.
+
 Run browser foundations with:
 
 ```bash

@@ -20,9 +20,7 @@ export class HouseholdStartPage {
 
   async create() {
     await this.startSearch.click()
-    await expect(
-      this.page.getByRole('heading', { name: 'Our home search' }),
-    ).toBeVisible()
+    await expect(this.page.getByRole('heading', { name: 'Our home search' })).toBeVisible()
   }
 
   async joinWith(value: string) {
