@@ -17,6 +17,11 @@ on:
         required: false
         type: boolean
         default: false
+      checkout-ref:
+        description: Ref to build for a controlled Pages-only restore
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -31,6 +36,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout-ref || github.sha }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
