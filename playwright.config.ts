@@ -36,8 +36,14 @@ export default defineConfig({
     ...(executablePath ? { launchOptions: { executablePath } } : {}),
   },
   projects: [
-    { name: 'chromium-desktop', use: { ...devices['Desktop Chrome'] } },
-    { name: 'chromium-mobile', use: { ...termuxSafeMobileDevice } },
+    {
+      name: 'chromium-desktop',
+      use: { ...devices['Desktop Chrome'], browserName: 'chromium' },
+    },
+    {
+      name: 'chromium-mobile',
+      use: { ...termuxSafeMobileDevice, browserName: 'chromium' },
+    },
   ],
   webServer: {
     command: `pnpm dev --mode e2e --host 127.0.0.1 --port ${port}`,

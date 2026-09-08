@@ -32,8 +32,12 @@ const seed = async (page: Page, input: E2eSeed) =>
 test('creates a search, persists it, and handles invalid and hash invitations', async ({
   page,
   browser,
+  context,
 }) => {
   const value = namespace('household-start')
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
+    origin: 'http://127.0.0.1:3000',
+  })
   await open(page, value)
   await page.getByRole('button', { name: 'Start a search' }).click()
   await expect(
