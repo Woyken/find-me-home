@@ -1,5 +1,6 @@
 import { createSignal } from 'solid-js'
 import { createAruodasBookmarklet } from '../imports/bookmarklet'
+import { e2eNamespace } from '../e2e/selector'
 import { Modal } from './Modal'
 import { showToast } from './Toast'
 
@@ -8,8 +9,12 @@ const [open, setOpen] = createSignal(false)
 /** Opens the "Add a plot from Aruodas" dialog from anywhere in the app. */
 export const openAddPlotDialog = () => setOpen(true)
 
-const bookmarkHref = () =>
-  createAruodasBookmarklet(new URL(import.meta.env.BASE_URL, window.location.origin).toString())
+const bookmarkHref = () => {
+  const appUrl = new URL(import.meta.env.BASE_URL, window.location.origin)
+  const namespace = e2eNamespace(window.location.search)
+  if (namespace) appUrl.searchParams.set('e2e', namespace)
+  return createAruodasBookmarklet(appUrl.toString())
+}
 
 const copy = async (text: string, message: string) => {
   try {

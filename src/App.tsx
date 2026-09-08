@@ -11,8 +11,8 @@ import { ImportProvider, useImport } from './imports/context'
 import ImportReview from './routes/import-review'
 import './styles.css'
 
-export default function App(props: ParentProps<{ runtime?: HouseholdRuntime }>) {
-  if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+export default function App(props: ParentProps<{ runtime?: HouseholdRuntime; e2e?: boolean }>) {
+  if (import.meta.env.PROD && !props.e2e && 'serviceWorker' in navigator) {
     void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}service-worker.js`, {
       scope: import.meta.env.BASE_URL,
     })

@@ -148,7 +148,7 @@ test('keeps a return marker through advert review and save', async ({ page }) =>
   await runAddPlotDialogBookmarklet(page, href, await actualBookmarkletSource(page))
   const review = new ImportReviewPage(page)
   await review.save()
-  await expect(page).toHaveURL(/\/import-inbox$/)
+  await expect(page).toHaveURL(/\/import-inbox\?e2e=return-marker$/)
 })
 
 for (const scenario of [aruodasScenarios.desktopAdvert, aruodasScenarios.mobileAdvert]) {

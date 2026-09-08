@@ -66,18 +66,24 @@ describe('production Pages artifact', () => {
     expect(serviceWorker).not.toContain('workers.dev')
   })
 
-  it('ships the base-scoped deep-route, service worker, and bookmarklet assets without E2E transport', () => {
+  it('keeps the normal entry fail-closed while shipping a lazy gated E2E chunk', () => {
     const index = readFileSync(path.join(clientDirectory, 'index.html'), 'utf8')
     const serviceWorker = readFileSync(path.join(clientDirectory, 'service-worker.js'), 'utf8')
     const bookmarklet = readFileSync(path.join(clientDirectory, 'aruodas-bookmarklet.js'), 'utf8')
-    const appAssets = readdirSync(path.join(clientDirectory, 'assets'))
-      .filter((file) => file.endsWith('.js'))
-      .map((file) => readFileSync(path.join(clientDirectory, 'assets', file), 'utf8'))
-      .join('\n')
+    const appAssetFiles = readdirSync(path.join(clientDirectory, 'assets')).filter((file) =>
+      file.endsWith('.js'),
+    )
+    const appAssetContents = appAssetFiles.map((file) =>
+      readFileSync(path.join(clientDirectory, 'assets', file), 'utf8'),
+    )
 
     expect(index).toContain('/find-me-home/assets/')
     expect(index).not.toContain('__FMH_E2E__')
-    expect(appAssets).not.toContain('__FMH_E2E__')
+    expect(appAssetContents.filter((asset) => asset.includes('__FMH_E2E__'))).toHaveLength(1)
+    expect(appAssetContents.some((asset) => /import\(`\.\/bootstrap-/.test(asset))).toBe(true)
+    expect(appAssetContents.some((asset) => asset.includes('find-me-home-e2e-device-'))).toBe(true)
+    expect(appAssetContents.some((asset) => asset.includes('find-me-home-e2e-shared-'))).toBe(true)
+    expect(appAssetContents.some((asset) => asset.includes('find-me-home-device'))).toBe(true)
     expect(serviceWorker).toContain('/find-me-home/index.html')
     expect(serviceWorker).not.toContain('__FMH_E2E__')
     expect(bookmarklet).toContain('__fmhAppUrl')

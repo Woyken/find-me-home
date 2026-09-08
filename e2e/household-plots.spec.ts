@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import type { E2eApi, E2eListingSeed, E2eSeed } from '../src/e2e/support'
 import { PlotsPage } from './pages/plots.page'
-import { appOrigin, appPathPattern, appUrl } from './support/app-url.ts'
+import { appOrigin, appUrl } from './support/app-url.ts'
 
 declare global {
   interface Window {
@@ -92,7 +92,7 @@ test('manages settings and navigates empty plots and not-found pages', async ({ 
   await page.goto(appUrl(`missing?e2e=${value}`))
   await expect(page.getByRole('heading', { name: "There's nothing at this address" })).toBeVisible()
   await page.getByRole('link', { name: 'Back to plots' }).click()
-  await expect(page).toHaveURL(appPathPattern())
+  await expect(page).toHaveURL(appUrl(`?e2e=${value}`))
 })
 
 test('sorts, filters, maps, and plans populated located and unlocated plots', async ({ page }) => {

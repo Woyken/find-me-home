@@ -50,14 +50,27 @@ Termux script selects a mobile project built from its stable desktop process
 configuration, with the iPhone viewport, touch support, and user agent.
 Linux CI uses full mobile emulation.
 
-The E2E server runs Vite in the explicit `e2e` mode. That mode injects only the
-test runtime and local service seams; production builds do not include it.
+The E2E server runs Vite in the explicit `e2e` mode. A production artifact can
+also enable the same browser-local fixtures only with a valid explicit
+`?e2e=<namespace>` selector. This is test isolation, not authentication: normal,
+missing, or malformed selectors render the ordinary app and never expose the E2E
+API. Gated tests use only `find-me-home-e2e-*` IndexedDB names, fake providers,
+and an E2E-only room; they do not use the Worker, real Trystero transport, normal
+browser data, or the production service worker.
 
 `pnpm build` creates the complete static artifact in `dist/client`, including the repository-aware manifest, history-route fallback, and versioned offline shell. Registered Parcel shards are generated separately into `public/parcels` before a production build and are fetched lazily rather than precached.
 
 ## Production
 
 The `Refresh Registered Parcel assets` GitHub Actions workflow deploys from `main`, runs every Friday at 18:00 UTC, and supports manual dispatch. It deploys and verifies the Worker, transforms and validates Registered Parcel data, builds one Pages artifact, and smoke-tests the deployed application. Any failure before Pages deployment leaves the previous site reachable.
+
+`Pages live browser tests` independently observes successful `github-pages`
+deployment statuses for the default branch, checks out that exact deployed SHA,
+and runs the complete desktop and mobile Playwright suite against the live Pages
+URL. It has only `contents: read`, cannot block, change, deploy, or roll back the
+release, and failures remain visible on its own workflow run. New event-triggered
+workflows exist only after this change reaches the default branch, so the first
+release that contains it is the first one that can trigger the observer.
 
 Initial configuration, release checks, rollback, and incident procedures are documented in [Production deployment](docs/production-deployment.md). Run `scripts/setup-production.sh` only for first-time setup or credential rotation.
 

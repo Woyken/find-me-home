@@ -6,19 +6,9 @@ import { LocationResolutionError } from '../location-resolution'
 import type { LocationResolver } from '../location-resolution'
 import type { ResolvedLocationData } from '../source-listings/model'
 import { createE2eRoomFactory } from './room'
+import { e2eNamespace } from './selector'
 import { e2eReview } from './support'
 import type { E2eApi, E2eFailure, E2eSeed, E2eSyncEvent } from './support'
-
-const namespaceFromLocation = () => {
-  const value = new URLSearchParams(location.search).get('e2e')
-  if (value && /^[A-Za-z0-9_-]{1,80}$/.test(value)) {
-    sessionStorage.setItem('find-me-home-e2e-namespace', value)
-    return value
-  }
-  const persisted = sessionStorage.getItem('find-me-home-e2e-namespace')
-  if (persisted && /^[A-Za-z0-9_-]{1,80}$/.test(persisted)) return persisted
-  return 'default'
-}
 
 const resolvedLocation = (latitude: number, longitude: number): ResolvedLocationData => ({
   resolvedLatitude: latitude,
@@ -34,7 +24,7 @@ const resolvedLocation = (latitude: number, longitude: number): ResolvedLocation
 })
 
 const boot = () => {
-  const namespace = namespaceFromLocation()
+  const namespace = e2eNamespace(location.search) ?? 'default'
   const device = new URLSearchParams(location.search).get('e2e-device')
   if (device && !/^[A-Za-z0-9_-]{1,80}$/.test(device)) throw new Error('Invalid E2E device')
   const storageNamespace = `${namespace}-${device ?? 'default'}`
@@ -146,7 +136,6 @@ const boot = () => {
       await runtime.removeHousehold(household.householdId)
     sessionStorage.clear()
     localStorage.clear()
-    sessionStorage.setItem('find-me-home-e2e-namespace', namespace)
     if (failure) localStorage.setItem(failureKey, failure)
   }
   const seed = async (seedInput: E2eSeed) => {
@@ -241,7 +230,7 @@ const boot = () => {
   })
   const root = document.getElementById('root')
   if (!root) throw new Error('Application root is missing')
-  render(() => <App runtime={runtime} />, root)
+  render(() => <App runtime={runtime} e2e />, root)
 }
 
 boot()

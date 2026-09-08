@@ -32,12 +32,21 @@ describe('Aruodas import fragment', () => {
     expect(bookmarklet.startsWith('javascript:')).toBe(true)
     expect(bookmarklet).toContain('var a="https://woyken.github.io/find-me-home/"')
     expect(bookmarklet).toContain('__fmhAppUrl=a')
-    expect(bookmarklet).toContain('aruodas-bookmarklet.js?t=')
+    expect(bookmarklet).toContain('new URL("aruodas-bookmarklet.js?t="+Date.now(),a).href')
     expect(bookmarklet).toContain('document.createElement("script")')
     // Short enough that browsers do not truncate it when pasted as a bookmark.
     expect(bookmarklet.length).toBeLessThan(600)
     expect(bookmarklet).not.toMatch(/[\r\n]/)
     expect(() => new Function(bookmarklet.slice('javascript:'.length))).not.toThrow()
+  })
+
+  it('retains only a valid E2E selector in a test loader URL', () => {
+    expect(createAruodasBookmarklet('https://example.test/find-me-home/?e2e=run_42&x=1')).toContain(
+      'var a="https://example.test/find-me-home/?e2e=run_42"',
+    )
+    expect(createAruodasBookmarklet('https://example.test/find-me-home/?e2e=not%20safe')).toContain(
+      'var a="https://example.test/find-me-home/"',
+    )
   })
 
   it('serves a scraper that navigates the same tab with the import fragment', () => {

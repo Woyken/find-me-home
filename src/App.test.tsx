@@ -423,6 +423,27 @@ describe('App Household boundary', () => {
     expect(sessionStorage.getItem('find-me-home-import-draft')).toContain('Žemųjų Rusokų sklypas')
   })
 
+  it('captures an import fragment added after the application has started', async () => {
+    const fragment = encodeImportFragment({
+      url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-upes-g-sklypas-11-1472707/',
+      title: 'Žemųjų Rusokų sklypas',
+      photos: [],
+      features: [],
+    })
+    mount(createTestRuntime())
+    await waitFor(() => expect(findButton('Start a search')).toBeTruthy())
+    findButton('Start a search')?.click()
+    await waitFor(() => expect(document.body.textContent).toContain('Existing product flows'))
+
+    location.hash = `import=${fragment}`
+
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('Check what we found, then save'),
+    )
+    expect(location.hash).toBe('')
+    expect(sessionStorage.getItem('find-me-home-import-draft')).toContain('Žemųjų Rusokų sklypas')
+  })
+
   it('offers create or join before mounting Household content', async () => {
     mount(createTestRuntime())
 

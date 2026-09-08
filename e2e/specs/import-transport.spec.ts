@@ -11,7 +11,7 @@ import {
   runAddPlotDialogBookmarklet,
 } from '../support/bookmarklet-source.ts'
 import type { PlaywrightPage } from '../support/bookmarklet-source.ts'
-import { appPathPattern, appUrl } from '../support/app-url.ts'
+import { appUrl } from '../support/app-url.ts'
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value), 'utf8').toString('base64url')
 
@@ -79,7 +79,7 @@ test('moves favorites to the IndexedDB inbox, then returns after saving an adver
   const review = new ImportReviewPage(page)
   await review.expectListing('11-424242')
   await review.save()
-  await expect(page).toHaveURL(/\/import-inbox$/)
+  await expect(page).toHaveURL(/\/import-inbox\?e2e=favorites-journey$/)
   await inbox.expectClippings(1)
 })
 
@@ -125,10 +125,12 @@ test('accepts v1 and v2 fragments and removes the fragment after storing a sessi
     title: 'Fragment plot',
     photos: [],
   }
-  await page.goto(appUrl(`#import=${encode({ version: 1, payload })}`))
+  await page.goto(appUrl(`?e2e=fragment-versions#import=${encode({ version: 1, payload })}`))
   await new ImportReviewPage(page).expectListing('11-999999')
-  await expect(page).toHaveURL(appPathPattern())
-  await page.goto(appUrl(`#import=${encode({ version: 2, kind: 'listing', payload })}`))
+  await expect(page).toHaveURL(appUrl('?e2e=fragment-versions'))
+  await page.goto(
+    appUrl(`?e2e=fragment-versions#import=${encode({ version: 2, kind: 'listing', payload })}`),
+  )
   await new ImportReviewPage(page).expectListing('11-999999')
   await page.reload()
   await new ImportReviewPage(page).expectListing('11-999999')
@@ -147,9 +149,9 @@ test('rejects malformed, hostile, and oversized fragments without retaining a dr
     }),
     Buffer.from('x'.repeat(100_001)).toString('base64url'),
   ].entries()) {
-    await page.goto(appUrl(`?import-case=${index}#import=${fragment}`))
+    await page.goto(appUrl(`?e2e=hostile-fragments&import-case=${index}#import=${fragment}`))
     await new ImportReviewPage(page).expectUnreadable()
     await page.getByRole('button', { name: 'Back to plots' }).click()
-    await expect(page).toHaveURL(new RegExp(`\\?import-case=${index}$`))
+    await expect(page).toHaveURL(new RegExp(`\\?e2e=hostile-fragments&import-case=${index}$`))
   }
 })

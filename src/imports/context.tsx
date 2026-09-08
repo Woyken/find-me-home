@@ -1,4 +1,4 @@
-import { createContext, createSignal, useContext } from 'solid-js'
+import { createContext, createSignal, onCleanup, useContext } from 'solid-js'
 import type { ParentProps } from 'solid-js'
 import type { AruodasImport, ImportTransport } from './aruodas'
 import { decodeImportTransportFragment } from './aruodas'
@@ -14,26 +14,26 @@ type ImportContextValue = {
 const ImportContext = createContext<ImportContextValue>()
 
 export function ImportProvider(props: ParentProps) {
-  let initialDraft: ImportTransport | undefined
-  let initialError = ''
-  {
+  const importFragment = () => {
+    let draft: ImportTransport | undefined
+    let error = ''
     const fragment = window.location.hash.match(/^#import=(.+)$/)?.[1]
     if (fragment) {
       history.replaceState(history.state, '', `${location.pathname}${location.search}`)
       try {
         const imported = decodeImportTransportFragment(fragment)
         sessionStorage.setItem(STORAGE_KEY, JSON.stringify(imported))
-        initialDraft = imported
+        draft = imported
       } catch {
         sessionStorage.removeItem(STORAGE_KEY)
-        initialError = 'This import could not be read. Run the Aruodas bookmarklet again.'
+        error = 'This import could not be read. Run the Aruodas bookmarklet again.'
       }
     } else {
       const stored = sessionStorage.getItem(STORAGE_KEY)
       if (stored) {
         try {
           const parsed = JSON.parse(stored) as ImportTransport | Record<string, unknown>
-          initialDraft =
+          draft =
             'kind' in parsed
               ? (parsed as ImportTransport)
               : {
@@ -45,9 +45,18 @@ export function ImportProvider(props: ParentProps) {
         }
       }
     }
+    return { draft, error }
   }
-  const [draft, setDraft] = createSignal(initialDraft, { ownedWrite: true })
-  const [error, setError] = createSignal(initialError, { ownedWrite: true })
+  const initial = importFragment()
+  const [draft, setDraft] = createSignal(initial.draft, { ownedWrite: true })
+  const [error, setError] = createSignal(initial.error, { ownedWrite: true })
+  const onHashChange = () => {
+    const imported = importFragment()
+    setDraft(imported.draft)
+    setError(imported.error)
+  }
+  window.addEventListener('hashchange', onHashChange)
+  onCleanup(() => window.removeEventListener('hashchange', onHashChange))
   return (
     <ImportContext
       value={{

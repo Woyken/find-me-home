@@ -23,14 +23,15 @@ export const actualBookmarkletSource = (appPage: PlaywrightPage) =>
   })
 
 const testLoaderHref = (href: string) => {
-  const productionOrigin = JSON.stringify(appBaseUrl.href)
-  const fixtureOrigin = JSON.stringify(
-    new URL(appBaseUrl.pathname, `${findMeHomeHttpsFixtureOrigin}/`).href,
-  )
-  if (!href.includes(productionOrigin))
+  const match = /var a=("(?:[^"\\]|\\.)*")/.exec(href)
+  if (!match) throw new Error('Loader does not contain an app URL')
+  const productionUrl = new URL(JSON.parse(match[1]) as string)
+  if (productionUrl.origin !== appOrigin || productionUrl.pathname !== appBaseUrl.pathname)
     throw new Error('Loader does not contain the rendered app base URL')
+  const fixtureUrl = new URL(appBaseUrl.pathname, `${findMeHomeHttpsFixtureOrigin}/`)
+  fixtureUrl.search = productionUrl.search
   // Only the embedded app base changes. The emitted loader itself is untouched.
-  return href.replace(productionOrigin, fixtureOrigin)
+  return href.replace(match[1], JSON.stringify(fixtureUrl.href))
 }
 
 export const runAddPlotDialogBookmarklet = async (

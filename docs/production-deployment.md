@@ -25,6 +25,28 @@ The `Refresh Registered Parcel assets` workflow reads `CLOUDFLARE_API_TOKEN`, `C
 
 The smoke command verifies allowed-origin preflight, rejected foreign-origin CORS, a valid fixed Trafi operation, invalid-input rejection, an ignored hostile upstream override, and Trafi upstream-failure mapping using impossible route parameters. Browser operations map network and upstream failures to unavailable/unknown states and permit manual retry.
 
+## Post-deployment browser verification
+
+`Pages live browser tests` is a separate `deployment_status` observer. It starts
+only after a successful `github-pages` deployment status whose ref is the default
+branch, checks out the event's exact deployment SHA, and runs all Chromium desktop
+and mobile Playwright tests against the repository Pages URL. Its single
+concurrency group cancels stale observers when a newer Pages deployment succeeds.
+It has `contents: read` only, does not receive Worker or Cloudflare secrets, and
+has no Pages write or deployment action. A failure is visible on that workflow
+run, including its always-uploaded Playwright artifacts, but cannot block, alter,
+roll back, or otherwise change the already-completed deployment.
+
+The normal production app remains fail-closed: E2E fixtures are loaded lazily only
+for an explicit valid `?e2e=<safe namespace>` query. This selector is browser-local
+test isolation, not authentication. Unselected or malformed visits use ordinary
+application startup and service-worker registration. Selected tests use unique
+namespaces, `find-me-home-e2e-*` IndexedDB databases, fake service providers, and
+the E2E room transport, so they do not touch normal browser data, the Worker, or
+real Trystero. Because GitHub evaluates event-triggered workflow definitions from
+the default branch, the observer first becomes eligible after this workflow has
+merged; it does not retrospectively test the deployment that introduces it.
+
 ## Rollback
 
 List deployments with `pnpm exec wrangler deployments list`, then use the rollback command printed by the current Wrangler version for the selected known-good deployment. Run `pnpm smoke:worker "$VITE_WORKER_URL"` after rollback. If a Pages release must also be reverted, rerun the last known-good GitHub Actions commit only after its Worker deployment passes smoke checks. A failed Worker deployment or smoke check blocks Pages publication, preserving the last good Pages artifact.
