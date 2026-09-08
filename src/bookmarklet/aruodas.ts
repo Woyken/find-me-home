@@ -58,7 +58,8 @@ const jsonLd = () =>
     .filter((item): item is Record<string, unknown> => Boolean(item))
 
 const fail = (message: string) => window.alert(`Find Me Home: ${message}`)
-const allowedPhoto = (source: string) => {
+const allowedPhoto = (source: string | undefined): source is string => {
+  if (!source) return false
   try {
     const photo = new URL(source)
     return (
@@ -73,6 +74,12 @@ const allowedPhoto = (source: string) => {
   }
 }
 const url = new URL(window.location.href)
+const appDestination = (pathname: string, fragment: string) => {
+  const destination = new URL(pathname, appUrl)
+  destination.search = new URL(appUrl).search
+  destination.hash = fragment
+  return destination.href
+}
 /**
  * Land adverts live under `/sklypai-…-11-123/` on www.aruodas.lt, while
  * m.aruodas.lt links to them as a bare `/11-123/` (category 11 is land).
@@ -252,12 +259,18 @@ const run = () => {
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
         .replace(/=+$/, '')
-      window.location.href = `${appUrl}import-inbox#import=${encoded}`
+      window.location.href = appDestination('import-inbox', `import=${encoded}`)
     }
   } else if (!isLandAdvertPath(url.pathname)) {
     fail(
       'Open an individual Aruodas land advertisement or your favorites page before importing.',
     )
+  } else if (
+    document.querySelector(
+      '.action-bar-advert-always-sticky .advert-is-passive, .obj-header .advert-is-passive, .advert-is-passive[data-advert-status], .action-bar-advert-always-sticky .list-sold-lt, .obj-header .list-sold-lt, .list-sold-lt[data-advert-status]',
+    )
+  ) {
+    fail('This Aruodas advertisement is no longer active.')
   } else {
     const structured = jsonLd()
     const offer = structured
@@ -325,8 +338,11 @@ const run = () => {
         : 'unknown',
       description,
       photos: [...document.images]
-        .map((image) => image.currentSrc || image.src)
-        .filter(allowedPhoto)
+        .map((image) => image.currentSrc || image.src || image.dataset.src)
+        .filter(
+          (source): source is string =>
+            typeof source === 'string' && allowedPhoto(source),
+        )
         .slice(0, 50),
       features: featureText,
       utilities: {

@@ -48,6 +48,7 @@ export default function SourceListingPage(props: {
   )
   const [selectedPlotId, setSelectedPlotId] = createSignal<string>()
   const [focus, setFocus] = createSignal<MapFocusRequest>()
+  let focusNonce = 0
   const [photoIndex, setPhotoIndex] = createSignal(0)
   const [error, setError] = createSignal('')
   const [busy, setBusy] = createSignal(false)
@@ -78,7 +79,7 @@ export default function SourceListingPage(props: {
   }
   const showOnMap = (plotId: string) => {
     setSelectedPlotId(plotId)
-    setFocus({ plotId, nonce: Date.now() })
+    setFocus({ plotId, nonce: ++focusNonce })
     scrollTo('bigmap')
   }
 

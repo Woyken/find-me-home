@@ -7,6 +7,20 @@ export type HouseholdCredentialSource = {
 
 const encoder = new TextEncoder()
 
+/** Accepts an invitation URL or its secret without letting malformed URLs throw. */
+export const invitationSecretFrom = (text: string) => {
+  const trimmed = text.trim()
+  const fromLink = trimmed.match(/#household=([^&\s]+)/)?.[1]
+  if (fromLink) {
+    try {
+      return decodeURIComponent(fromLink)
+    } catch {
+      return null
+    }
+  }
+  return /^[A-Za-z0-9_-]{8,}$/.test(trimmed) ? trimmed : null
+}
+
 const encodeBase64Url = (bytes: Uint8Array) => {
   let value = ''
   for (const byte of bytes) value += String.fromCharCode(byte)

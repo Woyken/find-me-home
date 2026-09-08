@@ -18,7 +18,7 @@ beforeAll(() => {
     },
     stdio: 'pipe',
   })
-})
+}, 120_000)
 
 describe('production Pages artifact', () => {
   it('is an installable repository-scoped Find Me Home app', () => {
@@ -75,6 +75,32 @@ describe('production Pages artifact', () => {
     expect(serviceWorker).not.toContain('/find-me-home/parcels/')
     expect(serviceWorker).not.toContain('tile.openstreetmap.org')
     expect(serviceWorker).not.toContain('workers.dev')
+  })
+
+  it('ships the base-scoped deep-route, service worker, and bookmarklet assets without E2E transport', () => {
+    const index = readFileSync(path.join(clientDirectory, 'index.html'), 'utf8')
+    const serviceWorker = readFileSync(
+      path.join(clientDirectory, 'service-worker.js'),
+      'utf8',
+    )
+    const bookmarklet = readFileSync(
+      path.join(clientDirectory, 'aruodas-bookmarklet.js'),
+      'utf8',
+    )
+    const appAssets = readdirSync(path.join(clientDirectory, 'assets'))
+      .filter((file) => file.endsWith('.js'))
+      .map((file) =>
+        readFileSync(path.join(clientDirectory, 'assets', file), 'utf8'),
+      )
+      .join('\n')
+
+    expect(index).toContain('/find-me-home/assets/')
+    expect(index).not.toContain('__FMH_E2E__')
+    expect(appAssets).not.toContain('__FMH_E2E__')
+    expect(serviceWorker).toContain('/find-me-home/index.html')
+    expect(serviceWorker).not.toContain('__FMH_E2E__')
+    expect(bookmarklet).toContain('__fmhAppUrl')
+    expect(bookmarklet).not.toContain('__FMH_E2E__')
   })
 
   it('contains no application server or SQLite runtime', () => {

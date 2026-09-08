@@ -20,6 +20,7 @@ export const createBrowserHouseholdRuntime = (options?: {
   uuid?: () => string
   beforeRemoveCommit?: (transaction: IDBTransaction) => void
   beforeVisitCommit?: (transaction: IDBTransaction) => void
+  beforeVisitPlanCommit?: (transaction: IDBTransaction) => void
   roomFactory?: (options: {
     householdId: string
     roomPassword: string
@@ -42,6 +43,7 @@ export const createBrowserHouseholdRuntime = (options?: {
         uuid: options?.uuid ?? (() => cryptoApi.randomUUID()),
         beforeRemoveCommit: options?.beforeRemoveCommit,
         beforeVisitCommit: options?.beforeVisitCommit,
+        beforeVisitPlanCommit: options?.beforeVisitPlanCommit,
       },
     ),
     credentials: createHouseholdCredentialSource({ crypto: cryptoApi }),
@@ -56,9 +58,10 @@ export const createBrowserHouseholdRuntime = (options?: {
         request.onerror = () => reject(request.error)
       }),
     roomFactory:
-      typeof RTCPeerConnection === 'undefined'
-        ? options?.roomFactory
-        : (options?.roomFactory ?? createTrysteroHouseholdRoom),
+      options?.roomFactory ??
+      (typeof RTCPeerConnection === 'undefined'
+        ? undefined
+        : createTrysteroHouseholdRoom),
     invitationBaseUrl: () =>
       new URL(import.meta.env.BASE_URL, window.location.origin).toString(),
     locationResolver:

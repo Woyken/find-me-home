@@ -22,6 +22,27 @@ pnpm lint
 pnpm check
 ```
 
+Run browser foundations with:
+
+```bash
+pnpm test:e2e
+```
+
+On Termux, install the `chromium` package and use the repository-local Android
+host preload with:
+
+```bash
+pnpm test:e2e:termux
+```
+
+Termux Chromium does not support Playwright's `isMobile` process emulation. The
+Termux script selects a mobile project built from its stable desktop process
+configuration, with the iPhone viewport, touch support, and user agent.
+Linux CI uses full mobile emulation.
+
+The E2E server runs Vite in the explicit `e2e` mode. That mode injects only the
+test runtime and local service seams; production builds do not include it.
+
 `pnpm build` creates the complete static artifact in `dist/client`, including the repository-aware manifest, history-route fallback, and versioned offline shell. Registered Parcel shards are generated separately into `public/parcels` before a production build and are fetched lazily rather than precached.
 
 ## Production

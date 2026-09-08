@@ -3,6 +3,7 @@ import type { ParentProps } from 'solid-js'
 import type { HouseholdRuntime } from './runtime'
 import type { HouseholdRuntimeState } from './model'
 import type { ReviewedImport } from '../source-listings/model'
+import { invitationSecretFrom } from './credentials'
 
 type HouseholdContextValue = {
   state: () => HouseholdRuntimeState
@@ -46,7 +47,7 @@ export function HouseholdProvider(
   const unsubscribe = props.runtime.subscribe(() =>
     setState(() => ({ ...props.runtime.state() })),
   )
-  const invitation = window.location.hash.match(/^#household=([^&]+)$/)?.[1]
+  const invitation = invitationSecretFrom(window.location.href)
   void (invitation
     ? props.runtime
         .joinHousehold(invitation)

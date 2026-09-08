@@ -50,13 +50,16 @@ const bookmarkletPlugin = (): Plugin => ({
   },
 })
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // PR browser tests always run at the localhost root, even in GitHub Actions.
   base:
-    process.env.GITHUB_ACTIONS === 'true'
-      ? `/${process.env.GITHUB_REPOSITORY?.split('/')[1] ?? ''}/`
-      : '/',
+    mode === 'e2e'
+      ? '/'
+      : process.env.GITHUB_ACTIONS === 'true'
+        ? `/${process.env.GITHUB_REPOSITORY?.split('/')[1] ?? ''}/`
+        : '/',
   resolve: { tsconfigPaths: true },
   plugins: [bookmarkletPlugin(), tailwindcss(), solid()],
   build: { outDir: 'dist/client' },
   server: { port: 3000 },
-})
+}))

@@ -1,14 +1,9 @@
 import { Show, createSignal } from 'solid-js'
 import { useHousehold } from '../households/context'
+import { invitationSecretFrom } from '../households/credentials'
 import { HouseIcon } from './icons'
 
-/** Pulls the invitation secret out of a pasted link (or a bare secret). */
-export const invitationSecretFrom = (text: string) => {
-  const trimmed = text.trim()
-  const fromLink = trimmed.match(/#household=([^&\s]+)/)?.[1]
-  if (fromLink) return decodeURIComponent(fromLink)
-  return /^[A-Za-z0-9_-]{8,}$/.test(trimmed) ? trimmed : null
-}
+export { invitationSecretFrom } from '../households/credentials'
 
 export function HouseholdStart() {
   const household = useHousehold()

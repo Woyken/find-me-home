@@ -89,7 +89,12 @@ export function VisitPlanMap(props: {
         when={located().length > 0}
         fallback={<p class="nomap">None of these plots is on the map yet.</p>}
       >
-        <div ref={init} class="canvas" aria-label="Map of the stops" />
+        <div
+          ref={init}
+          class="canvas"
+          role="region"
+          aria-label="Map of the stops"
+        />
       </Show>
     </div>
   )

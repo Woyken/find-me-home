@@ -1311,6 +1311,9 @@
     margin: 4px 0 0;
     color: var(--ink-soft);
   }
+  .trip-head > * {
+    min-width: 0;
+  }
   .stops {
     display: grid;
     gap: 12px;
@@ -1352,6 +1355,7 @@
   .ctrl {
     display: flex;
     gap: 6px;
+    flex-wrap: wrap;
   }
   .compact {
     display: grid;
@@ -1808,6 +1812,14 @@
     .stop .ctrl {
       grid-column: 1 / -1;
       justify-content: flex-end;
+    }
+    .trip-head .rowline.tight {
+      width: 100%;
+    }
+    .trip-head .btn.ghost {
+      max-width: 100%;
+      white-space: normal;
+      text-align: center;
     }
     .stack-fan {
       right: 8px;

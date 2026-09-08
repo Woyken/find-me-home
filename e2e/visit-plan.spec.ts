@@ -1,0 +1,302 @@
+import { expect, test } from '@playwright/test'
+import { E2eSyncRelay } from './support/sync-relay.ts'
+import type { Page } from '@playwright/test'
+import type { E2eSeed } from '../src/e2e/support'
+
+const uniqueNamespace = (name: string) =>
+  `${name}-${test.info().project.name.replace(/[^a-z0-9]/gi, '')}-${test.info().testId.replace(/[^a-z0-9]/gi, '')}`.slice(
+    0,
+    80,
+  )
+
+const open = async (page: Page, namespace: string) => {
+  await page.goto(`/?e2e=${namespace}`, { waitUntil: 'domcontentloaded' })
+  await expect
+    .poll(() => page.evaluate(() => Boolean(window.__FMH_E2E__)))
+    .toBe(true)
+  await page.evaluate(async () => {
+    const api = window.__FMH_E2E__
+    if (!api) throw new Error('E2E runtime is unavailable')
+    await api.ready()
+  })
+}
+
+const seed = async (page: Page, listings: E2eSeed['listings']) =>
+  page.evaluate((value) => {
+    const api = window.__FMH_E2E__
+    if (!api) throw new Error('E2E runtime is unavailable')
+    return api.seed({ listings: value })
+  }, listings)
+
+const plannedTitles = (page: Page) =>
+  page.locator('[aria-label^="Stop "] .t').allTextContents()
+
+test.describe('visit plan', () => {
+  test('covers the empty state and the Google Maps route only appears for located stops', async ({
+    page,
+  }) => {
+    const namespace = uniqueNamespace('visit-empty')
+    await open(page, namespace)
+    await seed(page, [])
+    await page.goto(`/visit-plan?e2e=${namespace}`, {
+      waitUntil: 'domcontentloaded',
+    })
+    await expect(
+      page.getByRole('heading', { name: 'No visits planned yet' }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('link', { name: 'Open route in Google Maps' }),
+    ).toHaveCount(0)
+
+    const result = await page.evaluate(async () => {
+      const api = window.__FMH_E2E__
+      if (!api) throw new Error('E2E runtime is unavailable')
+      return api.seed({
+        listings: [
+          { id: '101', title: 'Located plot', latitude: 54.7, longitude: 25.3 },
+          {
+            id: '102',
+            title: 'Unlocated plot',
+            latitude: null,
+            longitude: null,
+          },
+        ],
+        plannedListingIds: ['101', '102'],
+      })
+    })
+    await page.goto(`/visit-plan?e2e=${namespace}`, {
+      waitUntil: 'domcontentloaded',
+    })
+    await page.getByRole('link', { name: 'Going to see' }).click()
+
+    const route = page.getByRole('link', { name: 'Open route in Google Maps' })
+    await expect(route).toHaveAttribute('target', '_blank')
+    await expect(route).toHaveAttribute('rel', 'noreferrer')
+    await expect(route).toHaveAttribute('href', /destination=54.7%2C25.3/)
+    await expect(page.getByText('not on the map')).toBeVisible()
+    await expect(
+      page.getByRole('link', { name: 'Located plot', exact: true }),
+    ).toHaveAttribute('href', new RegExp(result.sourceListingIds[0]))
+  })
+
+  test('retains driving order across reloads and supports keyboard-operable reordering and removal', async ({
+    page,
+  }) => {
+    const namespace = uniqueNamespace('visit-order')
+    await open(page, namespace)
+    await page.evaluate(async () => {
+      const api = window.__FMH_E2E__
+      if (!api) throw new Error('E2E runtime is unavailable')
+      await api.seed({
+        listings: [
+          { id: '201', title: 'First' },
+          { id: '202', title: 'Second' },
+          { id: '203', title: 'Third' },
+        ],
+        plannedListingIds: ['201', '202', '203'],
+      })
+    })
+    await page.goto(`/visit-plan?e2e=${namespace}`, {
+      waitUntil: 'domcontentloaded',
+    })
+
+    await expect
+      .poll(() => plannedTitles(page))
+      .toEqual(['First', 'Second', 'Third'])
+    const moveThirdUp = page.getByRole('button', { name: 'Move Third up' })
+    await moveThirdUp.focus()
+    await page.keyboard.press('Enter')
+    await expect
+      .poll(() => plannedTitles(page))
+      .toEqual(['First', 'Third', 'Second'])
+    await expect(
+      page.getByRole('button', { name: 'Move First up' }),
+    ).toBeDisabled()
+    await page
+      .getByRole('button', { name: 'Remove Third from the list' })
+      .click()
+    await expect.poll(() => plannedTitles(page)).toEqual(['First', 'Second'])
+    await page.reload()
+    await expect.poll(() => plannedTitles(page)).toEqual(['First', 'Second'])
+
+    const view = page.getByRole('group', { name: 'View' })
+    await view.getByRole('button', { name: 'Map' }).focus()
+    await page.keyboard.press('Enter')
+    await expect(view.getByRole('button', { name: 'Map' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await expect(view.getByRole('button', { name: 'List' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    await page.keyboard.press('Shift+Tab')
+    await page.keyboard.press('Enter')
+    await expect(
+      page.getByRole('list', { name: 'Visit stops in driving order' }),
+    ).toBeVisible()
+
+    const fitsViewport = await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    )
+    expect(fitsViewport).toBe(true)
+  })
+
+  test('shows a failed storage write without changing the visit plan', async ({
+    page,
+  }) => {
+    const namespace = uniqueNamespace('visit-error')
+    await open(page, namespace)
+    await seed(page, [{ id: '301', title: 'Cannot save' }])
+    await page.evaluate(() =>
+      window.__FMH_E2E__?.setFailure('visit-plan-storage'),
+    )
+    await page.getByRole('button', { name: 'Go see it' }).click()
+    await expect(page.getByRole('alert')).toContainText('IndexedDB transaction')
+    await expect(
+      page.getByRole('button', { name: 'Go see it' }),
+    ).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  test('keeps plan references safe when a listing disappears', async ({
+    page,
+  }) => {
+    const namespace = uniqueNamespace('visit-missing')
+    await open(page, namespace)
+    const result = await seed(page, [{ id: '401', title: 'Gone soon' }])
+    await page.getByRole('button', { name: 'Go see it' }).click()
+    await page.evaluate((id) => {
+      const api = window.__FMH_E2E__
+      if (!api) throw new Error('E2E runtime is unavailable')
+      return api.removeSourceListing(id)
+    }, result.sourceListingIds[0])
+    await page.goto(`/visit-plan?e2e=${namespace}`, {
+      waitUntil: 'domcontentloaded',
+    })
+    await expect(
+      page.getByRole('heading', { name: 'No visits planned yet' }),
+    ).toBeVisible()
+  })
+})
+
+test('two pages synchronize initial state and subsequent plan, inbox, visit, and delete mutations', async ({
+  browser,
+}) => {
+  const namespace = uniqueNamespace('two-device')
+  const relay = new E2eSyncRelay()
+  const firstContext = await browser.newContext()
+  const secondContext = await browser.newContext()
+  await relay.attach(firstContext)
+  await relay.attach(secondContext)
+  const first = await firstContext.newPage()
+  const second = await secondContext.newPage()
+  try {
+    await open(first, `${namespace}&e2e-device=first`)
+    const result = await first.evaluate(async () => {
+      const api = window.__FMH_E2E__
+      if (!api) throw new Error('E2E runtime is unavailable')
+      return api.seed({
+        listings: [
+          { id: '501', title: 'Shared first' },
+          { id: '502', title: 'Shared second' },
+        ],
+        plannedListingIds: ['501', '502'],
+      })
+    })
+    const invitation = new URL(
+      await first.evaluate(() => {
+        const api = window.__FMH_E2E__
+        if (!api) throw new Error('E2E runtime is unavailable')
+        return api.invitationUrl()
+      }),
+    )
+    invitation.searchParams.set('e2e', namespace)
+    invitation.searchParams.set('e2e-device', 'second')
+    await second.goto(invitation.toString(), { waitUntil: 'domcontentloaded' })
+    await expect(
+      second.getByRole('link', { name: 'Going to see' }),
+    ).toContainText('2')
+    await second.getByRole('link', { name: 'Going to see' }).click()
+    await expect
+      .poll(() => plannedTitles(second))
+      .toEqual(['Shared first', 'Shared second'])
+    await expect
+      .poll(() => first.evaluate(() => window.__FMH_E2E__?.syncEvents()))
+      .toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ direction: 'sent', type: 'manifest' }),
+          expect.objectContaining({ direction: 'received', type: 'request' }),
+          expect.objectContaining({ direction: 'sent', type: 'records' }),
+        ]),
+      )
+    await expect
+      .poll(() => second.evaluate(() => window.__FMH_E2E__?.syncEvents()))
+      .toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ direction: 'received', type: 'manifest' }),
+          expect.objectContaining({ direction: 'sent', type: 'request' }),
+          expect.objectContaining({ direction: 'received', type: 'records' }),
+        ]),
+      )
+
+    await second.getByRole('button', { name: 'Move Shared second up' }).click()
+    await first.goto(`/visit-plan?e2e=${namespace}&e2e-device=first`, {
+      waitUntil: 'domcontentloaded',
+    })
+    await expect
+      .poll(() => plannedTitles(first))
+      .toEqual(['Shared second', 'Shared first'])
+    await first.evaluate(() => window.__FMH_E2E__?.captureInbox('503'))
+    await second.goto(`/import-inbox?e2e=${namespace}&e2e-device=second`, {
+      waitUntil: 'domcontentloaded',
+    })
+    await expect(second.getByText('E2E inbox 503')).toBeVisible()
+    await first.evaluate((id) => {
+      const api = window.__FMH_E2E__
+      if (!api) throw new Error('E2E runtime is unavailable')
+      return api.markVisited(id)
+    }, result.sourceListingIds[0])
+    await second.goto(`/visit-plan?e2e=${namespace}&e2e-device=second`, {
+      waitUntil: 'domcontentloaded',
+    })
+    await expect.poll(() => plannedTitles(second)).toEqual(['Shared second'])
+    await second.evaluate((id) => {
+      const api = window.__FMH_E2E__
+      if (!api) throw new Error('E2E runtime is unavailable')
+      return api.removeSourceListing(id)
+    }, result.sourceListingIds[1])
+    await first.goto(`/visit-plan?e2e=${namespace}&e2e-device=first`, {
+      waitUntil: 'domcontentloaded',
+    })
+    await expect.poll(() => plannedTitles(first)).toEqual([])
+
+    await first.goto(
+      `/source-listings/${result.sourceListingIds[0]}?e2e=${namespace}&e2e-device=first`,
+      {
+        waitUntil: 'domcontentloaded',
+      },
+    )
+    await first.getByRole('button', { name: 'Go see it' }).click()
+    await expect(
+      first.getByRole('button', { name: 'Going to see' }),
+    ).toBeVisible()
+
+    await second.close()
+    const rejoined = await secondContext.newPage()
+    try {
+      await rejoined.goto(invitation.toString(), {
+        waitUntil: 'domcontentloaded',
+      })
+      await expect(
+        rejoined.getByRole('link', { name: 'Going to see' }),
+      ).toContainText('1')
+      await rejoined.getByRole('link', { name: 'Going to see' }).click()
+      await expect.poll(() => plannedTitles(rejoined)).toEqual(['Shared first'])
+    } finally {
+      await rejoined.close()
+    }
+  } finally {
+    await firstContext.close()
+    await secondContext.close()
+  }
+})

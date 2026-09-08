@@ -149,6 +149,27 @@ describe('Aruodas import fragment', () => {
     ).toThrow()
   })
 
+  it('rejects sold or inactive markers in the individual advert header', () => {
+    expect(() =>
+      runBookmarklet(
+        '<section class="action-bar-advert-always-sticky"><span class="list-sold-lt">Parduotas</span></section>',
+      ),
+    ).toThrow()
+    expect(() =>
+      runBookmarklet(
+        '<section class="action-bar-advert-always-sticky"><span class="advert-is-passive">Neaktyvus</span></section>',
+      ),
+    ).toThrow()
+  })
+
+  it('does not reject an active advert because a related card is sold', () => {
+    expect(
+      runBookmarklet(
+        '<aside class="related"><span class="list-sold-lt">Parduotas</span></aside>',
+      ),
+    ).toMatchObject({ kind: 'listing' })
+  })
+
   it('shows a heartbeat before running and a copyable crash report when it fails', () => {
     let heartbeatSeen: boolean | undefined
     const broken = new Proxy(document, {
@@ -236,6 +257,18 @@ describe('Aruodas import fragment', () => {
         lat: 54.649337,
         lng: 25.46104,
         locationConfidence: 'approx',
+      },
+    })
+  })
+
+  it('imports a lazy-loaded advert photo', () => {
+    expect(
+      runBookmarklet(
+        '<img data-src="https://aruodas-img.dgn.lt/object_67_lazy/plot.jpg">',
+      ),
+    ).toMatchObject({
+      imported: {
+        photos: ['https://aruodas-img.dgn.lt/object_67_lazy/plot.jpg'],
       },
     })
   })

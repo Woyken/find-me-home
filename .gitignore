@@ -14,3 +14,6 @@ __unconfig*
 data/
 dev-out.log
 dev-err.log
+playwright-report/
+test-results/
+blob-report/

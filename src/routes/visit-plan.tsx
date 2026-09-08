@@ -57,9 +57,15 @@ export default function VisitPlanPage() {
       setBusy(false)
     }
   }
-  const move = (index: number, offset: -1 | 1) => {
+  const move = (id: string, offset: -1 | 1) => {
+    const index = plan().sourceListingIds.indexOf(id)
     const destination = index + offset
-    if (destination < 0 || destination >= plan().sourceListingIds.length) return
+    if (
+      index < 0 ||
+      destination < 0 ||
+      destination >= plan().sourceListingIds.length
+    )
+      return
     const ids = [...plan().sourceListingIds]
     ;[ids[index], ids[destination]] = [ids[destination], ids[index]]
     void replacePlan(ids)
@@ -76,7 +82,10 @@ export default function VisitPlanPage() {
       SourceListingDetail['candidatePlots'][number] | undefined
     const title = listing.title ?? `Aruodas advert ${listing.sourceId}`
     return (
-      <article class="panel stop going">
+      <article
+        class="panel stop going"
+        aria-label={`Stop ${index + 1}: ${title}`}
+      >
         <span class="num" aria-hidden="true">
           {index + 1}
         </span>
@@ -107,7 +116,7 @@ export default function VisitPlanPage() {
             type="button"
             aria-label={`Move ${title} up`}
             disabled={busy() || index === 0}
-            onClick={() => move(index, -1)}
+            onClick={() => move(listing.id, -1)}
           >
             <UpIcon />
           </button>
@@ -115,8 +124,12 @@ export default function VisitPlanPage() {
             class="iconbtn"
             type="button"
             aria-label={`Move ${title} down`}
-            disabled={busy() || index === listings().length - 1}
-            onClick={() => move(index, 1)}
+            disabled={
+              busy() ||
+              plan().sourceListingIds.indexOf(listing.id) ===
+                plan().sourceListingIds.length - 1
+            }
+            onClick={() => move(listing.id, 1)}
           >
             <DownIcon />
           </button>
@@ -212,7 +225,11 @@ export default function VisitPlanPage() {
             </>
           }
         >
-          <div class="stops">
+          <div
+            class="stops"
+            role="list"
+            aria-label="Visit stops in driving order"
+          >
             <For each={listings()}>
               {(listing, index) => stop(listing, index(), false)}
             </For>

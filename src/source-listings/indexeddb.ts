@@ -152,6 +152,7 @@ export const createIndexedDbSourceListingRepository = (
     uuid: () => string
     beforeRemoveCommit?: (transaction: IDBTransaction) => void
     beforeVisitCommit?: (transaction: IDBTransaction) => void
+    beforeVisitPlanCommit?: (transaction: IDBTransaction) => void
   } = {
     now: Date.now,
     uuid: () => crypto.randomUUID(),
@@ -845,6 +846,7 @@ export const createIndexedDbSourceListingRepository = (
         'readwrite',
       )
       transaction.objectStore('visit-plans').put(next)
+      dependencies.beforeVisitPlanCommit?.(transaction)
       await transactionComplete(transaction)
       visitPlan = next
       publish()
