@@ -35,11 +35,7 @@ export function HouseholdHeader(props: { active?: 'plots' | 'trip' }) {
           <span>{syncText[sync()]}</span>
           <span aria-hidden="true">·</span>
           <span>Last change {formatAgo(household.getLastChangeAt())}</span>
-          <button
-            class="linkbtn"
-            type="button"
-            onClick={() => setSettings(true)}
-          >
+          <button class="linkbtn" type="button" onClick={() => setSettings(true)}>
             Our search settings
           </button>
         </div>
@@ -63,10 +59,7 @@ export function HouseholdHeader(props: { active?: 'plots' | 'trip' }) {
           + Add a plot
         </button>
       </nav>
-      <SearchSettingsDialog
-        open={settings()}
-        onClose={() => setSettings(false)}
-      />
+      <SearchSettingsDialog open={settings()} onClose={() => setSettings(false)} />
     </header>
   )
 }

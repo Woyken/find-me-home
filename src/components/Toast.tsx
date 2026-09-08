@@ -9,10 +9,7 @@ let nextId = 1
 export const showToast = (message: string) => {
   const id = nextId++
   setToasts((current) => [...current, { id, message }])
-  setTimeout(
-    () => setToasts((current) => current.filter((toast) => toast.id !== id)),
-    1_800,
-  )
+  setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 1_800)
 }
 
 export function Toasts() {

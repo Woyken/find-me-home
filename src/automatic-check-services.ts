@@ -10,12 +10,9 @@ proj4.defs(
 )
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL as string | undefined
-const ESO_URL =
-  'https://www.geoportal.lt/mapproxy/ESO_DB_Public/MapServer/identify'
-const KVR_URL =
-  'https://kvr.kpd.lt/arcgis/rest/services/KVR/pub_kvr_objektai/MapServer'
-const FOREST_URL =
-  'https://www.geoportal.lt/mapproxy/vmt_miskai/MapServer/8/query'
+const ESO_URL = 'https://www.geoportal.lt/mapproxy/ESO_DB_Public/MapServer/identify'
+const KVR_URL = 'https://kvr.kpd.lt/arcgis/rest/services/KVR/pub_kvr_objektai/MapServer'
+const FOREST_URL = 'https://www.geoportal.lt/mapproxy/vmt_miskai/MapServer/8/query'
 const RATES = { I: 80.15, II: 159.17, III: 375.27 } as const
 
 const geographicDistanceKm = (
@@ -60,9 +57,7 @@ const pointQuery = async (
     spatialRel: 'esriSpatialRelIntersects',
     returnGeometry: 'false',
     outFields: '*',
-    ...(distanceM === undefined
-      ? {}
-      : { distance: String(distanceM), units: 'esriSRUnit_Meter' }),
+    ...(distanceM === undefined ? {} : { distance: String(distanceM), units: 'esriSRUnit_Meter' }),
   })
   const result = await requestJson<{ features?: unknown[] }>(
     `${baseUrl}?${params}`,
@@ -102,10 +97,7 @@ const estimateEsoCost = async (
         ? [
             {
               distanceM: Math.hypot(item.geometry.x - x, item.geometry.y - y),
-              name:
-                item.attributes?.PAVADINIMAS ??
-                item.attributes?.RUSIS ??
-                'grid node',
+              name: item.attributes?.PAVADINIMAS ?? item.attributes?.RUSIS ?? 'grid node',
             },
           ]
         : [],
@@ -165,10 +157,7 @@ export const createBrowserAutomaticCheckServices = (options?: {
 }): AutomaticCheckServices => {
   const fetcher = options?.fetcher ?? fetch
   const workerUrl = options?.workerUrl ?? WORKER_URL
-  const client = createExternalServiceClient(
-    options?.workerUrl ?? WORKER_URL ?? '',
-    fetcher,
-  )
+  const client = createExternalServiceClient(options?.workerUrl ?? WORKER_URL ?? '', fetcher)
   const noise = createNoiseService(client.transportNoise, fetcher)
   const livability = createLivabilityService(fetcher)
   const nextMondayArrival = () => {
@@ -198,78 +187,53 @@ export const createBrowserAutomaticCheckServices = (options?: {
     throw new Error('Unable to calculate next Monday')
   }
   return {
-    estimateEsoCost: (latitude, longitude) =>
-      estimateEsoCost(latitude, longitude, fetcher),
+    estimateEsoCost: (latitude, longitude) => estimateEsoCost(latitude, longitude, fetcher),
     async legalFlags(latitude, longitude) {
       const results = await Promise.allSettled([
         workerFlag('protected-area', latitude, longitude, workerUrl, fetcher),
         workerFlag('flood', latitude, longitude, workerUrl, fetcher),
         Promise.all([
           pointQuery(`${KVR_URL}/0/query`, latitude, longitude, 100, fetcher),
-          pointQuery(
-            `${KVR_URL}/1/query`,
-            latitude,
-            longitude,
-            undefined,
-            fetcher,
-          ),
+          pointQuery(`${KVR_URL}/1/query`, latitude, longitude, undefined, fetcher),
         ]).then((values) => ({
           flag: values.some(Boolean),
           detail: values.some(Boolean)
             ? 'heritage object or territory mapped nearby'
             : 'no heritage object or territory mapped nearby',
         })),
-        pointQuery(FOREST_URL, latitude, longitude, undefined, fetcher).then(
-          (flag) => ({
-            flag,
-            detail: flag
-              ? 'inside a mapped state-forest plot'
-              : 'not inside a mapped state-forest plot',
-          }),
-        ),
+        pointQuery(FOREST_URL, latitude, longitude, undefined, fetcher).then((flag) => ({
+          flag,
+          detail: flag
+            ? 'inside a mapped state-forest plot'
+            : 'not inside a mapped state-forest plot',
+        })),
       ])
-      return ['protected area', 'flood zone', 'heritage', 'state forest'].map(
-        (name, index) => {
-          const result = results[index]
-          return result.status === 'fulfilled'
-            ? { name, ...result.value }
-            : { name, flag: null, detail: 'service unavailable' }
-        },
-      )
+      return ['protected area', 'flood zone', 'heritage', 'state forest'].map((name, index) => {
+        const result = results[index]
+        return result.status === 'fulfilled'
+          ? { name, ...result.value }
+          : { name, flag: null, detail: 'service unavailable' }
+      })
     },
     async walkToStop(latitude, longitude) {
       const stops = await client.nearbyStops(latitude, longitude)
-      if (!stops.length)
-        return { stopName: null, durationSeconds: null, distanceMeters: null }
+      if (!stops.length) return { stopName: null, durationSeconds: null, distanceMeters: null }
       const candidates = stops
         .map((stop) => ({
           stop,
-          distance: geographicDistanceKm(
-            latitude,
-            longitude,
-            stop.latitude,
-            stop.longitude,
-          ),
+          distance: geographicDistanceKm(latitude, longitude, stop.latitude, stop.longitude),
         }))
         .sort((left, right) => left.distance - right.distance)
         .slice(0, 3)
       const directions = await Promise.allSettled(
         candidates.map(async ({ stop }) => ({
           stop,
-          direction: await client.walkingDirections(
-            { latitude, longitude },
-            stop,
-          ),
+          direction: await client.walkingDirections({ latitude, longitude }, stop),
         })),
       )
       const best = directions
-        .flatMap((result) =>
-          result.status === 'fulfilled' ? [result.value] : [],
-        )
-        .sort(
-          (left, right) =>
-            left.direction.durationSeconds - right.direction.durationSeconds,
-        )
+        .flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []))
+        .sort((left, right) => left.direction.durationSeconds - right.direction.durationSeconds)
         .at(0)
       if (!best) throw new Error('Walking directions unavailable')
       return {
@@ -285,9 +249,7 @@ export const createBrowserAutomaticCheckServices = (options?: {
         { latitude: 54.6856478, longitude: 25.2869905 },
         arriveBy,
       )
-      const best = routes
-        .sort((left, right) => left.durationSeconds - right.durationSeconds)
-        .at(0)
+      const best = routes.sort((left, right) => left.durationSeconds - right.durationSeconds).at(0)
       return {
         durationSeconds: best?.durationSeconds ?? null,
         routesFound: routes.length,
@@ -295,15 +257,13 @@ export const createBrowserAutomaticCheckServices = (options?: {
           best?.segments
             .map(
               (segment) =>
-                segment.name ??
-                (segment.mode === 'WALK' ? 'walk' : segment.mode.toLowerCase()),
+                segment.name ?? (segment.mode === 'WALK' ? 'walk' : segment.mode.toLowerCase()),
             )
             .join(' → ') ?? null,
         arriveBy,
       }
     },
-    crimeDensity: (latitude, longitude) =>
-      client.crimeDensity(latitude, longitude),
+    crimeDensity: (latitude, longitude) => client.crimeDensity(latitude, longitude),
     noise,
     livability,
   }

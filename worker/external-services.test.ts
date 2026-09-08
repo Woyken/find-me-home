@@ -50,9 +50,7 @@ describe('retained external-service Worker operations', () => {
       .fn<typeof fetch>()
       .mockResolvedValueOnce(Response.json({ stops: [] }))
       .mockResolvedValueOnce(
-        Response.json([
-          { id: 'rural', name: 'Kaimas', lat: 54.71, lng: 25.31 },
-        ]),
+        Response.json([{ id: 'rural', name: 'Kaimas', lat: 54.71, lng: 25.31 }]),
       )
     const response = await handleWorkerRequest(
       request('/trafi/nearby-stops?latitude=54.7&longitude=25.3'),
@@ -79,9 +77,7 @@ describe('retained external-service Worker operations', () => {
             {
               startTime: '2026-09-07T07:30:00+03:00',
               endTime: '2026-09-07T08:00:00+03:00',
-              segments: [
-                { mode: 'BUS', transit: { schedule: { name: '1G' } } },
-              ],
+              segments: [{ mode: 'BUS', transit: { schedule: { name: '1G' } } }],
             },
           ],
         }),
@@ -124,9 +120,9 @@ describe('retained external-service Worker operations', () => {
 
   it('counts fixed IRD crime results within the requested radius', async () => {
     const fetcher = vi.fn<typeof fetch>(async (_input, init) => {
-      const query = JSON.parse(
-        decodeURIComponent(String(init?.body).replace(/^query=/, '')),
-      ) as { shape: { rings: Array<[number, number]> } }
+      const query = JSON.parse(decodeURIComponent(String(init?.body).replace(/^query=/, ''))) as {
+        shape: { rings: Array<[number, number]> }
+      }
       const [x, y] = query.shape.rings[0]
       return Response.json({
         grid: [],
@@ -138,9 +134,7 @@ describe('retained external-service Worker operations', () => {
       })
     })
     const response = await handleWorkerRequest(
-      request(
-        '/crime/density?latitude=54.7&longitude=25.3&radiusMeters=1000&years=3',
-      ),
+      request('/crime/density?latitude=54.7&longitude=25.3&radiusMeters=1000&years=3'),
       options(fetcher),
     )
 
@@ -154,16 +148,12 @@ describe('retained external-service Worker operations', () => {
       dateTo: '2026-09-03',
       emptyResponse: false,
     })
-    expect(String(fetcher.mock.calls[0][0])).toBe(
-      'https://maps.ird.lt/nvzr-services/query',
-    )
+    expect(String(fetcher.mock.calls[0][0])).toBe('https://maps.ird.lt/nvzr-services/query')
   })
 
   it('treats the IRD "Results not found" envelope as an empty result', async () => {
     const response = await handleWorkerRequest(
-      request(
-        '/crime/density?latitude=54.613589&longitude=25.453212&radiusMeters=1000&years=3',
-      ),
+      request('/crime/density?latitude=54.613589&longitude=25.453212&radiusMeters=1000&years=3'),
       options(
         vi.fn<typeof fetch>(async () =>
           Response.json(
@@ -195,8 +185,7 @@ describe('retained external-service Worker operations', () => {
 
   it('explains why the IRD crime query failed in the 502 body', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const path =
-      '/crime/density?latitude=54.7&longitude=25.3&radiusMeters=1000&years=3'
+    const path = '/crime/density?latitude=54.7&longitude=25.3&radiusMeters=1000&years=3'
     const upstreamDown = await handleWorkerRequest(
       request(path),
       options(
@@ -248,8 +237,7 @@ describe('retained external-service Worker operations', () => {
       reason: 'IRD response has no "bare" array; keys: grid',
     })
     expect(await networkFailure.json()).toMatchObject({
-      reason:
-        'POST https://maps.ird.lt/nvzr-services/query failed: fetch failed',
+      reason: 'POST https://maps.ird.lt/nvzr-services/query failed: fetch failed',
     })
     expect(await irdError.json()).toMatchObject({
       reason: 'IRD returned error: {"code":500,"message":"Internal error"}',
@@ -257,9 +245,7 @@ describe('retained external-service Worker operations', () => {
   })
 
   it('distinguishes valid empty transport noise from unavailable schemas', async () => {
-    const emptyFetcher = vi.fn<typeof fetch>(async () =>
-      Response.json({ features: [] }),
-    )
+    const emptyFetcher = vi.fn<typeof fetch>(async () => Response.json({ features: [] }))
     const empty = await handleWorkerRequest(
       request('/inspire/transport-noise?latitude=54.7&longitude=25.3'),
       options(emptyFetcher),
@@ -277,9 +263,7 @@ describe('retained external-service Worker operations', () => {
     expect(await invalid.json()).toEqual({ error: 'INSPIRE unavailable' })
     expect(emptyFetcher).toHaveBeenCalledTimes(2)
     for (const [input] of emptyFetcher.mock.calls)
-      expect(String(input)).toContain(
-        'https://inspire-geoportal.lt/geoserver/tn/wfs?',
-      )
+      expect(String(input)).toContain('https://inspire-geoportal.lt/geoserver/tn/wfs?')
   })
 
   it('normalizes INSPIRE transport lines to nearest distances', async () => {
@@ -358,9 +342,7 @@ describe('retained external-service Worker operations', () => {
   })
 
   it('rejects invalid input, schema failures, arbitrary targets, and disallowed CORS', async () => {
-    const fetcher = vi.fn<typeof fetch>(async () =>
-      Response.json({ unexpected: true }),
-    )
+    const fetcher = vi.fn<typeof fetch>(async () => Response.json({ unexpected: true }))
     const invalid = await handleWorkerRequest(
       request('/crime/density?latitude=200&longitude=25.3'),
       options(fetcher),
@@ -374,12 +356,9 @@ describe('retained external-service Worker operations', () => {
       options(fetcher),
     )
     const forbidden = await handleWorkerRequest(
-      new Request(
-        'https://worker.test/trafi/nearby-stops?latitude=54.7&longitude=25.3',
-        {
-          headers: { Origin: 'https://attacker.test' },
-        },
-      ),
+      new Request('https://worker.test/trafi/nearby-stops?latitude=54.7&longitude=25.3', {
+        headers: { Origin: 'https://attacker.test' },
+      }),
       options(fetcher),
     )
 
@@ -392,13 +371,9 @@ describe('retained external-service Worker operations', () => {
   })
 
   it('remains publicly callable without granting cross-origin browser access', async () => {
-    const fetcher = vi.fn<typeof fetch>(async () =>
-      Response.json({ stops: [] }),
-    )
+    const fetcher = vi.fn<typeof fetch>(async () => Response.json({ stops: [] }))
     const response = await handleWorkerRequest(
-      new Request(
-        'https://worker.test/trafi/nearby-stops?latitude=54.7&longitude=25.3',
-      ),
+      new Request('https://worker.test/trafi/nearby-stops?latitude=54.7&longitude=25.3'),
       options(fetcher),
     )
 
@@ -428,9 +403,7 @@ describe('retained external-service Worker operations', () => {
 
     expect(allowed.status).toBe(204)
     expect(allowed.headers.get('Access-Control-Allow-Origin')).toBe(origin)
-    expect(allowed.headers.get('Access-Control-Allow-Methods')).toContain(
-      'POST',
-    )
+    expect(allowed.headers.get('Access-Control-Allow-Methods')).toContain('POST')
     expect(forbidden.status).toBe(403)
   })
 })

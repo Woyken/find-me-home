@@ -3,13 +3,7 @@ import { CheckStrip } from '../components/CheckStrip'
 import { FannedStack } from '../components/FannedStack'
 import { HouseholdHeader } from '../components/HouseholdHeader'
 import { VisitPlanMap } from '../components/VisitPlanMap'
-import {
-  CrossIcon,
-  DownIcon,
-  FlagIcon,
-  PinIcon,
-  UpIcon,
-} from '../components/icons'
+import { CrossIcon, DownIcon, FlagIcon, PinIcon, UpIcon } from '../components/icons'
 import { useHousehold } from '../households/context'
 import { paths } from '../paths'
 import type { SourceListingDetail } from '../source-listings/model'
@@ -28,9 +22,7 @@ export const routeUrl = (listings: Array<SourceListingDetail>) => {
   const destination = coordinates[coordinates.length - 1]
   const waypoints = coordinates.slice(0, -1)
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}${
-    waypoints.length
-      ? `&waypoints=${encodeURIComponent(waypoints.join('|'))}`
-      : ''
+    waypoints.length ? `&waypoints=${encodeURIComponent(waypoints.join('|'))}` : ''
   }`
 }
 
@@ -57,9 +49,10 @@ export default function VisitPlanPage() {
       setBusy(false)
     }
   }
-  const move = (index: number, offset: -1 | 1) => {
+  const move = (id: string, offset: -1 | 1) => {
+    const index = plan().sourceListingIds.indexOf(id)
     const destination = index + offset
-    if (destination < 0 || destination >= plan().sourceListingIds.length) return
+    if (index < 0 || destination < 0 || destination >= plan().sourceListingIds.length) return
     const ids = [...plan().sourceListingIds]
     ;[ids[index], ids[destination]] = [ids[destination], ids[index]]
     void replacePlan(ids)
@@ -67,16 +60,13 @@ export default function VisitPlanPage() {
   const drop = (id: string) =>
     void replacePlan(plan().sourceListingIds.filter((other) => other !== id))
 
-  const stop = (
-    listing: SourceListingDetail,
-    index: number,
-    compact: boolean,
-  ) => {
+  const stop = (listing: SourceListingDetail, index: number, compact: boolean) => {
     const plot = listing.candidatePlots[0] as
-      SourceListingDetail['candidatePlots'][number] | undefined
+      | SourceListingDetail['candidatePlots'][number]
+      | undefined
     const title = listing.title ?? `Aruodas advert ${listing.sourceId}`
     return (
-      <article class="panel stop going">
+      <article class="panel stop going" aria-label={`Stop ${index + 1}: ${title}`}>
         <span class="num" aria-hidden="true">
           {index + 1}
         </span>
@@ -91,9 +81,7 @@ export default function VisitPlanPage() {
               <span>{orDash(formatAres(plot?.areaAres))}</span>
               <CheckStrip checks={plot?.automaticChecks} />
               <Show when={listing.visitedAt !== null}>
-                <span class="tag pass">
-                  visited {formatDateShort(listing.visitedAt)}
-                </span>
+                <span class="tag pass">visited {formatDateShort(listing.visitedAt)}</span>
               </Show>
               <Show when={!sourceListingMapLocation(listing)}>
                 <span class="tag warn">not on the map</span>
@@ -107,7 +95,7 @@ export default function VisitPlanPage() {
             type="button"
             aria-label={`Move ${title} up`}
             disabled={busy() || index === 0}
-            onClick={() => move(index, -1)}
+            onClick={() => move(listing.id, -1)}
           >
             <UpIcon />
           </button>
@@ -115,8 +103,11 @@ export default function VisitPlanPage() {
             class="iconbtn"
             type="button"
             aria-label={`Move ${title} down`}
-            disabled={busy() || index === listings().length - 1}
-            onClick={() => move(index, 1)}
+            disabled={
+              busy() ||
+              plan().sourceListingIds.indexOf(listing.id) === plan().sourceListingIds.length - 1
+            }
+            onClick={() => move(listing.id, 1)}
           >
             <DownIcon />
           </button>
@@ -149,12 +140,7 @@ export default function VisitPlanPage() {
         <div class="rowline tight">
           <Show when={routeUrl(listings())}>
             {(url) => (
-              <a
-                class="btn ghost"
-                href={url()}
-                target="_blank"
-                rel="noreferrer"
-              >
+              <a class="btn ghost" href={url()} target="_blank" rel="noreferrer">
                 <PinIcon /> Open route in Google Maps
               </a>
             )}
@@ -190,8 +176,7 @@ export default function VisitPlanPage() {
           <div class="panel empty">
             <h2>No visits planned yet</h2>
             <p>
-              On the plots page, press "Go see it" on the ones worth a drive.
-              They'll line up here.
+              On the plots page, press "Go see it" on the ones worth a drive. They'll line up here.
             </p>
             <a class="btn stake" href={paths.home}>
               <FlagIcon /> Pick plots to see
@@ -205,17 +190,13 @@ export default function VisitPlanPage() {
             <>
               <VisitPlanMap sourceListings={listings()} />
               <div class="compact">
-                <For each={listings()}>
-                  {(listing, index) => stop(listing, index(), true)}
-                </For>
+                <For each={listings()}>{(listing, index) => stop(listing, index(), true)}</For>
               </div>
             </>
           }
         >
-          <div class="stops">
-            <For each={listings()}>
-              {(listing, index) => stop(listing, index(), false)}
-            </For>
+          <div class="stops" role="list" aria-label="Visit stops in driving order">
+            <For each={listings()}>{(listing, index) => stop(listing, index(), false)}</For>
           </div>
         </Show>
       </Show>

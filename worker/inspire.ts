@@ -15,8 +15,7 @@ const OPERATIONS = {
       'ps:PS.ProtectedSitesNatureConservation',
       'ps:PS.ProtectedSitesNatura2000',
     ],
-    present: (name: string | null) =>
-      `inside protected area${name ? `: ${name}` : ''}`,
+    present: (name: string | null) => `inside protected area${name ? `: ${name}` : ''}`,
     absent: 'not inside a mapped protected area',
   },
   flood: {
@@ -27,16 +26,12 @@ const OPERATIONS = {
   },
 } as const
 
-export const handleInspireRequest = async (
-  request: Request,
-  options: WorkerOptions,
-) => {
+export const handleInspireRequest = async (request: Request, options: WorkerOptions) => {
   const cors = corsHeaders(request, options.productionOrigin)
   if (cors === null) return new Response('Origin not allowed', { status: 403 })
   const url = new URL(request.url)
   const operationName = url.pathname.replace('/inspire/', '')
-  if (operationName === 'transport-noise')
-    return handleTransportNoise(request, options, cors)
+  if (operationName === 'transport-noise') return handleTransportNoise(request, options, cors)
   if (request.method !== 'GET' || !(operationName in OPERATIONS))
     return Response.json({ error: 'Not found' }, { status: 404, headers: cors })
   const operation = OPERATIONS[operationName as keyof typeof OPERATIONS]
@@ -54,10 +49,7 @@ export const handleInspireRequest = async (
     longitude < -180 ||
     longitude > 180
   )
-    return Response.json(
-      { error: 'Invalid coordinates' },
-      { status: 400, headers: cors },
-    )
+    return Response.json({ error: 'Invalid coordinates' }, { status: 400, headers: cors })
   try {
     const bodies = await Promise.all(
       operation.typeNames.map(async (typeName) => {
@@ -70,9 +62,7 @@ export const handleInspireRequest = async (
           typeNames: typeName,
           cql_filter: `INTERSECTS(geometry,POINT(${latitude} ${longitude}))`,
         })
-        const response = await (options.fetch ?? fetch)(
-          `${operation.service}?${params}`,
-        )
+        const response = await (options.fetch ?? fetch)(`${operation.service}?${params}`)
         if (!response.ok) throw new Error('INSPIRE unavailable')
         return (await response.json()) as {
           features?: Array<{ properties?: Record<string, unknown> }>
@@ -81,9 +71,7 @@ export const handleInspireRequest = async (
     )
     const feature = bodies.flatMap((body) => body.features ?? []).at(0)
     const rawName = feature
-      ? (feature.properties?.text ??
-        feature.properties?.NAME ??
-        feature.properties?.description)
+      ? (feature.properties?.text ?? feature.properties?.NAME ?? feature.properties?.description)
       : undefined
     const name = typeof rawName === 'string' ? rawName.trim() : null
     const flag = feature !== undefined
@@ -95,10 +83,7 @@ export const handleInspireRequest = async (
       { headers: cors },
     )
   } catch {
-    return Response.json(
-      { error: 'INSPIRE unavailable' },
-      { status: 502, headers: cors },
-    )
+    return Response.json({ error: 'INSPIRE unavailable' }, { status: 502, headers: cors })
   }
 }
 
@@ -118,11 +103,7 @@ const lineComponents = (
     if (!Array.isArray(line)) return null
     const vertices: Array<[number, number]> = []
     for (const vertex of line) {
-      if (
-        !Array.isArray(vertex) ||
-        typeof vertex[0] !== 'number' ||
-        typeof vertex[1] !== 'number'
-      )
+      if (!Array.isArray(vertex) || typeof vertex[0] !== 'number' || typeof vertex[1] !== 'number')
         return null
       vertices.push([vertex[0], vertex[1]])
     }
@@ -136,19 +117,12 @@ const segmentDistance = (point: number[], start: number[], end: number[]) => {
   const dx = end[0] - start[0]
   const dy = end[1] - start[1]
   const lengthSquared = dx * dx + dy * dy
-  if (!lengthSquared)
-    return Math.hypot(point[0] - start[0], point[1] - start[1])
+  if (!lengthSquared) return Math.hypot(point[0] - start[0], point[1] - start[1])
   const position = Math.max(
     0,
-    Math.min(
-      1,
-      ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSquared,
-    ),
+    Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSquared),
   )
-  return Math.hypot(
-    point[0] - (start[0] + position * dx),
-    point[1] - (start[1] + position * dy),
-  )
+  return Math.hypot(point[0] - (start[0] + position * dx), point[1] - (start[1] + position * dy))
 }
 
 const handleTransportNoise = async (
@@ -161,17 +135,13 @@ const handleTransportNoise = async (
     return Response.json({ error: 'Not found' }, { status: 404, headers: cors })
   const validated = coordinates(url.searchParams)
   if (!validated)
-    return Response.json(
-      { error: 'Invalid coordinates' },
-      { status: 400, headers: cors },
-    )
+    return Response.json({ error: 'Invalid coordinates' }, { status: 400, headers: cors })
   try {
     const { latitude, longitude } = validated
     const point = proj4('EPSG:4326', 'EPSG:3346', [longitude, latitude])
     const searchMeters = 2_000
     const latitudeDelta = searchMeters / 111_320
-    const longitudeDelta =
-      searchMeters / (111_320 * Math.cos((latitude * Math.PI) / 180))
+    const longitudeDelta = searchMeters / (111_320 * Math.cos((latitude * Math.PI) / 180))
     const entries = await Promise.all(
       Object.entries(TRANSPORT_TYPES).map(async ([name, typeName]) => {
         const params = new URLSearchParams({
@@ -188,8 +158,7 @@ const handleTransportNoise = async (
         )
         if (!response.ok) throw new Error('INSPIRE unavailable')
         const value = (await response.json()) as Record<string, unknown>
-        if (!Array.isArray(value.features))
-          throw new Error('INSPIRE unavailable')
+        if (!Array.isArray(value.features)) throw new Error('INSPIRE unavailable')
         let nearest = Infinity
         for (const feature of value.features) {
           if (typeof feature !== 'object' || feature === null)
@@ -199,27 +168,19 @@ const handleTransportNoise = async (
             typeof geometry !== 'object' ||
             geometry === null ||
             !('type' in geometry) ||
-            (geometry.type !== 'LineString' &&
-              geometry.type !== 'MultiLineString')
+            (geometry.type !== 'LineString' && geometry.type !== 'MultiLineString')
           )
             throw new Error('INSPIRE unavailable')
           const components = lineComponents(geometry)
           if (!components) throw new Error('INSPIRE unavailable')
           for (const component of components) {
-            const vertices = component.map(
-              ([vertexLongitude, vertexLatitude]) =>
-                proj4('EPSG:4326', 'EPSG:3346', [
-                  vertexLongitude,
-                  vertexLatitude,
-                ]),
+            const vertices = component.map(([vertexLongitude, vertexLatitude]) =>
+              proj4('EPSG:4326', 'EPSG:3346', [vertexLongitude, vertexLatitude]),
             )
             if (vertices.length === 1)
               nearest = Math.min(
                 nearest,
-                Math.hypot(
-                  point[0] - vertices[0][0],
-                  point[1] - vertices[0][1],
-                ),
+                Math.hypot(point[0] - vertices[0][0], point[1] - vertices[0][1]),
               )
             for (let index = 0; index + 1 < vertices.length; index += 1)
               nearest = Math.min(
@@ -233,9 +194,6 @@ const handleTransportNoise = async (
     )
     return Response.json(Object.fromEntries(entries), { headers: cors })
   } catch {
-    return Response.json(
-      { error: 'INSPIRE unavailable' },
-      { status: 502, headers: cors },
-    )
+    return Response.json({ error: 'INSPIRE unavailable' }, { status: 502, headers: cors })
   }
 }

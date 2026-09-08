@@ -22,11 +22,56 @@ pnpm lint
 pnpm check
 ```
 
+`pnpm lint` uses Oxlint and `pnpm check` verifies Oxfmt formatting. Strict
+TypeScript checks continue to run separately for both application and E2E
+projects. Oxlint's type-aware companion, `oxlint-tsgolint`, does not publish
+an Android binary, so its typed rules cannot run in Termux. The migration
+preserves the native equivalent rules and `tsc` coverage; the unavailable
+ESLint equivalents are `@typescript-eslint/naming-convention` and
+`node/prefer-node-protocol`. The project intentionally uses the direct Oxc
+tools rather than Vite+ because Vite+ does not publish an Android/Termux
+binary; Oxlint and Oxfmt do and are validated by the Termux E2E workflow.
+
+Run browser foundations with:
+
+```bash
+pnpm test:e2e
+```
+
+On Termux, install the `chromium` package and use the repository-local Android
+host preload with:
+
+```bash
+pnpm test:e2e:termux
+```
+
+Termux Chromium does not support Playwright's `isMobile` process emulation. The
+Termux script selects a mobile project built from its stable desktop process
+configuration, with the iPhone viewport, touch support, and user agent.
+Linux CI uses full mobile emulation.
+
+The E2E server runs Vite in the explicit `e2e` mode. Production live tests instead
+visit `/initialize-e2e-storage` once in each fresh BrowserContext. That non-product
+test-tooling page sets a tab-local sessionStorage flag and replace-navigates to a
+validated same-origin path. It is not authentication or a security boundary.
+Normal routes and product-generated URLs never contain E2E parameters. Initialized
+tabs use fake providers and an E2E-only room, suppress service-worker registration,
+and use normal IndexedDB names safely because every test has an isolated fresh
+BrowserContext.
+
 `pnpm build` creates the complete static artifact in `dist/client`, including the repository-aware manifest, history-route fallback, and versioned offline shell. Registered Parcel shards are generated separately into `public/parcels` before a production build and are fetched lazily rather than precached.
 
 ## Production
 
 The `Refresh Registered Parcel assets` GitHub Actions workflow deploys from `main`, runs every Friday at 18:00 UTC, and supports manual dispatch. It deploys and verifies the Worker, transforms and validates Registered Parcel data, builds one Pages artifact, and smoke-tests the deployed application. Any failure before Pages deployment leaves the previous site reachable.
+
+`Pages live browser tests` independently observes successful `github-pages`
+deployment statuses for the default branch, checks out that exact deployed SHA,
+and runs the complete desktop and mobile Playwright suite against the live Pages
+URL. It has only `contents: read`, cannot block, change, deploy, or roll back the
+release, and failures remain visible on its own workflow run. New event-triggered
+workflows exist only after this change reaches the default branch, so the first
+release that contains it is the first one that can trigger the observer.
 
 Initial configuration, release checks, rollback, and incident procedures are documented in [Production deployment](docs/production-deployment.md). Run `scripts/setup-production.sh` only for first-time setup or credential rotation.
 

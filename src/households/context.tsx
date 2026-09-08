@@ -3,6 +3,7 @@ import type { ParentProps } from 'solid-js'
 import type { HouseholdRuntime } from './runtime'
 import type { HouseholdRuntimeState } from './model'
 import type { ReviewedImport } from '../source-listings/model'
+import { invitationSecretFrom } from './credentials'
 
 type HouseholdContextValue = {
   state: () => HouseholdRuntimeState
@@ -17,9 +18,7 @@ type HouseholdContextValue = {
   listImportInbox: HouseholdRuntime['listImportInbox']
   captureImportInbox: HouseholdRuntime['captureImportInbox']
   removeImportInbox: HouseholdRuntime['removeImportInbox']
-  saveReviewedImport: (
-    review: ReviewedImport,
-  ) => ReturnType<HouseholdRuntime['saveReviewedImport']>
+  saveReviewedImport: (review: ReviewedImport) => ReturnType<HouseholdRuntime['saveReviewedImport']>
   addCandidatePlot: HouseholdRuntime['addCandidatePlot']
   updateCandidatePlot: HouseholdRuntime['updateCandidatePlot']
   resolveCandidatePlotLocation: HouseholdRuntime['resolveCandidatePlotLocation']
@@ -37,25 +36,17 @@ type HouseholdContextValue = {
 
 const HouseholdContext = createContext<HouseholdContextValue>()
 
-export function HouseholdProvider(
-  props: ParentProps<{ runtime: HouseholdRuntime }>,
-) {
+export function HouseholdProvider(props: ParentProps<{ runtime: HouseholdRuntime }>) {
   const [state, setState] = createSignal(props.runtime.state(), {
     ownedWrite: true,
   })
-  const unsubscribe = props.runtime.subscribe(() =>
-    setState(() => ({ ...props.runtime.state() })),
-  )
-  const invitation = window.location.hash.match(/^#household=([^&]+)$/)?.[1]
+  const unsubscribe = props.runtime.subscribe(() => setState(() => ({ ...props.runtime.state() })))
+  const invitation = invitationSecretFrom(window.location.href)
   void (invitation
     ? props.runtime
         .joinHousehold(invitation)
         .then(() => {
-          history.replaceState(
-            history.state,
-            '',
-            `${location.pathname}${location.search}`,
-          )
+          history.replaceState(history.state, '', `${location.pathname}${location.search}`)
         })
         .catch(() => undefined)
     : props.runtime.start())
@@ -68,18 +59,14 @@ export function HouseholdProvider(
       value={{
         state,
         createHousehold: () => props.runtime.createHousehold(),
-        joinHousehold: (invitationSecret) =>
-          props.runtime.joinHousehold(invitationSecret),
+        joinHousehold: (invitationSecret) => props.runtime.joinHousehold(invitationSecret),
         listHouseholds: () => {
           state()
           return props.runtime.listHouseholds()
         },
-        switchHousehold: (householdId) =>
-          props.runtime.switchHousehold(householdId),
-        removeHousehold: (householdId) =>
-          props.runtime.removeHousehold(householdId),
-        renameActiveHousehold: (name: string) =>
-          props.runtime.renameActiveHousehold(name),
+        switchHousehold: (householdId) => props.runtime.switchHousehold(householdId),
+        removeHousehold: (householdId) => props.runtime.removeHousehold(householdId),
+        renameActiveHousehold: (name: string) => props.runtime.renameActiveHousehold(name),
         listSourceListings: () => {
           state()
           return props.runtime.listSourceListings()
@@ -92,51 +79,33 @@ export function HouseholdProvider(
           state()
           return props.runtime.listImportInbox()
         },
-        captureImportInbox: (imports) =>
-          props.runtime.captureImportInbox(imports),
+        captureImportInbox: (imports) => props.runtime.captureImportInbox(imports),
         removeImportInbox: (id) => props.runtime.removeImportInbox(id),
-        saveReviewedImport: (review) =>
-          props.runtime.saveReviewedImport(review),
-        addCandidatePlot: (sourceListingId) =>
-          props.runtime.addCandidatePlot(sourceListingId),
+        saveReviewedImport: (review) => props.runtime.saveReviewedImport(review),
+        addCandidatePlot: (sourceListingId) => props.runtime.addCandidatePlot(sourceListingId),
         updateCandidatePlot: (sourceListingId, candidatePlotId, update) =>
-          props.runtime.updateCandidatePlot(
-            sourceListingId,
-            candidatePlotId,
-            update,
-          ),
+          props.runtime.updateCandidatePlot(sourceListingId, candidatePlotId, update),
         resolveCandidatePlotLocation: (sourceListingId, candidatePlotId) =>
-          props.runtime.resolveCandidatePlotLocation(
-            sourceListingId,
-            candidatePlotId,
-          ),
+          props.runtime.resolveCandidatePlotLocation(sourceListingId, candidatePlotId),
         isCandidatePlotLocationRunning: (candidatePlotId) => {
           state()
           return props.runtime.isCandidatePlotLocationRunning(candidatePlotId)
         },
         getCandidatePlotLocationDiagnostic: (candidatePlotId) => {
           state()
-          return props.runtime.getCandidatePlotLocationDiagnostic(
-            candidatePlotId,
-          )
+          return props.runtime.getCandidatePlotLocationDiagnostic(candidatePlotId)
         },
         runCandidatePlotAutomaticChecks: (sourceListingId, candidatePlotId) =>
-          props.runtime.runCandidatePlotAutomaticChecks(
-            sourceListingId,
-            candidatePlotId,
-          ),
+          props.runtime.runCandidatePlotAutomaticChecks(sourceListingId, candidatePlotId),
         isCandidatePlotAutomaticChecksRunning: (candidatePlotId) => {
           state()
-          return props.runtime.isCandidatePlotAutomaticChecksRunning(
-            candidatePlotId,
-          )
+          return props.runtime.isCandidatePlotAutomaticChecksRunning(candidatePlotId)
         },
         getVisitPlan: () => {
           state()
           return props.runtime.getVisitPlan()
         },
-        setVisitPlan: (sourceListingIds) =>
-          props.runtime.setVisitPlan(sourceListingIds),
+        setVisitPlan: (sourceListingIds) => props.runtime.setVisitPlan(sourceListingIds),
         markSourceListingVisited: (sourceListingId) =>
           props.runtime.markSourceListingVisited(sourceListingId),
         removeSourceListing: (sourceListingId) =>

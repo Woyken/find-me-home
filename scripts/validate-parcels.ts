@@ -10,9 +10,7 @@ async function directorySize(directoryPath: string): Promise<number> {
   let bytes = 0
   for (const entry of await readdir(directoryPath, { withFileTypes: true })) {
     const entryPath = path.join(directoryPath, entry.name)
-    bytes += entry.isDirectory()
-      ? await directorySize(entryPath)
-      : (await stat(entryPath)).size
+    bytes += entry.isDirectory() ? await directorySize(entryPath) : (await stat(entryPath)).size
   }
   return bytes
 }

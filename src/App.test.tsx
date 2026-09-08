@@ -40,9 +40,7 @@ const mountRouter = (runtime: HouseholdRuntime) => {
 }
 
 const findButton = (name: string) =>
-  [...document.querySelectorAll('button')].find(
-    (button) => button.textContent.trim() === name,
-  )
+  [...document.querySelectorAll('button')].find((button) => button.textContent.trim() === name)
 
 const waitFor = async (assertion: () => void) => {
   for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -63,10 +61,7 @@ const createTestRuntime = () => {
     state = next
     for (const listener of listeners) listener()
   }
-  const active = (
-    name: string,
-    householdId = 'household-id',
-  ): HouseholdRuntimeState => ({
+  const active = (name: string, householdId = 'household-id'): HouseholdRuntimeState => ({
     status: 'active',
     household: {
       id: 'record-id',
@@ -109,8 +104,7 @@ const createTestRuntime = () => {
             },
           ]
         : [],
-    switchHousehold: async (householdId) =>
-      publish(active('Lake search', householdId)),
+    switchHousehold: async (householdId) => publish(active('Lake search', householdId)),
     removeHousehold: async () => publish({ status: 'no-household' }),
     renameActiveHousehold: async (name) => publish(active(name)),
     listSourceListings: () => [],
@@ -171,9 +165,7 @@ describe('App Household boundary', () => {
     await runtime.createHousehold()
 
     await waitFor(() =>
-      expect(document.body.textContent).toContain(
-        'Check what we found, then save',
-      ),
+      expect(document.body.textContent).toContain('Check what we found, then save'),
     )
   })
   it('renders a directly loaded imported Source Listing', async () => {
@@ -238,9 +230,7 @@ describe('App Household boundary', () => {
 
     mountRouter(runtime)
 
-    await waitFor(() =>
-      expect(document.body.textContent).toContain('Imported listing'),
-    )
+    await waitFor(() => expect(document.body.textContent).toContain('Imported listing'))
     await waitFor(() => {
       expect(runtime.resolveCandidatePlotLocation).toHaveBeenCalledTimes(1)
       expect(runtime.runCandidatePlotAutomaticChecks).toHaveBeenCalledTimes(1)
@@ -257,14 +247,10 @@ describe('App Household boundary', () => {
     await runtime.renameActiveHousehold('Parcel retry')
     await waitFor(() => expect(findButton('Look up again')).toBeTruthy())
     findButton('Look up again')?.click()
-    await waitFor(() =>
-      expect(runtime.resolveCandidatePlotLocation).toHaveBeenCalledTimes(2),
-    )
+    await waitFor(() => expect(runtime.resolveCandidatePlotLocation).toHaveBeenCalledTimes(2))
 
     const updateCandidatePlot = vi.spyOn(runtime, 'updateCandidatePlot')
-    const clueKind = document.querySelector<HTMLSelectElement>(
-      'select[name="clue-kind"]',
-    )
+    const clueKind = document.querySelector<HTMLSelectElement>('select[name="clue-kind"]')
     if (!clueKind) throw new Error('Location hint selector is missing')
     clueKind.value = 'address'
     clueKind.dispatchEvent(new Event('change', { bubbles: true }))
@@ -302,9 +288,7 @@ describe('App Household boundary', () => {
       ],
     }
     await runtime.renameActiveHousehold('No coordinates')
-    await waitFor(() =>
-      expect(document.querySelector('a[href^="https://regia.lt/"]')).toBeNull(),
-    )
+    await waitFor(() => expect(document.querySelector('a[href^="https://regia.lt/"]')).toBeNull())
 
     listing = {
       ...listing,
@@ -320,9 +304,7 @@ describe('App Household boundary', () => {
     await runtime.renameActiveHousehold('Address resolved')
     await waitFor(() =>
       expect(
-        document.querySelector<HTMLAnchorElement>(
-          'a[href^="https://regia.lt/"]',
-        )?.href,
+        document.querySelector<HTMLAnchorElement>('a[href^="https://regia.lt/"]')?.href,
       ).toContain('?x=582411&y=6062277&'),
     )
 
@@ -330,9 +312,7 @@ describe('App Household boundary', () => {
     document.querySelector<HTMLAnchorElement>('a.crumb')?.click()
     await waitFor(() => {
       expect(location.pathname).toBe('/')
-      const link = document.querySelector<HTMLAnchorElement>(
-        '.list a[href^="https://regia.lt/"]',
-      )
+      const link = document.querySelector<HTMLAnchorElement>('.list a[href^="https://regia.lt/"]')
       expect(link?.href).toContain('?x=582411&y=6062277&')
       expect(link?.target).toBe('_blank')
       expect(link?.rel).toBe('noopener noreferrer')
@@ -388,9 +368,7 @@ describe('App Household boundary', () => {
     await runtime.createHousehold()
 
     await waitFor(() =>
-      expect(document.body.textContent).toContain(
-        'Bringing over your Aruodas favourites',
-      ),
+      expect(document.body.textContent).toContain('Bringing over your Aruodas favourites'),
     )
     expect(document.body.textContent).toContain('2 clippings are on their way')
     expect(document.body.textContent).not.toContain('All sorted')
@@ -398,31 +376,21 @@ describe('App Household boundary', () => {
 
     settle?.(false)
     await waitFor(() =>
-      expect(document.body.textContent).toContain(
-        'Your favourites did not come through',
-      ),
+      expect(document.body.textContent).toContain('Your favourites did not come through'),
     )
     expect(document.body.textContent).toContain('Household is changing')
     expect(document.body.textContent).not.toContain('All sorted')
-    expect(sessionStorage.getItem('find-me-home-import-draft')).toContain(
-      '11-2',
-    )
+    expect(sessionStorage.getItem('find-me-home-import-draft')).toContain('11-2')
 
     findButton('Try again')?.click()
+    await waitFor(() => expect(runtime.captureImportInbox).toHaveBeenCalledTimes(2))
     await waitFor(() =>
-      expect(runtime.captureImportInbox).toHaveBeenCalledTimes(2),
-    )
-    await waitFor(() =>
-      expect(document.body.textContent).toContain(
-        'Bringing over your Aruodas favourites',
-      ),
+      expect(document.body.textContent).toContain('Bringing over your Aruodas favourites'),
     )
     expect(document.body.textContent).not.toContain('did not come through')
 
     settle?.(true)
-    await waitFor(() =>
-      expect(document.body.textContent).toContain('All sorted'),
-    )
+    await waitFor(() => expect(document.body.textContent).toContain('All sorted'))
     expect(document.body.textContent).toContain(
       'Brought over from your Aruodas favourites just now',
     )
@@ -444,21 +412,36 @@ describe('App Household boundary', () => {
 
     expect(location.hash).toBe('')
     await waitFor(() => expect(findButton('Start a search')).toBeTruthy())
-    expect(document.body.textContent).not.toContain(
-      'Check what we found, then save',
-    )
+    expect(document.body.textContent).not.toContain('Check what we found, then save')
 
     findButton('Start a search')?.click()
 
     await waitFor(() =>
-      expect(document.body.textContent).toContain(
-        'Check what we found, then save',
-      ),
+      expect(document.body.textContent).toContain('Check what we found, then save'),
     )
     expect(document.body.textContent).toContain('Žemųjų Rusokų sklypas')
-    expect(sessionStorage.getItem('find-me-home-import-draft')).toContain(
-      'Žemųjų Rusokų sklypas',
+    expect(sessionStorage.getItem('find-me-home-import-draft')).toContain('Žemųjų Rusokų sklypas')
+  })
+
+  it('captures an import fragment added after the application has started', async () => {
+    const fragment = encodeImportFragment({
+      url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-upes-g-sklypas-11-1472707/',
+      title: 'Žemųjų Rusokų sklypas',
+      photos: [],
+      features: [],
+    })
+    mount(createTestRuntime())
+    await waitFor(() => expect(findButton('Start a search')).toBeTruthy())
+    findButton('Start a search')?.click()
+    await waitFor(() => expect(document.body.textContent).toContain('Existing product flows'))
+
+    location.hash = `import=${fragment}`
+
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('Check what we found, then save'),
     )
+    expect(location.hash).toBe('')
+    expect(sessionStorage.getItem('find-me-home-import-draft')).toContain('Žemųjų Rusokų sklypas')
   })
 
   it('offers create or join before mounting Household content', async () => {
@@ -470,9 +453,7 @@ describe('App Household boundary', () => {
 
     findButton('Start a search')?.click()
 
-    await waitFor(() =>
-      expect(document.body.textContent).toContain('Our home search'),
-    )
+    await waitFor(() => expect(document.body.textContent).toContain('Our home search'))
     expect(document.body.textContent).toContain('Existing product flows')
   })
 
@@ -484,13 +465,9 @@ describe('App Household boundary', () => {
     await waitFor(() => expect(findButton('Our search settings')).toBeTruthy())
     findButton('Our search settings')?.click()
     await waitFor(() => {
-      expect(
-        document.querySelector('input[aria-label="Search name"]'),
-      ).toBeTruthy()
+      expect(document.querySelector('input[aria-label="Search name"]')).toBeTruthy()
     })
-    const nameInput = document.querySelector<HTMLInputElement>(
-      'input[aria-label="Search name"]',
-    )
+    const nameInput = document.querySelector<HTMLInputElement>('input[aria-label="Search name"]')
     if (!nameInput) throw new Error('Search name input is missing')
     nameInput.value = 'Forest edge search'
     nameInput.dispatchEvent(new InputEvent('input', { bubbles: true }))
@@ -498,9 +475,7 @@ describe('App Household boundary', () => {
     findButton('Save')?.click()
 
     await waitFor(() =>
-      expect(document.querySelector('h1')?.textContent).toBe(
-        'Forest edge search',
-      ),
+      expect(document.querySelector('h1')?.textContent).toBe('Forest edge search'),
     )
   })
 
@@ -513,17 +488,13 @@ describe('App Household boundary', () => {
 
     await waitFor(() =>
       expect(
-        document.querySelector<HTMLInputElement>(
-          'input[aria-label="Invitation link"]',
-        )?.value,
+        document.querySelector<HTMLInputElement>('input[aria-label="Invitation link"]')?.value,
       ).toContain('#household='),
     )
     expect(document.body.textContent).toContain('Anyone with it can edit')
     expect(document.body.textContent).toContain("can't be taken back")
     await waitFor(() =>
-      expect(
-        document.querySelector('img[alt="Invitation QR code"]'),
-      ).toBeTruthy(),
+      expect(document.querySelector('img[alt="Invitation QR code"]')).toBeTruthy(),
     )
   })
 
@@ -534,15 +505,11 @@ describe('App Household boundary', () => {
     await waitFor(() => expect(findButton('Our search settings')).toBeTruthy())
     findButton('Our search settings')?.click()
 
-    await waitFor(() =>
-      expect(document.body.textContent).toContain('Lake search'),
-    )
+    await waitFor(() => expect(document.body.textContent).toContain('Lake search'))
     expect(document.body.textContent).toContain('Our home search')
     findButton('Switch')?.click()
 
-    await waitFor(() =>
-      expect(document.querySelector('h1')?.textContent).toBe('Lake search'),
-    )
+    await waitFor(() => expect(document.querySelector('h1')?.textContent).toBe('Lake search'))
   })
 
   it('requires confirmation before removing a search from this device', async () => {
@@ -554,14 +521,10 @@ describe('App Household boundary', () => {
     findButton('Start a search')?.click()
     await waitFor(() => expect(findButton('Our search settings')).toBeTruthy())
     findButton('Our search settings')?.click()
-    await waitFor(() =>
-      expect(findButton('Remove this search from this device')).toBeTruthy(),
-    )
+    await waitFor(() => expect(findButton('Remove this search from this device')).toBeTruthy())
     findButton('Remove this search from this device')?.click()
 
-    expect(confirm).toHaveBeenCalledWith(
-      expect.stringContaining('other devices'),
-    )
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('other devices'))
     expect(remove).not.toHaveBeenCalled()
 
     confirm.mockReturnValue(true)
@@ -584,9 +547,7 @@ describe('App Household boundary', () => {
     await new Promise((resolve) => setTimeout(resolve))
     findButton('Join')?.click()
     await waitFor(() =>
-      expect(document.querySelector('[role="alert"]')?.textContent).toContain(
-        'invitation link',
-      ),
+      expect(document.querySelector('[role="alert"]')?.textContent).toContain('invitation link'),
     )
     expect(join).not.toHaveBeenCalled()
 

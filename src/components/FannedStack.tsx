@@ -22,12 +22,8 @@ export function FannedStack() {
       >
         <For each={[...items().slice(0, 3)].reverse()}>
           {(item, index) => (
-            <span
-              class={`fan-card c${Math.min(2, items().length - 1) - index()}`}
-            >
-              <Show when={item.thumbnail}>
-                {(thumbnail) => <img src={thumbnail()} alt="" />}
-              </Show>
+            <span class={`fan-card c${Math.min(2, items().length - 1) - index()}`}>
+              <Show when={item.thumbnail}>{(thumbnail) => <img src={thumbnail()} alt="" />}</Show>
             </span>
           )}
         </For>

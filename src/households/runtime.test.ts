@@ -22,8 +22,7 @@ afterEach(async () => {
     .map((database) => database.name)
     .filter(
       (name): name is string =>
-        name !== undefined &&
-        databasePrefixes.some((prefix) => name.startsWith(prefix)),
+        name !== undefined && databasePrefixes.some((prefix) => name.startsWith(prefix)),
     )
   await Promise.all(
     names.map(
@@ -86,13 +85,9 @@ describe('Household runtime', () => {
         addressClue: null,
       })
 
-      await runtime.runCandidatePlotAutomaticChecks(
-        saved.sourceListingId,
-        saved.candidatePlotId,
-      )
+      await runtime.runCandidatePlotAutomaticChecks(saved.sourceListingId, saved.candidatePlotId)
 
-      const plot = runtime.getSourceListing(saved.sourceListingId)!
-        .candidatePlots[0]
+      const plot = runtime.getSourceListing(saved.sourceListingId)!.candidatePlots[0]
       expect(plot.automaticChecks).toMatchObject([
         { key: 'price', status: 'pass' },
         { key: 'area', status: 'pass' },
@@ -171,8 +166,7 @@ describe('Household runtime', () => {
         saved.sourceListingId,
         saved.candidatePlotId,
       )
-      const plot = runtime.getSourceListing(saved.sourceListingId)!
-        .candidatePlots[0]
+      const plot = runtime.getSourceListing(saved.sourceListingId)!.candidatePlots[0]
       await runtime.updateCandidatePlot(saved.sourceListingId, plot.id, {
         name: plot.name,
         priceEur: 70_000,
@@ -198,22 +192,18 @@ describe('Household runtime', () => {
       await running
       await waitFor(
         () =>
-          runtime.getSourceListing(saved.sourceListingId)!.candidatePlots[0]
-            .automaticChecks !== null,
+          runtime.getSourceListing(saved.sourceListingId)!.candidatePlots[0].automaticChecks !==
+          null,
       )
       expect(
         runtime
           .getSourceListing(saved.sourceListingId)!
-          .candidatePlots[0].automaticChecks?.find(
-            (check) => check.key === 'eso_cost',
-          ),
+          .candidatePlots[0].automaticChecks?.find((check) => check.key === 'eso_cost'),
       ).toMatchObject({ status: 'pass', value: '€1,000 · Group I' })
       expect(
         runtime
           .getSourceListing(saved.sourceListingId)!
-          .candidatePlots[0].automaticChecks?.find(
-            (check) => check.key === 'price',
-          ),
+          .candidatePlots[0].automaticChecks?.find((check) => check.key === 'price'),
       ).toMatchObject({ status: 'fail' })
       expect(esoRuns).toBe(2)
     } finally {
@@ -261,16 +251,11 @@ describe('Household runtime', () => {
         coordinateCluePrecision: 'exact',
         addressClue: null,
       })
-      await runtime.runCandidatePlotAutomaticChecks(
-        saved.sourceListingId,
-        saved.candidatePlotId,
-      )
+      await runtime.runCandidatePlotAutomaticChecks(saved.sourceListingId, saved.candidatePlotId)
       expect(
         runtime
           .getSourceListing(saved.sourceListingId)!
-          .candidatePlots[0].automaticChecks?.find(
-            (check) => check.key === 'legal_flags',
-          ),
+          .candidatePlots[0].automaticChecks?.find((check) => check.key === 'legal_flags'),
       ).toMatchObject({ status: 'warning', value: '1 flag · protected area' })
     } finally {
       runtime.dispose()
@@ -324,16 +309,11 @@ describe('Household runtime', () => {
       })
       await existing.setVisitPlan([saved.sourceListingId])
       const existingState = existing.state()
-      if (existingState.status !== 'active')
-        throw new Error('Household was not active')
+      if (existingState.status !== 'active') throw new Error('Household was not active')
 
       await invited.joinHousehold(existingState.access.invitationSecret)
       expect(invited.state().status).toBe('waiting')
-      for (
-        let attempt = 0;
-        attempt < 50 && invited.state().status !== 'active';
-        attempt += 1
-      )
+      for (let attempt = 0; attempt < 50 && invited.state().status !== 'active'; attempt += 1)
         await new Promise((resolve) => setTimeout(resolve, 5))
 
       expect(invited.state().status).toBe('active')
@@ -343,21 +323,15 @@ describe('Household runtime', () => {
           candidatePlots: [{ notes: 'Bring boots' }],
         },
       ])
-      expect(invited.getVisitPlan().sourceListingIds).toEqual([
-        saved.sourceListingId,
-      ])
-      await existing.runCandidatePlotAutomaticChecks(
-        saved.sourceListingId,
-        saved.candidatePlotId,
-      )
+      expect(invited.getVisitPlan().sourceListingIds).toEqual([saved.sourceListingId])
+      await existing.runCandidatePlotAutomaticChecks(saved.sourceListingId, saved.candidatePlotId)
       await waitFor(
         () =>
-          invited.getSourceListing(saved.sourceListingId)?.candidatePlots[0]
-            .automaticChecks?.length === 13,
+          invited.getSourceListing(saved.sourceListingId)?.candidatePlots[0].automaticChecks
+            ?.length === 13,
       )
       expect(
-        invited.getSourceListing(saved.sourceListingId)?.candidatePlots[0]
-          .automaticChecks,
+        invited.getSourceListing(saved.sourceListingId)?.candidatePlots[0].automaticChecks,
       ).toHaveLength(13)
     } finally {
       existing.dispose()
@@ -371,10 +345,7 @@ describe('Household runtime', () => {
     let uuid = 0
     const clocks = { first: 10_000, second: 10_000, third: 10_000 }
     const initialNetwork = createInMemoryRoomNetwork()
-    const createRuntime = (
-      device: keyof typeof clocks,
-      roomFactory?: typeof initialNetwork,
-    ) =>
+    const createRuntime = (device: keyof typeof clocks, roomFactory?: typeof initialNetwork) =>
       createBrowserHouseholdRuntime({
         accessDatabaseName: `${prefix}-${device}-access`,
         sharedDatabasePrefix: `${prefix}-${device}`,
@@ -396,18 +367,14 @@ describe('Household runtime', () => {
         second.joinHousehold(state.access.invitationSecret),
         third.joinHousehold(state.access.invitationSecret),
       ])
-      await waitFor(
-        () =>
-          second.state().status === 'active' &&
-          third.state().status === 'active',
-      )
+      await waitFor(() => second.state().status === 'active' && third.state().status === 'active')
       first.dispose()
       second.dispose()
       third.dispose()
 
-      const offline = (
-        ['first', 'second', 'third'] as (keyof typeof clocks)[]
-      ).map((device) => createRuntime(device))
+      const offline = (['first', 'second', 'third'] as (keyof typeof clocks)[]).map((device) =>
+        createRuntime(device),
+      )
       clocks.first = 20_000
       clocks.second = 30_000
       clocks.third = 40_000
@@ -420,8 +387,8 @@ describe('Household runtime', () => {
       offline.forEach((runtime) => runtime.dispose())
 
       const convergenceNetwork = createInMemoryRoomNetwork()
-      reopened = (['first', 'second', 'third'] as (keyof typeof clocks)[]).map(
-        (device) => createRuntime(device, convergenceNetwork),
+      reopened = (['first', 'second', 'third'] as (keyof typeof clocks)[]).map((device) =>
+        createRuntime(device, convergenceNetwork),
       )
       await Promise.all(reopened.map((runtime) => runtime.start()))
       await waitFor(() =>
@@ -438,9 +405,7 @@ describe('Household runtime', () => {
       expect(
         reopened.map((runtime) => {
           const current = runtime.state()
-          return current.status === 'active'
-            ? current.household.name
-            : undefined
+          return current.status === 'active' ? current.household.name : undefined
         }),
       ).toEqual(['Newest device', 'Newest device', 'Newest device'])
     } finally {
@@ -493,9 +458,7 @@ describe('Household runtime', () => {
       const state = existing.state()
       if (state.status !== 'active') throw new Error('Household was not active')
       await invited.joinHousehold(state.access.invitationSecret)
-      await waitFor(
-        () => invited.getSourceListing(saved.sourceListingId) !== undefined,
-      )
+      await waitFor(() => invited.getSourceListing(saved.sourceListingId) !== undefined)
       invited.dispose()
 
       now = 20_000
@@ -514,8 +477,7 @@ describe('Household runtime', () => {
         .filter(
           (record) =>
             record.id === saved.sourceListingId ||
-            ('sourceListingId' in record &&
-              record.sourceListingId === saved.sourceListingId),
+            ('sourceListingId' in record && record.sourceListingId === saved.sourceListingId),
         )
       expect(retained).toHaveLength(2)
       expect(retained.every((record) => record.deletedAt === 20_000)).toBe(true)
@@ -529,9 +491,7 @@ describe('Household runtime', () => {
 
   it('isolates Household rooms and keeps invalid remote records out of storage', async () => {
     const roomFactory = createInMemoryRoomNetwork()
-    const records: Parameters<
-      ReturnType<typeof roomFactory>['sendRecords']
-    >[0] = []
+    const records: Parameters<ReturnType<typeof roomFactory>['sendRecords']>[0] = []
     const first = roomFactory({
       householdId: 'household-a',
       roomPassword: 'password-a',
@@ -653,9 +613,7 @@ describe('Household runtime', () => {
       await runtime.start()
       await runtime.createHousehold()
       expect(
-        runtime
-          .getSourceListingRecords()
-          .filter((record) => 'sourceListingIds' in record),
+        runtime.getSourceListingRecords().filter((record) => 'sourceListingIds' in record),
       ).toHaveLength(1)
       const persistedPlan = runtime
         .getSourceListingRecords()
@@ -679,9 +637,7 @@ describe('Household runtime', () => {
 
       now = 4_000
       await runtime.markSourceListingVisited(first.sourceListingId)
-      expect(runtime.getSourceListing(first.sourceListingId)?.visitedAt).toBe(
-        4_000,
-      )
+      expect(runtime.getSourceListing(first.sourceListingId)?.visitedAt).toBe(4_000)
       expect(runtime.getVisitPlan().sourceListingIds).toEqual([
         third.sourceListingId,
         second.sourceListingId,
@@ -692,9 +648,7 @@ describe('Household runtime', () => {
         second.sourceListingId,
         first.sourceListingId,
       ])
-      expect(runtime.getSourceListing(first.sourceListingId)?.visitedAt).toBe(
-        4_000,
-      )
+      expect(runtime.getSourceListing(first.sourceListingId)?.visitedAt).toBe(4_000)
 
       runtime.dispose()
       reopened = createRuntime()
@@ -704,9 +658,7 @@ describe('Household runtime', () => {
         second.sourceListingId,
         first.sourceListingId,
       ])
-      expect(reopened.getSourceListing(first.sourceListingId)?.visitedAt).toBe(
-        4_000,
-      )
+      expect(reopened.getSourceListing(first.sourceListingId)?.visitedAt).toBe(4_000)
     } finally {
       runtime.dispose()
       reopened?.dispose()
@@ -845,8 +797,7 @@ describe('Household runtime', () => {
         .filter(
           (record) =>
             record.id === first.sourceListingId ||
-            ('sourceListingId' in record &&
-              record.sourceListingId === first.sourceListingId),
+            ('sourceListingId' in record && record.sourceListingId === first.sourceListingId),
         )
       expect(retained).toHaveLength(3)
       expect(retained.every((record) => record.deletedAt === 1_005)).toBe(true)
@@ -877,9 +828,7 @@ describe('Household runtime', () => {
         ],
       })
       expect(
-        runtime
-          .getSourceListingRecords()
-          .find((record) => record.id === secondPlotId)?.deletedAt,
+        runtime.getSourceListingRecords().find((record) => record.id === secondPlotId)?.deletedAt,
       ).toBe(1_005)
 
       runtime.dispose()
@@ -888,8 +837,7 @@ describe('Household runtime', () => {
       const afterReload = await reopened.addCandidatePlot(first.sourceListingId)
       expect(afterReload).toBeTruthy()
       expect(
-        reopened.getSourceListing(first.sourceListingId)?.candidatePlots.at(-1)
-          ?.updatedAt,
+        reopened.getSourceListing(first.sourceListingId)?.candidatePlots.at(-1)?.updatedAt,
       ).toBe(1_007)
       reopened.dispose()
     } finally {
@@ -936,31 +884,24 @@ describe('Household runtime', () => {
         saved.sourceListingId,
         saved.candidatePlotId,
       )
-      expect(
-        runtime.isCandidatePlotLocationRunning(saved.candidatePlotId),
-      ).toBe(true)
-      const current = runtime.getSourceListing(saved.sourceListingId)!
-        .candidatePlots[0]
-      await runtime.updateCandidatePlot(
-        saved.sourceListingId,
-        saved.candidatePlotId,
-        {
-          name: current.name,
-          priceEur: current.priceEur,
-          areaAres: current.areaAres,
-          purposeText: current.purposeText,
-          notes: current.notes,
-          parcelNumberClue: null,
-          latitudeClue: null,
-          longitudeClue: null,
-          coordinateCluePrecision: null,
-          addressClue: 'New address 2',
-          primaryLocationClue: null,
-          roadAccessRating: current.roadAccessRating,
-          areaFeelingRating: current.areaFeelingRating,
-          viewRating: current.viewRating,
-        },
-      )
+      expect(runtime.isCandidatePlotLocationRunning(saved.candidatePlotId)).toBe(true)
+      const current = runtime.getSourceListing(saved.sourceListingId)!.candidatePlots[0]
+      await runtime.updateCandidatePlot(saved.sourceListingId, saved.candidatePlotId, {
+        name: current.name,
+        priceEur: current.priceEur,
+        areaAres: current.areaAres,
+        purposeText: current.purposeText,
+        notes: current.notes,
+        parcelNumberClue: null,
+        latitudeClue: null,
+        longitudeClue: null,
+        coordinateCluePrecision: null,
+        addressClue: 'New address 2',
+        primaryLocationClue: null,
+        roadAccessRating: current.roadAccessRating,
+        areaFeelingRating: current.areaFeelingRating,
+        viewRating: current.viewRating,
+      })
       completeResolution({
         resolvedLatitude: 54.7,
         resolvedLongitude: 25.3,
@@ -975,16 +916,12 @@ describe('Household runtime', () => {
       })
       await running
 
-      expect(
-        runtime.getSourceListing(saved.sourceListingId)?.candidatePlots[0],
-      ).toMatchObject({
+      expect(runtime.getSourceListing(saved.sourceListingId)?.candidatePlots[0]).toMatchObject({
         addressClue: 'New address 2',
         resolvedLatitude: null,
         locationResolutionState: 'missing',
       })
-      expect(
-        runtime.isCandidatePlotLocationRunning(saved.candidatePlotId),
-      ).toBe(false)
+      expect(runtime.isCandidatePlotLocationRunning(saved.candidatePlotId)).toBe(false)
     } finally {
       runtime.dispose()
     }
@@ -1011,13 +948,10 @@ describe('Household runtime', () => {
       await runtime.createHousehold()
       const created = runtime.state()
       expect(created.status).toBe('active')
-      if (created.status !== 'active')
-        throw new Error('Household was not active')
+      if (created.status !== 'active') throw new Error('Household was not active')
       expect(created.household.name).toBe('Our home search')
       expect(created.access.invitationSecret).toHaveLength(43)
-      expect(created.access.householdId).not.toBe(
-        created.access.invitationSecret,
-      )
+      expect(created.access.householdId).not.toBe(created.access.invitationSecret)
       expect(created.roomPassword).not.toBe(created.access.householdId)
 
       await runtime.renameActiveHousehold('The oak tree search')
@@ -1027,8 +961,7 @@ describe('Household runtime', () => {
       await reloaded.start()
       const reopened = reloaded.state()
       expect(reopened.status).toBe('active')
-      if (reopened.status !== 'active')
-        throw new Error('Household was not active')
+      if (reopened.status !== 'active') throw new Error('Household was not active')
       expect(reopened.household.name).toBe('The oak tree search')
       expect(Object.keys(reopened.household).sort()).toEqual([
         'householdId',
@@ -1087,22 +1020,16 @@ describe('Household runtime', () => {
       await runtime.setVisitPlan([saved.sourceListingId])
       abortRemoval = true
 
-      await expect(
-        runtime.removeSourceListing(saved.sourceListingId),
-      ).rejects.toBeTruthy()
+      await expect(runtime.removeSourceListing(saved.sourceListingId)).rejects.toBeTruthy()
       expect(runtime.getSourceListing(saved.sourceListingId)).toBeDefined()
-      expect(runtime.getVisitPlan().sourceListingIds).toEqual([
-        saved.sourceListingId,
-      ])
+      expect(runtime.getVisitPlan().sourceListingIds).toEqual([saved.sourceListingId])
 
       runtime.dispose()
       abortRemoval = false
       reopened = createRuntime()
       await reopened.start()
       expect(reopened.getSourceListing(saved.sourceListingId)).toBeDefined()
-      expect(reopened.getVisitPlan().sourceListingIds).toEqual([
-        saved.sourceListingId,
-      ])
+      expect(reopened.getVisitPlan().sourceListingIds).toEqual([saved.sourceListingId])
     } finally {
       runtime.dispose()
       reopened?.dispose()
@@ -1149,26 +1076,16 @@ describe('Household runtime', () => {
       await runtime.setVisitPlan([saved.sourceListingId])
       abortVisit = true
 
-      await expect(
-        runtime.markSourceListingVisited(saved.sourceListingId),
-      ).rejects.toBeTruthy()
-      expect(
-        runtime.getSourceListing(saved.sourceListingId)?.visitedAt,
-      ).toBeNull()
-      expect(runtime.getVisitPlan().sourceListingIds).toEqual([
-        saved.sourceListingId,
-      ])
+      await expect(runtime.markSourceListingVisited(saved.sourceListingId)).rejects.toBeTruthy()
+      expect(runtime.getSourceListing(saved.sourceListingId)?.visitedAt).toBeNull()
+      expect(runtime.getVisitPlan().sourceListingIds).toEqual([saved.sourceListingId])
 
       runtime.dispose()
       abortVisit = false
       reopened = createRuntime()
       await reopened.start()
-      expect(
-        reopened.getSourceListing(saved.sourceListingId)?.visitedAt,
-      ).toBeNull()
-      expect(reopened.getVisitPlan().sourceListingIds).toEqual([
-        saved.sourceListingId,
-      ])
+      expect(reopened.getSourceListing(saved.sourceListingId)?.visitedAt).toBeNull()
+      expect(reopened.getVisitPlan().sourceListingIds).toEqual([saved.sourceListingId])
     } finally {
       runtime.dispose()
       reopened?.dispose()
@@ -1213,13 +1130,11 @@ describe('Household runtime', () => {
       await second.start()
       await second.createHousehold()
       expect(second.getVisitPlan().sourceListingIds).toEqual([])
-      await expect(
-        second.setVisitPlan([saved.sourceListingId]),
-      ).rejects.toThrow('unavailable Source Listing')
+      await expect(second.setVisitPlan([saved.sourceListingId])).rejects.toThrow(
+        'unavailable Source Listing',
+      )
       expect(second.getVisitPlan().sourceListingIds).toEqual([])
-      expect(first.getVisitPlan().sourceListingIds).toEqual([
-        saved.sourceListingId,
-      ])
+      expect(first.getVisitPlan().sourceListingIds).toEqual([saved.sourceListingId])
     } finally {
       first.dispose()
       second.dispose()
@@ -1270,10 +1185,7 @@ describe('Household runtime', () => {
         },
         getStored: async (householdId) =>
           householdId === 'first-household' ? firstHousehold : secondHousehold,
-        get: () =>
-          openedHouseholdId === 'first-household'
-            ? firstHousehold
-            : secondHousehold,
+        get: () => (openedHouseholdId === 'first-household' ? firstHousehold : secondHousehold),
         create: async () => undefined,
         rename: async () => undefined,
         remove: async () => undefined,
@@ -1379,8 +1291,7 @@ describe('Household runtime', () => {
       await runtime.createHousehold()
       await runtime.renameActiveHousehold('Woodland search')
       const firstState = runtime.state()
-      if (firstState.status !== 'active')
-        throw new Error('First Household was not active')
+      if (firstState.status !== 'active') throw new Error('First Household was not active')
       const firstId = firstState.access.householdId
       await runtime.saveReviewedImport({
         imported: parseAruodasImport({
@@ -1404,8 +1315,7 @@ describe('Household runtime', () => {
       await runtime.createHousehold()
       await runtime.renameActiveHousehold('Lakeside search')
       const secondState = runtime.state()
-      if (secondState.status !== 'active')
-        throw new Error('Second Household was not active')
+      if (secondState.status !== 'active') throw new Error('Second Household was not active')
       const secondId = secondState.access.householdId
       expect(activeRooms).toEqual(new Set([secondId]))
 
@@ -1432,9 +1342,7 @@ describe('Household runtime', () => {
         access: { householdId: firstId, lastOpenedAt: 3_000 },
         household: { name: 'Woodland search' },
       })
-      expect(runtime.listSourceListings()).toMatchObject([
-        { title: 'First Household listing' },
-      ])
+      expect(runtime.listSourceListings()).toMatchObject([{ title: 'First Household listing' }])
 
       const pendingWrite = runtime.saveReviewedImport({
         imported: parseAruodasImport({
@@ -1484,8 +1392,7 @@ describe('Household runtime', () => {
       await local.createHousehold()
       await local.renameActiveHousehold('Shared search')
       const sharedState = local.state()
-      if (sharedState.status !== 'active')
-        throw new Error('Shared Household was not active')
+      if (sharedState.status !== 'active') throw new Error('Shared Household was not active')
       const sharedId = sharedState.access.householdId
       const invitation = sharedState.access.invitationSecret
       const saved = await local.saveReviewedImport({
@@ -1517,8 +1424,7 @@ describe('Household runtime', () => {
       await local.createHousehold()
       await local.renameActiveHousehold('Older private search')
       const privateState = local.state()
-      if (privateState.status !== 'active')
-        throw new Error('Private Household was not active')
+      if (privateState.status !== 'active') throw new Error('Private Household was not active')
       const privateId = privateState.access.householdId
       now = 2_500
       await local.createHousehold()
@@ -1529,18 +1435,13 @@ describe('Household runtime', () => {
       const newestPrivateId = newestPrivateState.access.householdId
       await peer.renameActiveHousehold('Updated shared search')
       expect(
-        local
-          .listHouseholds()
-          .find((household) => household.householdId === sharedId)?.name,
+        local.listHouseholds().find((household) => household.householdId === sharedId)?.name,
       ).toBe('Shared search')
       now = 3_000
       await local.switchHousehold(sharedId)
       await waitFor(() => {
         const current = local.state()
-        return (
-          current.status === 'active' &&
-          current.household.name === 'Updated shared search'
-        )
+        return current.status === 'active' && current.household.name === 'Updated shared search'
       })
 
       await local.removeHousehold(sharedId)
@@ -1560,12 +1461,8 @@ describe('Household runtime', () => {
         status: 'active',
         household: { name: 'Updated shared search' },
       })
-      expect(peer.getSourceListing(saved.sourceListingId)?.title).toBe(
-        'Retained by peer',
-      )
-      expect(peer.getVisitPlan().sourceListingIds).toEqual([
-        saved.sourceListingId,
-      ])
+      expect(peer.getSourceListing(saved.sourceListingId)?.title).toBe('Retained by peer')
+      expect(peer.getVisitPlan().sourceListingIds).toEqual([saved.sourceListingId])
       expect(
         (await indexedDB.databases()).some(
           (database) => database.name === `${prefix}-local-${sharedId}`,

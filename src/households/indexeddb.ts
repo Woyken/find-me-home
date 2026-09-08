@@ -17,9 +17,7 @@ export type HouseholdRepository = {
   allRecords: () => HouseholdRecord[]
   applyRemote: (records: HouseholdRecord[]) => Promise<HouseholdRecord[]>
   subscribe: (listener: () => void) => () => void
-  subscribeLocalMutations: (
-    listener: (records: HouseholdRecord[]) => void,
-  ) => () => void
+  subscribeLocalMutations: (listener: (records: HouseholdRecord[]) => void) => () => void
   closeActive: () => void
   close: () => void
 }
@@ -35,21 +33,17 @@ const openDatabase = (name: string, storeName: string) =>
       }
       if (storeName === 'households') {
         if (!request.result.objectStoreNames.contains('source-listings')) {
-          const sourceListings = request.result.createObjectStore(
-            'source-listings',
-            { keyPath: 'id' },
-          )
-          sourceListings.createIndex(
-            'source-identity',
-            ['householdId', 'source', 'sourceId'],
-            { unique: true },
-          )
+          const sourceListings = request.result.createObjectStore('source-listings', {
+            keyPath: 'id',
+          })
+          sourceListings.createIndex('source-identity', ['householdId', 'source', 'sourceId'], {
+            unique: true,
+          })
         }
         if (!request.result.objectStoreNames.contains('candidate-plots')) {
-          const candidatePlots = request.result.createObjectStore(
-            'candidate-plots',
-            { keyPath: 'id' },
-          )
+          const candidatePlots = request.result.createObjectStore('candidate-plots', {
+            keyPath: 'id',
+          })
           candidatePlots.createIndex('source-listing-id', 'sourceListingId')
         }
         if (!request.result.objectStoreNames.contains('visit-plans')) {
@@ -59,11 +53,9 @@ const openDatabase = (name: string, storeName: string) =>
           const importInbox = request.result.createObjectStore('import-inbox', {
             keyPath: 'id',
           })
-          importInbox.createIndex(
-            'source-identity',
-            ['householdId', 'source', 'sourceId'],
-            { unique: true },
-          )
+          importInbox.createIndex('source-identity', ['householdId', 'source', 'sourceId'], {
+            unique: true,
+          })
         }
       }
     }
@@ -95,10 +87,7 @@ export const createIndexedDbHouseholdAccessStore = (
     async list() {
       const db = await database
       return requestResult<HouseholdAccessState[]>(
-        db
-          .transaction('household-access')
-          .objectStore('household-access')
-          .getAll(),
+        db.transaction('household-access').objectStore('household-access').getAll(),
       )
     },
     async put(value) {
@@ -128,15 +117,12 @@ export const createIndexedDbHouseholdRepository = (
   const listeners = new Set<() => void>()
   const localMutationListeners = new Set<(records: HouseholdRecord[]) => void>()
   const requireOpen = () => {
-    if (!database || !householdId)
-      throw new Error('Household collection is not open')
+    if (!database || !householdId) throw new Error('Household collection is not open')
     return { database, householdId }
   }
   const publish = () => listeners.forEach((listener) => listener())
   const publishLocal = (changed: HouseholdRecord[]) =>
-    localMutationListeners.forEach((listener) =>
-      listener(structuredClone(changed)),
-    )
+    localMutationListeners.forEach((listener) => listener(structuredClone(changed)))
 
   return {
     async open(nextHouseholdId) {
@@ -147,10 +133,7 @@ export const createIndexedDbHouseholdRepository = (
       )
       database = openedDatabase
       records = await requestResult<HouseholdRecord[]>(
-        openedDatabase
-          .transaction('households')
-          .objectStore('households')
-          .getAll(),
+        openedDatabase.transaction('households').objectStore('households').getAll(),
       )
       householdId = nextHouseholdId
       publish()
@@ -163,16 +146,10 @@ export const createIndexedDbHouseholdRepository = (
       )
       try {
         const stored = await requestResult<HouseholdRecord[]>(
-          storedDatabase
-            .transaction('households')
-            .objectStore('households')
-            .getAll(),
+          storedDatabase.transaction('households').objectStore('households').getAll(),
         )
         return structuredClone(
-          stored.find(
-            (value) =>
-              value.householdId === storedHouseholdId && !value.deletedAt,
-          ),
+          stored.find((value) => value.householdId === storedHouseholdId && !value.deletedAt),
         )
       } finally {
         storedDatabase.close()
@@ -181,10 +158,7 @@ export const createIndexedDbHouseholdRepository = (
     get() {
       const active = requireOpen()
       return structuredClone(
-        records.find(
-          (value) =>
-            value.householdId === active.householdId && !value.deletedAt,
-        ),
+        records.find((value) => value.householdId === active.householdId && !value.deletedAt),
       )
     },
     async create(value) {
@@ -227,22 +201,16 @@ export const createIndexedDbHouseholdRepository = (
       const transaction = active.database.transaction('households', 'readwrite')
       const store = transaction.objectStore('households')
       const persisted = await Promise.all(
-        incoming.map((record) =>
-          requestResult<HouseholdRecord | undefined>(store.get(record.id)),
-        ),
+        incoming.map((record) => requestResult<HouseholdRecord | undefined>(store.get(record.id))),
       )
       const winners = incoming.filter(
-        (record, index) =>
-          record.updatedAt > (persisted[index]?.updatedAt ?? -1),
+        (record, index) => record.updatedAt > (persisted[index]?.updatedAt ?? -1),
       )
       for (const winner of winners) store.put(winner)
       await transactionComplete(transaction)
       if (!winners.length) return []
       const byId = new Map(winners.map((record) => [record.id, record]))
-      records = [
-        ...records.filter((record) => !byId.has(record.id)),
-        ...winners,
-      ]
+      records = [...records.filter((record) => !byId.has(record.id)), ...winners]
       publish()
       return structuredClone(winners)
     },

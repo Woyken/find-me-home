@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { synchronizeHousehold } from './synchronization'
-import type {
-  HouseholdRoom,
-  SharedRecord,
-  SharedRepository,
-} from './synchronization'
+import type { HouseholdRoom, SharedRecord, SharedRepository } from './synchronization'
 
 const household = (updatedAt: number, name = `Household ${updatedAt}`) =>
   ({
@@ -143,9 +139,7 @@ describe('Household synchronization', () => {
           (candidate) => candidate.record.updatedAt > current.record.updatedAt,
         )
         if (!winner) return []
-        await (winner.record.updatedAt === 30
-          ? newestGate.promise
-          : olderGate.promise)
+        await (winner.record.updatedAt === 30 ? newestGate.promise : olderGate.promise)
         current = winner
         return [winner]
       },
@@ -312,9 +306,7 @@ describe('Household synchronization', () => {
     await new Promise((resolve) => setTimeout(resolve))
 
     expect(applyRemote).toHaveBeenCalledOnce()
-    expect(sent.records).toEqual([
-      { value: [household(20)], peerId: undefined },
-    ])
+    expect(sent.records).toEqual([{ value: [household(20)], peerId: undefined }])
   })
 
   it('drops disconnected reconciliation work and lets another peer complete', async () => {

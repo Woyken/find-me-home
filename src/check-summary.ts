@@ -1,9 +1,5 @@
 import { AUTOMATIC_CHECK_KEYS } from './automatic-checks'
-import type {
-  AutomaticCheck,
-  AutomaticCheckKey,
-  AutomaticCheckStatus,
-} from './automatic-checks'
+import type { AutomaticCheck, AutomaticCheckKey, AutomaticCheckStatus } from './automatic-checks'
 
 /** Plain-language labels for each automatic check, shown to the household. */
 export const checkLabel = (key: AutomaticCheckKey) =>
@@ -45,9 +41,7 @@ export type CheckCell = {
 }
 
 /** One cell per check key, in canonical order, filling gaps with "unknown". */
-export const checkCells = (
-  checks: Array<AutomaticCheck> | null | undefined,
-): Array<CheckCell> =>
+export const checkCells = (checks: Array<AutomaticCheck> | null | undefined): Array<CheckCell> =>
   AUTOMATIC_CHECK_KEYS.map((key) => {
     const found = checks?.find((check) => check.key === key)
     return {
@@ -92,8 +86,7 @@ export const summarizeChecks = (cells: Array<CheckCell>): CheckSummary => {
       .join(', ')
     return { kind: 'problems', lead, text: names }
   }
-  if (counts.warning)
-    return { kind: 'look', lead: null, text: `${counts.warning} to look at` }
+  if (counts.warning) return { kind: 'look', lead: null, text: `${counts.warning} to look at` }
   return { kind: 'fine', lead: null, text: `all ${counts.pass} fine` }
 }
 

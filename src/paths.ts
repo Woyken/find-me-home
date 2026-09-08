@@ -8,8 +8,7 @@ export const routes = {
   home: '/',
   visitPlan: '/visit-plan',
   importInbox: '/import-inbox',
-  sourceListing: (id: string | number) =>
-    `/source-listings/${encodeURIComponent(id)}`,
+  sourceListing: (id: string | number) => `/source-listings/${encodeURIComponent(id)}`,
 } as const
 
 /** Full hrefs, for plain `<a href>` and `window.location`. */

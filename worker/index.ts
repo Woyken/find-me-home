@@ -8,17 +8,11 @@ interface Env {
   PRODUCTION_ORIGIN: string
 }
 
-export const handleWorkerRequest = (
-  request: Request,
-  options: WorkerOptions,
-) => {
+export const handleWorkerRequest = (request: Request, options: WorkerOptions) => {
   const pathname = new URL(request.url).pathname
-  if (pathname.startsWith('/inspire/'))
-    return handleInspireRequest(request, options)
-  if (pathname.startsWith('/trafi/'))
-    return handleTrafiRequest(request, options)
-  if (pathname.startsWith('/crime/'))
-    return handleCrimeRequest(request, options)
+  if (pathname.startsWith('/inspire/')) return handleInspireRequest(request, options)
+  if (pathname.startsWith('/trafi/')) return handleTrafiRequest(request, options)
+  if (pathname.startsWith('/crime/')) return handleCrimeRequest(request, options)
   return handleRequest(request, options)
 }
 

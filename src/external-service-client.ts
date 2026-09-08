@@ -35,8 +35,7 @@ export interface TransportNoise {
   majorRoadDistanceMeters: number | null
 }
 
-const number = (value: unknown) =>
-  typeof value === 'number' && Number.isFinite(value)
+const number = (value: unknown) => typeof value === 'number' && Number.isFinite(value)
 const nullableNumber = (value: unknown) => value === null || number(value)
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -84,10 +83,7 @@ const describeErrorBody = async (response: Response) => {
   return `${status}: ${text.slice(0, 200)}`
 }
 
-export const createExternalServiceClient = (
-  workerUrl: string,
-  fetcher: typeof fetch = fetch,
-) => {
+export const createExternalServiceClient = (workerUrl: string, fetcher: typeof fetch = fetch) => {
   const base = workerUrl.replace(/\/$/, '')
   const request = async (path: string, init?: RequestInit) => {
     const url = `${base}${path}`
@@ -101,8 +97,7 @@ export const createExternalServiceClient = (
         error,
       )
     }
-    if (!response.ok)
-      throw new ExternalServiceError(url, await describeErrorBody(response))
+    if (!response.ok) throw new ExternalServiceError(url, await describeErrorBody(response))
     try {
       return (await response.json()) as unknown
     } catch (error) {
@@ -151,11 +146,7 @@ export const createExternalServiceClient = (
       })
       const path = `/trafi/walking-directions?${query}`
       const value = await request(path)
-      if (
-        !record(value) ||
-        !number(value.durationSeconds) ||
-        !nullableNumber(value.distanceMeters)
-      )
+      if (!record(value) || !number(value.durationSeconds) || !nullableNumber(value.distanceMeters))
         throw invalidShape(path, value)
       return value as unknown as {
         durationSeconds: number
@@ -182,22 +173,15 @@ export const createExternalServiceClient = (
               (segment) =>
                 record(segment) &&
                 typeof segment.mode === 'string' &&
-                (segment.name === undefined ||
-                  typeof segment.name === 'string') &&
-                (segment.durationSeconds === undefined ||
-                  number(segment.durationSeconds)),
+                (segment.name === undefined || typeof segment.name === 'string') &&
+                (segment.durationSeconds === undefined || number(segment.durationSeconds)),
             ),
         )
       )
         throw invalidShape(path, value)
       return value as unknown as TrafiRoute[]
     },
-    async crimeDensity(
-      latitude: number,
-      longitude: number,
-      radiusMeters = 1000,
-      years = 3,
-    ) {
+    async crimeDensity(latitude: number, longitude: number, radiusMeters = 1000, years = 3) {
       const query = queryPoint(latitude, longitude)
       query.set('radiusMeters', String(radiusMeters))
       query.set('years', String(years))

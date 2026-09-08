@@ -32,11 +32,7 @@ export class LocationResolutionError extends Error {
   readonly data: ResolvedLocationData
   readonly diagnostic: string
 
-  constructor(
-    data: ResolvedLocationData,
-    steps: readonly string[],
-    cause: unknown,
-  ) {
+  constructor(data: ResolvedLocationData, steps: readonly string[], cause: unknown) {
     const reason = describeError(cause)
     super(reason)
     this.name = 'LocationResolutionError'
@@ -45,15 +41,13 @@ export class LocationResolutionError extends Error {
   }
 }
 
-export const isLocationResolutionError = (
-  error: unknown,
-): error is LocationResolutionError => error instanceof LocationResolutionError
+export const isLocationResolutionError = (error: unknown): error is LocationResolutionError =>
+  error instanceof LocationResolutionError
 
 const describeError = (error: unknown): string => {
   if (error instanceof Error) {
     const name = error.name && error.name !== 'Error' ? `${error.name}: ` : ''
-    const cause =
-      error.cause !== undefined ? ` (cause: ${describeError(error.cause)})` : ''
+    const cause = error.cause !== undefined ? ` (cause: ${describeError(error.cause)})` : ''
     return `${name}${error.message || 'no message'}${cause}`
   }
   return String(error)
@@ -111,19 +105,12 @@ const DEFAULT_LOCATION_CLUE_ORDER: readonly LocationClueKind[] = [
  * The Primary Location Clue is tried first; the others stay as fallbacks in
  * the default order.
  */
-export const locationClueOrder = (
-  primary: LocationClueKind | null,
-): LocationClueKind[] =>
+export const locationClueOrder = (primary: LocationClueKind | null): LocationClueKind[] =>
   primary
-    ? [
-        primary,
-        ...DEFAULT_LOCATION_CLUE_ORDER.filter((kind) => kind !== primary),
-      ]
+    ? [primary, ...DEFAULT_LOCATION_CLUE_ORDER.filter((kind) => kind !== primary)]
     : [...DEFAULT_LOCATION_CLUE_ORDER]
 
-const emptyResult = (
-  state: 'no-result' | 'unavailable',
-): ResolvedLocationData => ({
+const emptyResult = (state: 'no-result' | 'unavailable'): ResolvedLocationData => ({
   resolvedLatitude: null,
   resolvedLongitude: null,
   resolvedAddress: null,
@@ -194,15 +181,9 @@ const parcelResult = (
 })
 
 export const createLocationResolver = (dependencies: {
-  parcels: Pick<
-    ParcelRepository,
-    'findByNumber' | 'findAtLks94' | 'datasetVersion'
-  >
+  parcels: Pick<ParcelRepository, 'findByNumber' | 'findAtLks94' | 'datasetVersion'>
   searchAddress: (address: string) => Promise<AddressResult | null>
-  reverseAddress: (
-    latitude: number,
-    longitude: number,
-  ) => Promise<string | null>
+  reverseAddress: (latitude: number, longitude: number) => Promise<string | null>
 }): LocationResolver => ({
   async resolve(plot) {
     const steps: string[] = []
@@ -211,9 +192,7 @@ export const createLocationResolver = (dependencies: {
     const byParcelNumber = async (): Promise<ResolvedLocationData | null> => {
       if (!plot.parcelNumberClue?.trim()) return null
       steps.push(`Looking up unique parcel number ${plot.parcelNumberClue}`)
-      const parcel = (
-        await dependencies.parcels.findByNumber(plot.parcelNumberClue)
-      ).at(0)
+      const parcel = (await dependencies.parcels.findByNumber(plot.parcelNumberClue)).at(0)
       if (parcel) {
         const centre = parcelCentroid(parcel)
         const address = await dependencies
@@ -259,9 +238,7 @@ export const createLocationResolver = (dependencies: {
         .catch(() => null)
       partial = { ...partial, resolvedAddress: address }
       steps.push(
-        address
-          ? `Reverse address: ${address}`
-          : 'Reverse address lookup returned nothing',
+        address ? `Reverse address: ${address}` : 'Reverse address lookup returned nothing',
       )
       let parcel: RegisteredParcel | null
       try {
@@ -309,9 +286,7 @@ export const createLocationResolver = (dependencies: {
         steps.push('Regia found nothing for that address')
         return null
       }
-      steps.push(
-        `Regia found ${address.address} at ${address.latitude}, ${address.longitude}`,
-      )
+      steps.push(`Regia found ${address.address} at ${address.latitude}, ${address.longitude}`)
       partial = {
         ...emptyResult('unavailable'),
         resolvedLatitude: address.latitude,
@@ -338,10 +313,7 @@ export const createLocationResolver = (dependencies: {
       }
     }
 
-    const strategies: Record<
-      LocationClueKind,
-      () => Promise<ResolvedLocationData | null>
-    > = {
+    const strategies: Record<LocationClueKind, () => Promise<ResolvedLocationData | null>> = {
       parcel_number: byParcelNumber,
       coordinates: byCoordinates,
       address: byAddress,

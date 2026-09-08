@@ -114,9 +114,7 @@ describe('Household Source Listing repository', () => {
         .allRecords()
         .find(
           (record) =>
-            'sourceId' in record &&
-            !('url' in record) &&
-            record.sourceId === imported.sourceId,
+            'sourceId' in record && !('url' in record) && record.sourceId === imported.sourceId,
         ),
     ).toMatchObject({ updatedAt: 20, deletedAt: 20 })
 
@@ -138,8 +136,7 @@ describe('Household Source Listing repository', () => {
     const create = () =>
       createIndexedDbSourceListingRepository(prefix, {
         now: () => 1_788_290_400_000,
-        uuid: () =>
-          `00000000-0000-4000-8000-${String(++uuid).padStart(12, '0')}`,
+        uuid: () => `00000000-0000-4000-8000-${String(++uuid).padStart(12, '0')}`,
       })
     const repository = create()
     await repository.open('household-a')

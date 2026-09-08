@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { smokeWorker } from './worker-smoke'
 
-const endpoint =
-  'https://find-me-home-operations.karolis-uzkuraitis.workers.dev'
+const endpoint = 'https://find-me-home-operations.karolis-uzkuraitis.workers.dev'
 const productionOrigin = 'https://woyken.github.io'
 
 describe('production Worker smoke checks', () => {
@@ -39,8 +38,7 @@ describe('production Worker smoke checks', () => {
           { error: 'Invalid coordinates' },
           { status: 400, headers: { 'Access-Control-Allow-Origin': origin! } },
         )
-      if (url.pathname === '/proxy')
-        return new Response('Not found', { status: 404 })
+      if (url.pathname === '/proxy') return new Response('Not found', { status: 404 })
       if (url.pathname === '/trafi/route-search')
         return Response.json(
           { error: 'Trafi unavailable' },
@@ -51,9 +49,7 @@ describe('production Worker smoke checks', () => {
       })
     })
 
-    await expect(
-      smokeWorker({ endpoint, productionOrigin, fetch: fetcher }),
-    ).resolves.toEqual([
+    await expect(smokeWorker({ endpoint, productionOrigin, fetch: fetcher })).resolves.toEqual([
       'allowed-origin preflight',
       'foreign-origin rejection',
       'valid operation',

@@ -50,13 +50,16 @@ const bookmarkletPlugin = (): Plugin => ({
   },
 })
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // PR browser tests default to the localhost root but can exercise Pages scope.
   base:
-    process.env.GITHUB_ACTIONS === 'true'
-      ? `/${process.env.GITHUB_REPOSITORY?.split('/')[1] ?? ''}/`
-      : '/',
+    mode === 'e2e'
+      ? (process.env.VITE_E2E_BASE_PATH ?? '/')
+      : process.env.GITHUB_ACTIONS === 'true'
+        ? `/${process.env.GITHUB_REPOSITORY?.split('/')[1] ?? ''}/`
+        : '/',
   resolve: { tsconfigPaths: true },
   plugins: [bookmarkletPlugin(), tailwindcss(), solid()],
   build: { outDir: 'dist/client' },
   server: { port: 3000 },
-})
+}))

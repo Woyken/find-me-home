@@ -44,8 +44,7 @@ export function MiniMap(props: {
     if (!bounds) return
     map.fitBounds(bounds.pad(2.2), { maxZoom: 16 })
     group.clearLayers()
-    for (const item of items)
-      shapeLayer(leaflet, item, going ? STAKE : BLUE).addTo(group)
+    for (const item of items) shapeLayer(leaflet, item, going ? STAKE : BLUE).addTo(group)
   }
 
   const create = async (element: HTMLDivElement) => {

@@ -13,19 +13,9 @@ import type {
   LocationClueKind,
   SourceListingRecord,
 } from '../source-listings/model'
-import {
-  candidatePlotName,
-  sourceListingMapItems,
-} from '../source-listings/map'
-import {
-  AUTOMATIC_CHECK_KEYS,
-  automaticCheckRevision,
-} from '../automatic-checks'
-import {
-  checkCells,
-  checkStatusTagClass,
-  checkStatusWord,
-} from '../check-summary'
+import { candidatePlotName, sourceListingMapItems } from '../source-listings/map'
+import { AUTOMATIC_CHECK_KEYS, automaticCheckRevision } from '../automatic-checks'
+import { checkCells, checkStatusTagClass, checkStatusWord } from '../check-summary'
 import { candidatePlotRegiaUrl, describeLks94 } from '../location-resolution'
 import { formatAgo, formatDateLong, formatDateShort } from '../format'
 
@@ -38,16 +28,13 @@ const utilityLabel = {
   gas: 'gas',
 } as const
 
-export default function SourceListingPage(props: {
-  params: Record<string, string | undefined>
-}) {
+export default function SourceListingPage(props: { params: Record<string, string | undefined> }) {
   const household = useHousehold()
   const navigate = useNavigate()
-  const listing = createMemo(() =>
-    household.getSourceListing(props.params.sourceListingId ?? ''),
-  )
+  const listing = createMemo(() => household.getSourceListing(props.params.sourceListingId ?? ''))
   const [selectedPlotId, setSelectedPlotId] = createSignal<string>()
   const [focus, setFocus] = createSignal<MapFocusRequest>()
+  let focusNonce = 0
   const [photoIndex, setPhotoIndex] = createSignal(0)
   const [error, setError] = createSignal('')
   const [busy, setBusy] = createSignal(false)
@@ -57,9 +44,7 @@ export default function SourceListingPage(props: {
   })
   const title = () => {
     const current = listing()
-    return current
-      ? (current.title ?? `Aruodas advert ${current.sourceId}`)
-      : ''
+    return current ? (current.title ?? `Aruodas advert ${current.sourceId}`) : ''
   }
   const utilities = () =>
     (Object.keys(utilityLabel) as Array<keyof typeof utilityLabel>).filter(
@@ -68,9 +53,7 @@ export default function SourceListingPage(props: {
 
   const scrollTo = (id: string) =>
     requestAnimationFrame(() =>
-      document
-        .getElementById(id)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
     )
   const selectFromMap = (plotId: string) => {
     setSelectedPlotId(plotId)
@@ -78,7 +61,7 @@ export default function SourceListingPage(props: {
   }
   const showOnMap = (plotId: string) => {
     setSelectedPlotId(plotId)
-    setFocus({ plotId, nonce: Date.now() })
+    setFocus({ plotId, nonce: ++focusNonce })
     scrollTo('bigmap')
   }
 
@@ -145,25 +128,16 @@ export default function SourceListingPage(props: {
             <header class="head">
               <div>
                 <h1>{title()}</h1>
-                <div class="place">
-                  {item().address ?? 'Location not recorded yet'}
-                </div>
+                <div class="place">{item().address ?? 'Location not recorded yet'}</div>
                 <div class="tags">
-                  <a
-                    class="tag blue"
-                    href={item().url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
+                  <a class="tag blue" href={item().url} target="_blank" rel="noreferrer">
                     Aruodas {item().sourceId} ↗
                   </a>
                   <Show
                     when={item().visitedAt !== null}
                     fallback={<span class="tag">not visited yet</span>}
                   >
-                    <span class="tag pass">
-                      visited {formatDateShort(item().visitedAt)}
-                    </span>
+                    <span class="tag pass">visited {formatDateShort(item().visitedAt)}</span>
                   </Show>
                   <span class="tag">changed {formatAgo(item().updatedAt)}</span>
                 </div>
@@ -181,8 +155,7 @@ export default function SourceListingPage(props: {
                     <div class="panel blue">
                       <b>Not on the map yet.</b>{' '}
                       <span class="muted">
-                        Add a location hint to one of the marked areas below and
-                        we'll look it up.
+                        Add a location hint to one of the marked areas below and we'll look it up.
                       </span>
                     </div>
                   }
@@ -230,13 +203,7 @@ export default function SourceListingPage(props: {
                       total={item().candidatePlots.length}
                       selected={selectedPlotId() === plot.id}
                       onShowOnMap={() => showOnMap(plot.id)}
-                      onSave={(update) =>
-                        household.updateCandidatePlot(
-                          item().id,
-                          plot.id,
-                          update,
-                        )
-                      }
+                      onSave={(update) => household.updateCandidatePlot(item().id, plot.id, update)}
                     />
                   )}
                 </For>
@@ -246,18 +213,12 @@ export default function SourceListingPage(props: {
                 <Show
                   when={item().photos.length > 0}
                   fallback={
-                    <div class="panel soft muted small">
-                      No photos came with the advert.
-                    </div>
+                    <div class="panel soft muted small">No photos came with the advert.</div>
                   }
                 >
                   <div class="gallery">
                     <img
-                      src={
-                        item().photos[
-                          Math.min(photoIndex(), item().photos.length - 1)
-                        ]
-                      }
+                      src={item().photos[Math.min(photoIndex(), item().photos.length - 1)]}
                       alt=""
                     />
                     <Show when={item().photos.length > 1}>
@@ -267,9 +228,7 @@ export default function SourceListingPage(props: {
                             <button
                               type="button"
                               aria-label={`Photo ${index() + 1}`}
-                              aria-pressed={
-                                index() === photoIndex() ? 'true' : 'false'
-                              }
+                              aria-pressed={index() === photoIndex() ? 'true' : 'false'}
                               onClick={() => setPhotoIndex(index())}
                             >
                               <img src={photo} alt="" />
@@ -284,11 +243,7 @@ export default function SourceListingPage(props: {
                   <p class="aside-p first">
                     <Show
                       when={item().description}
-                      fallback={
-                        <span class="muted">
-                          No description came with the advert.
-                        </span>
-                      }
+                      fallback={<span class="muted">No description came with the advert.</span>}
                     >
                       {item().description}
                     </Show>
@@ -296,11 +251,7 @@ export default function SourceListingPage(props: {
                   <Show when={utilities().length > 0}>
                     <div class="util">
                       <For each={utilities()}>
-                        {(key) => (
-                          <span class="tag pass">
-                            {utilityLabel[key]} mentioned
-                          </span>
-                        )}
+                        {(key) => <span class="tag pass">{utilityLabel[key]} mentioned</span>}
                       </For>
                     </div>
                   </Show>
@@ -320,8 +271,8 @@ export default function SourceListingPage(props: {
                 <div class="panel stake" style={{ 'margin-top': '14px' }}>
                   <h3>We went to see it</h3>
                   <p class="small" style={{ margin: '6px 0 12px' }}>
-                    Records today's visit and takes it off the "going to see"
-                    list. Your notes and ratings stay.
+                    Records today's visit and takes it off the "going to see" list. Your notes and
+                    ratings stay.
                   </p>
                   <button
                     class="btn stake wide"
@@ -335,15 +286,10 @@ export default function SourceListingPage(props: {
                 <div class="panel danger" style={{ 'margin-top': '14px' }}>
                   <h3>Remove this plot</h3>
                   <p class="small" style={{ margin: '6px 0 12px' }}>
-                    Removes it and its marked areas for everyone in the search.
-                    Saving the same advert again brings it back with your notes.
+                    Removes it and its marked areas for everyone in the search. Saving the same
+                    advert again brings it back with your notes.
                   </p>
-                  <button
-                    class="btn danger wide"
-                    type="button"
-                    disabled={busy()}
-                    onClick={remove}
-                  >
+                  <button class="btn danger wide" type="button" disabled={busy()} onClick={remove}>
                     Remove plot
                   </button>
                 </div>
@@ -387,9 +333,7 @@ function CandidatePlotEditor(props: {
   selected: boolean
   onShowOnMap: () => void
   onSave: (
-    update: Parameters<
-      ReturnType<typeof useHousehold>['updateCandidatePlot']
-    >[2],
+    update: Parameters<ReturnType<typeof useHousehold>['updateCandidatePlot']>[2],
   ) => Promise<void>
 }) {
   const household = useHousehold()
@@ -398,19 +342,11 @@ function CandidatePlotEditor(props: {
   const [area, setArea] = createSignal(textNumber(props.plot.areaAres))
   const [purpose, setPurpose] = createSignal(props.plot.purposeText ?? '')
   const [notes, setNotes] = createSignal(props.plot.notes ?? '')
-  const [clueKind, setClueKind] = createSignal<ClueKind>(
-    initialClueKind(props.plot),
-  )
+  const [clueKind, setClueKind] = createSignal<ClueKind>(initialClueKind(props.plot))
   const [parcel, setParcel] = createSignal(props.plot.parcelNumberClue ?? '')
-  const [latitude, setLatitude] = createSignal(
-    textNumber(props.plot.latitudeClue),
-  )
-  const [longitude, setLongitude] = createSignal(
-    textNumber(props.plot.longitudeClue),
-  )
-  const [address, setAddress] = createSignal(
-    props.plot.addressClue ?? props.importedAddress ?? '',
-  )
+  const [latitude, setLatitude] = createSignal(textNumber(props.plot.latitudeClue))
+  const [longitude, setLongitude] = createSignal(textNumber(props.plot.longitudeClue))
+  const [address, setAddress] = createSignal(props.plot.addressClue ?? props.importedAddress ?? '')
   const [precision, setPrecision] = createSignal<'exact' | 'approx'>(
     props.plot.coordinateCluePrecision ?? 'approx',
   )
@@ -419,14 +355,11 @@ function CandidatePlotEditor(props: {
   const [view, setView] = createSignal(props.plot.viewRating)
   const [status, setStatus] = createSignal<{ text: string; bad: boolean }>()
 
-  const heading = () =>
-    candidatePlotName(props.plot, props.number - 1, props.total)
+  const heading = () => candidatePlotName(props.plot, props.number - 1, props.total)
   const located = () =>
-    props.plot.resolvedLatitude !== null &&
-    props.plot.resolvedLongitude !== null
+    props.plot.resolvedLatitude !== null && props.plot.resolvedLongitude !== null
   const directionsDestination = () => {
-    if (located())
-      return `${props.plot.resolvedLatitude},${props.plot.resolvedLongitude}`
+    if (located()) return `${props.plot.resolvedLatitude},${props.plot.resolvedLongitude}`
     if (props.plot.latitudeClue !== null && props.plot.longitudeClue !== null)
       return `${props.plot.latitudeClue},${props.plot.longitudeClue}`
     return props.plot.addressClue
@@ -443,8 +376,7 @@ function CandidatePlotEditor(props: {
       (props.plot.resolvedParcelNumber === null ||
         props.plot.resolvedCadastralNumber === null ||
         props.plot.resolvedBoundary === null))
-  const locationDiagnostic = () =>
-    household.getCandidatePlotLocationDiagnostic(props.plot.id)
+  const locationDiagnostic = () => household.getCandidatePlotLocationDiagnostic(props.plot.id)
   const locationNote = () => {
     switch (props.plot.locationResolutionState) {
       case 'resolved':
@@ -460,8 +392,7 @@ function CandidatePlotEditor(props: {
     }
   }
   const clueLks94 = () => {
-    if (props.plot.latitudeClue === null || props.plot.longitudeClue === null)
-      return null
+    if (props.plot.latitudeClue === null || props.plot.longitudeClue === null) return null
     try {
       return describeLks94(props.plot.latitudeClue, props.plot.longitudeClue)
     } catch (caught) {
@@ -469,21 +400,13 @@ function CandidatePlotEditor(props: {
     }
   }
   const hasPartialLocation = () =>
-    located() ||
-    props.plot.resolvedAddress !== null ||
-    props.plot.resolvedParcelNumber !== null
+    located() || props.plot.resolvedAddress !== null || props.plot.resolvedParcelNumber !== null
   const resolveLocation = () =>
     needsLocationRetry()
-      ? household.resolveCandidatePlotLocation(
-          props.plot.sourceListingId,
-          props.plot.id,
-        )
+      ? household.resolveCandidatePlotLocation(props.plot.sourceListingId, props.plot.id)
       : undefined
   const runAutomaticChecks = () =>
-    household.runCandidatePlotAutomaticChecks(
-      props.plot.sourceListingId,
-      props.plot.id,
-    )
+    household.runCandidatePlotAutomaticChecks(props.plot.sourceListingId, props.plot.id)
   const cells = () => checkCells(props.plot.automaticChecks)
   const hasChecks = () => cells().some((cell) => cell.status !== 'unknown')
 
@@ -501,8 +424,7 @@ function CandidatePlotEditor(props: {
     ({ revision }) => {
       queueMicrotask(() => {
         void (async () => {
-          if (props.plot.locationResolutionState === 'missing')
-            await resolveLocation()
+          if (props.plot.locationResolutionState === 'missing') await resolveLocation()
           if (
             !props.plot.automaticChecks ||
             props.plot.automaticChecks.length !== AUTOMATIC_CHECK_KEYS.length ||
@@ -526,8 +448,7 @@ function CandidatePlotEditor(props: {
         parcelNumberClue: optionalText(parcel()),
         latitudeClue: optionalNumber(latitude()),
         longitudeClue: optionalNumber(longitude()),
-        coordinateCluePrecision:
-          latitude().trim() || longitude().trim() ? precision() : null,
+        coordinateCluePrecision: latitude().trim() || longitude().trim() ? precision() : null,
         addressClue: optionalText(address()),
         primaryLocationClue: locationClueKindOf(clueKind()),
         roadAccessRating: road(),
@@ -541,10 +462,7 @@ function CandidatePlotEditor(props: {
   }
 
   return (
-    <article
-      class={`panel area ${props.selected ? 'selected' : ''}`}
-      id={`area-${props.plot.id}`}
-    >
+    <article class={`panel area ${props.selected ? 'selected' : ''}`} id={`area-${props.plot.id}`}>
       <div class="area-h">
         <h3>
           <span class="num" aria-hidden="true">
@@ -555,34 +473,20 @@ function CandidatePlotEditor(props: {
         <div class="rowline tight">
           <Show when={candidatePlotRegiaUrl(props.plot)}>
             {(url) => (
-              <a
-                class="btn ghost sm"
-                href={url()}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <a class="btn ghost sm" href={url()} target="_blank" rel="noopener noreferrer">
                 REGIA
               </a>
             )}
           </Show>
           <Show when={directionsUrl()}>
             {(url) => (
-              <a
-                class="btn ghost sm"
-                href={url()}
-                target="_blank"
-                rel="noreferrer"
-              >
+              <a class="btn ghost sm" href={url()} target="_blank" rel="noreferrer">
                 <PinIcon /> Directions
               </a>
             )}
           </Show>
           <Show when={located()}>
-            <button
-              class="btn ghost sm"
-              type="button"
-              onClick={props.onShowOnMap}
-            >
+            <button class="btn ghost sm" type="button" onClick={props.onShowOnMap}>
               Show on map
             </button>
           </Show>
@@ -629,8 +533,7 @@ function CandidatePlotEditor(props: {
         <Show when={clueLks94()}>
           {(lks94) => (
             <p class="small muted" style={{ margin: '10px 0 0' }}>
-              Hint {props.plot.latitudeClue}, {props.plot.longitudeClue} →{' '}
-              {lks94()}
+              Hint {props.plot.latitudeClue}, {props.plot.longitudeClue} → {lks94()}
             </p>
           )}
         </Show>
@@ -650,9 +553,7 @@ function CandidatePlotEditor(props: {
           <button
             class="btn ghost sm"
             type="button"
-            disabled={household.isCandidatePlotAutomaticChecksRunning(
-              props.plot.id,
-            )}
+            disabled={household.isCandidatePlotAutomaticChecksRunning(props.plot.id)}
             onClick={() => void runAutomaticChecks()}
           >
             {household.isCandidatePlotAutomaticChecksRunning(props.plot.id)
@@ -697,26 +598,13 @@ function CandidatePlotEditor(props: {
             onInput={setName}
             placeholder="e.g. Whole plot"
           />
-          <Field
-            label="Price (€)"
-            value={price()}
-            onInput={setPrice}
-            inputmode="decimal"
-          />
-          <Field
-            label="Area (ares)"
-            value={area()}
-            onInput={setArea}
-            inputmode="decimal"
-          />
+          <Field label="Price (€)" value={price()} onInput={setPrice} inputmode="decimal" />
+          <Field label="Area (ares)" value={area()} onInput={setArea} inputmode="decimal" />
           <Field label="Land purpose" value={purpose()} onInput={setPurpose} />
         </div>
         <label class="f" style={{ 'margin-top': '14px' }}>
           Our notes
-          <textarea
-            value={notes()}
-            onInput={(event) => setNotes(event.currentTarget.value)}
-          />
+          <textarea value={notes()} onInput={(event) => setNotes(event.currentTarget.value)} />
         </label>
       </section>
 
@@ -730,9 +618,7 @@ function CandidatePlotEditor(props: {
           <select
             name="clue-kind"
             value={clueKind()}
-            onChange={(event) =>
-              setClueKind(event.currentTarget.value as ClueKind)
-            }
+            onChange={(event) => setClueKind(event.currentTarget.value as ClueKind)}
           >
             <option value="parcel">Unique parcel number (most exact)</option>
             <option value="coordinates">Coordinates</option>
@@ -770,9 +656,7 @@ function CandidatePlotEditor(props: {
                 <select
                   value={precision()}
                   onChange={(event) =>
-                    setPrecision(
-                      event.currentTarget.value as 'exact' | 'approx',
-                    )
+                    setPrecision(event.currentTarget.value as 'exact' | 'approx')
                   }
                 >
                   <option value="exact">Exactly on the plot</option>
@@ -793,11 +677,7 @@ function CandidatePlotEditor(props: {
           <span class="small muted">After you've been there</span>
         </div>
         <Stars label="Road & access" value={road()} onChange={setRoad} />
-        <Stars
-          label="Feel of the area"
-          value={feeling()}
-          onChange={setFeeling}
-        />
+        <Stars label="Feel of the area" value={feeling()} onChange={setFeeling} />
         <Stars label="View" value={view()} onChange={setView} />
       </section>
 
@@ -807,10 +687,7 @@ function CandidatePlotEditor(props: {
         </button>
         <Show when={status()}>
           {(current) => (
-            <span
-              class={`status-text ${current().bad ? 'bad' : ''}`}
-              role="status"
-            >
+            <span class={`status-text ${current().bad ? 'bad' : ''}`} role="status">
               {current().text}
             </span>
           )}
@@ -872,10 +749,8 @@ const optionalText = (value: string) => value.trim() || null
 const optionalNumber = (value: string) => {
   if (!value.trim()) return null
   const parsed = Number(value.replace(',', '.'))
-  if (!Number.isFinite(parsed))
-    throw new Error('Enter a number — check price and area')
+  if (!Number.isFinite(parsed)) throw new Error('Enter a number — check price and area')
   return parsed
 }
 const textNumber = (value: number | null) => value?.toString() ?? ''
-const errorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : String(error)
+const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error))

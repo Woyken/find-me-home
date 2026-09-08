@@ -1,0 +1,47 @@
+name: Pages live browser tests
+
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-live-e2e
+  cancel-in-progress: true
+
+jobs:
+  browser-tests:
+    # A successful github-pages status contains the deployed ref and SHA. Restrict
+    # this observer to normal default-branch Pages releases; it cannot deploy or roll back.
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment == 'github-pages' &&
+      github.event.deployment.ref == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.deployment.sha }}
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Chromium is installed only in this independent live-site test job.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ github.event.deployment_status.environment_url }}
+          PLAYWRIGHT_RETRIES: '0'
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-live-pages-${{ github.event.deployment.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore

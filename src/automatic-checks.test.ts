@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { runAutomaticChecks } from './automatic-checks'
 import type { AutomaticCheckServices } from './automatic-checks'
-import type {
-  CandidatePlotRecord,
-  SourceListingRecord,
-} from './source-listings/model'
+import type { CandidatePlotRecord, SourceListingRecord } from './source-listings/model'
 
 const sourceListing = {
   id: 'listing',
@@ -93,9 +90,7 @@ const services: AutomaticCheckServices = {
 describe('Automatic Checks', () => {
   it('restores transit, combined budget, crime, noise, and livability thresholds', async () => {
     const results = await runAutomaticChecks({ plot, sourceListing }, services)
-    const byKey = Object.fromEntries(
-      results.map((result) => [result.key, result]),
-    )
+    const byKey = Object.fromEntries(results.map((result) => [result.key, result]))
 
     expect(byKey.walk_to_stop).toMatchObject({ status: 'pass' })
     expect(byKey.commute).toMatchObject({ status: 'pass' })
@@ -121,9 +116,7 @@ describe('Automatic Checks', () => {
 
     const results = await runAutomaticChecks({ plot, sourceListing }, failing)
 
-    expect(
-      results.filter((result) => result.status === 'unknown'),
-    ).toHaveLength(9)
+    expect(results.filter((result) => result.status === 'unknown')).toHaveLength(9)
     expect(results).toHaveLength(13)
   })
 
@@ -144,13 +137,8 @@ describe('Automatic Checks', () => {
       },
     }
 
-    const results = await runAutomaticChecks(
-      { plot, sourceListing },
-      explaining,
-    )
-    const byKey = Object.fromEntries(
-      results.map((result) => [result.key, result]),
-    )
+    const results = await runAutomaticChecks({ plot, sourceListing }, explaining)
+    const byKey = Object.fromEntries(results.map((result) => [result.key, result]))
 
     expect(byKey.crime).toEqual({
       key: 'crime',

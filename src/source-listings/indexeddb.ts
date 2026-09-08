@@ -35,10 +35,7 @@ export type SourceListingRepository = {
     candidatePlotId: string
     created: boolean
   }>
-  addCandidatePlot: (
-    sourceListingId: string,
-    updatedAt: number,
-  ) => Promise<string>
+  addCandidatePlot: (sourceListingId: string, updatedAt: number) => Promise<string>
   updateCandidatePlot: (
     sourceListingId: string,
     candidatePlotId: string,
@@ -61,22 +58,14 @@ export type SourceListingRepository = {
   ) => Promise<boolean>
   getVisitPlan: () => VisitPlanRecord
   setVisitPlan: (sourceListingIds: string[], updatedAt: number) => Promise<void>
-  markSourceListingVisited: (
-    sourceListingId: string,
-    updatedAt: number,
-  ) => Promise<void>
-  removeSourceListing: (
-    sourceListingId: string,
-    updatedAt: number,
-  ) => Promise<void>
+  markSourceListingVisited: (sourceListingId: string, updatedAt: number) => Promise<void>
+  removeSourceListing: (sourceListingId: string, updatedAt: number) => Promise<void>
   allRecords: () => (SourceListingSharedRecord | ImportInboxRecord)[]
   applyRemote: (
     records: (SourceListingSharedRecord | ImportInboxRecord)[],
   ) => Promise<(SourceListingSharedRecord | ImportInboxRecord)[]>
   subscribeLocalMutations: (
-    listener: (
-      records: (SourceListingSharedRecord | ImportInboxRecord)[],
-    ) => void,
+    listener: (records: (SourceListingSharedRecord | ImportInboxRecord)[]) => void,
   ) => () => void
   subscribe: (listener: () => void) => () => void
   closeActive: () => void
@@ -110,13 +99,9 @@ const openDatabase = (name: string) =>
         const store = database.createObjectStore('source-listings', {
           keyPath: 'id',
         })
-        store.createIndex(
-          'source-identity',
-          ['householdId', 'source', 'sourceId'],
-          {
-            unique: true,
-          },
-        )
+        store.createIndex('source-identity', ['householdId', 'source', 'sourceId'], {
+          unique: true,
+        })
       }
       if (!database.objectStoreNames.contains('candidate-plots')) {
         const store = database.createObjectStore('candidate-plots', {
@@ -131,11 +116,9 @@ const openDatabase = (name: string) =>
         const store = database.createObjectStore('import-inbox', {
           keyPath: 'id',
         })
-        store.createIndex(
-          'source-identity',
-          ['householdId', 'source', 'sourceId'],
-          { unique: true },
-        )
+        store.createIndex('source-identity', ['householdId', 'source', 'sourceId'], {
+          unique: true,
+        })
       }
     }
     request.onsuccess = () => {
@@ -152,6 +135,7 @@ export const createIndexedDbSourceListingRepository = (
     uuid: () => string
     beforeRemoveCommit?: (transaction: IDBTransaction) => void
     beforeVisitCommit?: (transaction: IDBTransaction) => void
+    beforeVisitPlanCommit?: (transaction: IDBTransaction) => void
   } = {
     now: Date.now,
     uuid: () => crypto.randomUUID(),
@@ -169,8 +153,7 @@ export const createIndexedDbSourceListingRepository = (
     (records: (SourceListingSharedRecord | ImportInboxRecord)[]) => void
   >()
   const requireOpen = () => {
-    if (!database || !householdId)
-      throw new Error('Source Listings are not open')
+    if (!database || !householdId) throw new Error('Source Listings are not open')
     return { database, householdId }
   }
   const detail = (record: SourceListingRecord): SourceListingDetail => ({
@@ -182,11 +165,8 @@ export const createIndexedDbSourceListingRepository = (
   const publish = () => {
     for (const listener of listeners) listener()
   }
-  const publishLocal = (
-    records: (SourceListingSharedRecord | ImportInboxRecord)[],
-  ) => {
-    for (const listener of localMutationListeners)
-      listener(structuredClone(records))
+  const publishLocal = (records: (SourceListingSharedRecord | ImportInboxRecord)[]) => {
+    for (const listener of localMutationListeners) listener(structuredClone(records))
   }
   const normalizeCandidatePlots = (records: CandidatePlotRecord[]) => {
     const hasPersistedField = (record: CandidatePlotRecord, field: string) =>
@@ -227,10 +207,7 @@ export const createIndexedDbSourceListingRepository = (
           ? record.resolvedPrecision
           : (record.coordinateCluePrecision ?? null),
         effectiveLocationSource: record.effectiveLocationSource ?? null,
-        locationResolutionState: hasPersistedField(
-          record,
-          'locationResolutionState',
-        )
+        locationResolutionState: hasPersistedField(record, 'locationResolutionState')
           ? record.locationResolutionState
           : 'missing',
         parcelDatasetVersion: record.parcelDatasetVersion ?? null,
@@ -247,28 +224,19 @@ export const createIndexedDbSourceListingRepository = (
       householdId = nextHouseholdId
       sourceListings = (
         await requestResult<SourceListingRecord[]>(
-          database
-            .transaction('source-listings')
-            .objectStore('source-listings')
-            .getAll(),
+          database.transaction('source-listings').objectStore('source-listings').getAll(),
         )
       ).map((record) => ({ ...record, visitedAt: record.visitedAt ?? null }))
       candidatePlots = normalizeCandidatePlots(
         await requestResult<CandidatePlotRecord[]>(
-          database
-            .transaction('candidate-plots')
-            .objectStore('candidate-plots')
-            .getAll(),
+          database.transaction('candidate-plots').objectStore('candidate-plots').getAll(),
         ),
       )
       const persistedVisitPlans = await requestResult<VisitPlanRecord[]>(
         database.transaction('visit-plans').objectStore('visit-plans').getAll(),
       )
       importInbox = await requestResult<ImportInboxRecord[]>(
-        database
-          .transaction('import-inbox')
-          .objectStore('import-inbox')
-          .getAll(),
+        database.transaction('import-inbox').objectStore('import-inbox').getAll(),
       )
       visitPlan = persistedVisitPlans.find(
         (record) => record.householdId === nextHouseholdId && !record.deletedAt,
@@ -293,19 +261,14 @@ export const createIndexedDbSourceListingRepository = (
     list() {
       requireOpen()
       return sourceListings
-        .filter(
-          (record) => record.householdId === householdId && !record.deletedAt,
-        )
+        .filter((record) => record.householdId === householdId && !record.deletedAt)
         .sort((left, right) => right.updatedAt - left.updatedAt)
         .map(detail)
     },
     get(id) {
       requireOpen()
       const record = sourceListings.find(
-        (value) =>
-          value.id === id &&
-          value.householdId === householdId &&
-          !value.deletedAt,
+        (value) => value.id === id && value.householdId === householdId && !value.deletedAt,
       )
       return record ? detail(record) : undefined
     },
@@ -313,10 +276,7 @@ export const createIndexedDbSourceListingRepository = (
       const active = requireOpen()
       return structuredClone(
         importInbox
-          .filter(
-            (record) =>
-              record.householdId === active.householdId && !record.deletedAt,
-          )
+          .filter((record) => record.householdId === active.householdId && !record.deletedAt)
           .sort((left, right) => right.updatedAt - left.updatedAt),
       )
     },
@@ -324,10 +284,7 @@ export const createIndexedDbSourceListingRepository = (
       const active = requireOpen()
       const distinct = [
         ...new Map(
-          imports.map((imported) => [
-            `${imported.source}:${imported.sourceId}`,
-            imported,
-          ]),
+          imports.map((imported) => [`${imported.source}:${imported.sourceId}`, imported]),
         ).values(),
       ]
       const changed: ImportInboxRecord[] = []
@@ -337,8 +294,7 @@ export const createIndexedDbSourceListingRepository = (
       for (const imported of distinct) {
         const existing = importInbox.find(
           (record) =>
-            record.householdId === active.householdId &&
-            record.sourceId === imported.sourceId,
+            record.householdId === active.householdId && record.sourceId === imported.sourceId,
         )
         const sourceListing = sourceListings.find(
           (record) =>
@@ -364,15 +320,9 @@ export const createIndexedDbSourceListingRepository = (
           source: imported.source,
           sourceId: imported.sourceId,
           ...(imported.title === undefined ? {} : { title: imported.title }),
-          ...(imported.description === undefined
-            ? {}
-            : { description: imported.description }),
-          ...(imported.priceEur === undefined
-            ? {}
-            : { priceEur: imported.priceEur }),
-          ...(imported.areaAres === undefined
-            ? {}
-            : { areaAres: imported.areaAres }),
+          ...(imported.description === undefined ? {} : { description: imported.description }),
+          ...(imported.priceEur === undefined ? {} : { priceEur: imported.priceEur }),
+          ...(imported.areaAres === undefined ? {} : { areaAres: imported.areaAres }),
           ...(imported.photos.length ? { thumbnail: imported.photos[0] } : {}),
           updatedAt,
         }
@@ -380,10 +330,7 @@ export const createIndexedDbSourceListingRepository = (
         if (existing) refreshed += 1
         else added += 1
       }
-      const transaction = active.database.transaction(
-        'import-inbox',
-        'readwrite',
-      )
+      const transaction = active.database.transaction('import-inbox', 'readwrite')
       const store = transaction.objectStore('import-inbox')
       for (const record of changed) store.put(record)
       await transactionComplete(transaction)
@@ -409,21 +356,14 @@ export const createIndexedDbSourceListingRepository = (
       const active = requireOpen()
       const existing = importInbox.find(
         (record) =>
-          record.id === id &&
-          record.householdId === active.householdId &&
-          !record.deletedAt,
+          record.id === id && record.householdId === active.householdId && !record.deletedAt,
       )
       if (!existing) throw new Error('Import Inbox item not found')
       const removed = { ...existing, updatedAt, deletedAt: updatedAt }
-      const transaction = active.database.transaction(
-        'import-inbox',
-        'readwrite',
-      )
+      const transaction = active.database.transaction('import-inbox', 'readwrite')
       transaction.objectStore('import-inbox').put(removed)
       await transactionComplete(transaction)
-      importInbox = importInbox.map((record) =>
-        record.id === id ? removed : record,
-      )
+      importInbox = importInbox.map((record) => (record.id === id ? removed : record))
       publish()
       publishLocal([removed])
     },
@@ -435,8 +375,7 @@ export const createIndexedDbSourceListingRepository = (
           record.source === review.imported.source &&
           record.sourceId === review.imported.sourceId,
       )
-      lastMutationAt =
-        suppliedUpdatedAt ?? Math.max(dependencies.now(), lastMutationAt + 1)
+      lastMutationAt = suppliedUpdatedAt ?? Math.max(dependencies.now(), lastMutationAt + 1)
       const timestamp = lastMutationAt
       const sourceListing: SourceListingRecord = {
         id: existing?.id ?? dependencies.uuid(),
@@ -455,18 +394,13 @@ export const createIndexedDbSourceListingRepository = (
       }
       const existingPlot = existing
         ? candidatePlots.find(
-            (plot) =>
-              plot.sourceListingId === existing.id &&
-              plot.importKey === 'primary',
+            (plot) => plot.sourceListingId === existing.id && plot.importKey === 'primary',
           )
         : undefined
       const sourceInputsChanged =
         existing !== undefined &&
         JSON.stringify([existing.utilities ?? {}, existing.description]) !==
-          JSON.stringify([
-            sourceListing.utilities ?? {},
-            sourceListing.description,
-          ])
+          JSON.stringify([sourceListing.utilities ?? {}, sourceListing.description])
       const candidatePlot: CandidatePlotRecord = existingPlot
         ? (() => {
             const restored = {
@@ -511,8 +445,7 @@ export const createIndexedDbSourceListingRepository = (
             resolvedCadastralNumber: null,
             resolvedBoundary: null,
             resolvedPrecision: review.coordinateCluePrecision,
-            effectiveLocationSource:
-              review.latitudeClue === null ? null : 'coordinates',
+            effectiveLocationSource: review.latitudeClue === null ? null : 'coordinates',
             locationResolutionState: 'missing',
             parcelDatasetVersion: null,
             automaticChecks: null,
@@ -534,8 +467,7 @@ export const createIndexedDbSourceListingRepository = (
       )
       transaction.objectStore('source-listings').put(sourceListing)
       transaction.objectStore('candidate-plots').put(candidatePlot)
-      if (reviewedInbox)
-        transaction.objectStore('import-inbox').put(reviewedInbox)
+      if (reviewedInbox) transaction.objectStore('import-inbox').put(reviewedInbox)
       const secondaryPlots = existing
         ? candidatePlots
             .filter(
@@ -551,26 +483,17 @@ export const createIndexedDbSourceListingRepository = (
               updatedAt: timestamp,
             }))
         : []
-      for (const plot of secondaryPlots)
-        transaction.objectStore('candidate-plots').put(plot)
+      for (const plot of secondaryPlots) transaction.objectStore('candidate-plots').put(plot)
       await transactionComplete(transaction)
       sourceListings = existing
-        ? sourceListings.map((record) =>
-            record.id === sourceListing.id ? sourceListing : record,
-          )
+        ? sourceListings.map((record) => (record.id === sourceListing.id ? sourceListing : record))
         : [...sourceListings, sourceListing]
       candidatePlots = existingPlot
-        ? candidatePlots.map((plot) =>
-            plot.id === candidatePlot.id ? candidatePlot : plot,
-          )
+        ? candidatePlots.map((plot) => (plot.id === candidatePlot.id ? candidatePlot : plot))
         : [...candidatePlots, candidatePlot]
       if (secondaryPlots.length) {
-        const secondaryById = new Map(
-          secondaryPlots.map((plot) => [plot.id, plot]),
-        )
-        candidatePlots = candidatePlots.map(
-          (plot) => secondaryById.get(plot.id) ?? plot,
-        )
+        const secondaryById = new Map(secondaryPlots.map((plot) => [plot.id, plot]))
+        candidatePlots = candidatePlots.map((plot) => secondaryById.get(plot.id) ?? plot)
       }
       if (reviewedInbox)
         importInbox = importInbox.map((record) =>
@@ -631,10 +554,7 @@ export const createIndexedDbSourceListingRepository = (
         automaticChecksRevision: null,
         updatedAt,
       }
-      const transaction = active.database.transaction(
-        'candidate-plots',
-        'readwrite',
-      )
+      const transaction = active.database.transaction('candidate-plots', 'readwrite')
       transaction.objectStore('candidate-plots').put(candidatePlot)
       await transactionComplete(transaction)
       candidatePlots = [...candidatePlots, candidatePlot]
@@ -642,12 +562,7 @@ export const createIndexedDbSourceListingRepository = (
       publishLocal([candidatePlot])
       return candidatePlot.id
     },
-    async updateCandidatePlot(
-      sourceListingId,
-      candidatePlotId,
-      update,
-      updatedAt,
-    ) {
+    async updateCandidatePlot(sourceListingId, candidatePlotId, update, updatedAt) {
       const active = requireOpen()
       const existing = candidatePlots.find(
         (plot) =>
@@ -676,8 +591,7 @@ export const createIndexedDbSourceListingRepository = (
               resolvedCadastralNumber: null,
               resolvedBoundary: null,
               resolvedPrecision: update.coordinateCluePrecision,
-              effectiveLocationSource:
-                update.latitudeClue === null ? null : 'coordinates',
+              effectiveLocationSource: update.latitudeClue === null ? null : 'coordinates',
               locationResolutionState: 'missing',
               parcelDatasetVersion: null,
             }
@@ -688,18 +602,13 @@ export const createIndexedDbSourceListingRepository = (
         sourceListings.find((record) => record.id === sourceListingId) &&
         automaticCheckRevision({
           plot: candidatePlot,
-          sourceListing: sourceListings.find(
-            (record) => record.id === sourceListingId,
-          )!,
+          sourceListing: sourceListings.find((record) => record.id === sourceListingId)!,
         }) !== existing.automaticChecksRevision
       ) {
         candidatePlot.automaticChecks = null
         candidatePlot.automaticChecksRevision = null
       }
-      const transaction = active.database.transaction(
-        'candidate-plots',
-        'readwrite',
-      )
+      const transaction = active.database.transaction('candidate-plots', 'readwrite')
       transaction.objectStore('candidate-plots').put(candidatePlot)
       await transactionComplete(transaction)
       candidatePlots = candidatePlots.map((plot) =>
@@ -729,8 +638,7 @@ export const createIndexedDbSourceListingRepository = (
       if (
         !existing ||
         !sourceListing ||
-        automaticCheckRevision({ plot: existing, sourceListing }) !==
-          expectedRevision
+        automaticCheckRevision({ plot: existing, sourceListing }) !== expectedRevision
       )
         return false
       const candidatePlot = {
@@ -739,10 +647,7 @@ export const createIndexedDbSourceListingRepository = (
         automaticChecksRevision: expectedRevision,
         updatedAt,
       }
-      const transaction = active.database.transaction(
-        'candidate-plots',
-        'readwrite',
-      )
+      const transaction = active.database.transaction('candidate-plots', 'readwrite')
       transaction.objectStore('candidate-plots').put(candidatePlot)
       await transactionComplete(transaction)
       candidatePlots = candidatePlots.map((plot) =>
@@ -776,16 +681,13 @@ export const createIndexedDbSourceListingRepository = (
         addressClue: existing.addressClue,
         primaryLocationClue: existing.primaryLocationClue,
       }
-      if (JSON.stringify(currentClues) !== JSON.stringify(expectedClues))
-        return false
+      if (JSON.stringify(currentClues) !== JSON.stringify(expectedClues)) return false
       const candidatePlot: CandidatePlotRecord = {
         ...existing,
         ...structuredClone(resolution),
         updatedAt,
       }
-      const sourceListing = sourceListings.find(
-        (record) => record.id === sourceListingId,
-      )
+      const sourceListing = sourceListings.find((record) => record.id === sourceListingId)
       if (
         sourceListing &&
         automaticCheckRevision({ plot: candidatePlot, sourceListing }) !==
@@ -794,10 +696,7 @@ export const createIndexedDbSourceListingRepository = (
         candidatePlot.automaticChecks = null
         candidatePlot.automaticChecksRevision = null
       }
-      const transaction = active.database.transaction(
-        'candidate-plots',
-        'readwrite',
-      )
+      const transaction = active.database.transaction('candidate-plots', 'readwrite')
       transaction.objectStore('candidate-plots').put(candidatePlot)
       await transactionComplete(transaction)
       candidatePlots = candidatePlots.map((plot) =>
@@ -826,9 +725,7 @@ export const createIndexedDbSourceListingRepository = (
           (id) =>
             !sourceListings.some(
               (record) =>
-                record.id === id &&
-                record.householdId === active.householdId &&
-                !record.deletedAt,
+                record.id === id && record.householdId === active.householdId && !record.deletedAt,
             ),
         )
       ) {
@@ -840,11 +737,9 @@ export const createIndexedDbSourceListingRepository = (
         sourceListingIds: distinctIds,
         updatedAt,
       }
-      const transaction = active.database.transaction(
-        'visit-plans',
-        'readwrite',
-      )
+      const transaction = active.database.transaction('visit-plans', 'readwrite')
       transaction.objectStore('visit-plans').put(next)
+      dependencies.beforeVisitPlanCommit?.(transaction)
       await transactionComplete(transaction)
       visitPlan = next
       publish()
@@ -872,9 +767,7 @@ export const createIndexedDbSourceListingRepository = (
       }
       const nextVisitPlan = {
         ...currentVisitPlan,
-        sourceListingIds: currentVisitPlan.sourceListingIds.filter(
-          (id) => id !== sourceListingId,
-        ),
+        sourceListingIds: currentVisitPlan.sourceListingIds.filter((id) => id !== sourceListingId),
         updatedAt,
       }
       const transaction = active.database.transaction(
@@ -909,18 +802,13 @@ export const createIndexedDbSourceListingRepository = (
       const removedCandidatePlots = candidatePlots
         .filter(
           (plot) =>
-            plot.householdId === active.householdId &&
-            plot.sourceListingId === sourceListingId,
+            plot.householdId === active.householdId && plot.sourceListingId === sourceListingId,
         )
         .map((plot) => ({ ...plot, updatedAt, deletedAt: updatedAt }))
-      const nextVisitPlan = visitPlan?.sourceListingIds.includes(
-        sourceListingId,
-      )
+      const nextVisitPlan = visitPlan?.sourceListingIds.includes(sourceListingId)
         ? {
             ...visitPlan,
-            sourceListingIds: visitPlan.sourceListingIds.filter(
-              (id) => id !== sourceListingId,
-            ),
+            sourceListingIds: visitPlan.sourceListingIds.filter((id) => id !== sourceListingId),
             updatedAt,
           }
         : visitPlan
@@ -932,19 +820,14 @@ export const createIndexedDbSourceListingRepository = (
       for (const plot of removedCandidatePlots) {
         transaction.objectStore('candidate-plots').put(plot)
       }
-      if (nextVisitPlan)
-        transaction.objectStore('visit-plans').put(nextVisitPlan)
+      if (nextVisitPlan) transaction.objectStore('visit-plans').put(nextVisitPlan)
       dependencies.beforeRemoveCommit?.(transaction)
       await transactionComplete(transaction)
       sourceListings = sourceListings.map((record) =>
         record.id === sourceListingId ? removedSourceListing : record,
       )
-      const removedById = new Map(
-        removedCandidatePlots.map((plot) => [plot.id, plot]),
-      )
-      candidatePlots = candidatePlots.map(
-        (plot) => removedById.get(plot.id) ?? plot,
-      )
+      const removedById = new Map(removedCandidatePlots.map((plot) => [plot.id, plot]))
+      candidatePlots = candidatePlots.map((plot) => removedById.get(plot.id) ?? plot)
       visitPlan = nextVisitPlan
       publish()
       publishLocal([
@@ -967,24 +850,20 @@ export const createIndexedDbSourceListingRepository = (
       if (
         incoming.some(
           (record) =>
-            record.householdId !== active.householdId ||
-            !Number.isFinite(record.updatedAt),
+            record.householdId !== active.householdId || !Number.isFinite(record.updatedAt),
         )
       )
         throw new Error('Invalid Household payload')
       const incomingInbox = incoming.filter(
         (record): record is ImportInboxRecord =>
-          !('url' in record) &&
-          !('sourceListingId' in record) &&
-          !('sourceListingIds' in record),
+          !('url' in record) && !('sourceListingId' in record) && !('sourceListingIds' in record),
       )
       const inboxWinners: ImportInboxRecord[] = []
       let comparedInbox = importInbox
       for (const record of incomingInbox) {
         const existing = comparedInbox.find(
           (candidate) =>
-            candidate.householdId === record.householdId &&
-            candidate.sourceId === record.sourceId,
+            candidate.householdId === record.householdId && candidate.sourceId === record.sourceId,
         )
         const wins =
           !existing ||
@@ -1004,14 +883,8 @@ export const createIndexedDbSourceListingRepository = (
         const winner = activeSourceListings.length
           ? {
               ...record,
-              updatedAt: Math.max(
-                record.updatedAt + 1,
-                activeSourceListings[0].updatedAt,
-              ),
-              deletedAt: Math.max(
-                record.updatedAt + 1,
-                activeSourceListings[0].updatedAt,
-              ),
+              updatedAt: Math.max(record.updatedAt + 1, activeSourceListings[0].updatedAt),
+              deletedAt: Math.max(record.updatedAt + 1, activeSourceListings[0].updatedAt),
             }
           : record
         inboxWinners.push(winner)
@@ -1025,18 +898,13 @@ export const createIndexedDbSourceListingRepository = (
         ]
       }
       const nonInboxIncoming = incoming.filter(
-        (record) =>
-          'url' in record ||
-          'sourceListingId' in record ||
-          'sourceListingIds' in record,
+        (record) => 'url' in record || 'sourceListingId' in record || 'sourceListingIds' in record,
       ) as SourceListingSharedRecord[]
       const transaction = active.database.transaction(
         ['source-listings', 'candidate-plots', 'visit-plans', 'import-inbox'],
         'readwrite',
       )
-      const storeFor = (
-        record: SourceListingSharedRecord | ImportInboxRecord,
-      ) =>
+      const storeFor = (record: SourceListingSharedRecord | ImportInboxRecord) =>
         transaction.objectStore(
           'sourceListingIds' in record
             ? 'visit-plans'
@@ -1048,18 +916,16 @@ export const createIndexedDbSourceListingRepository = (
         )
       const persisted = await Promise.all(
         nonInboxIncoming.map((record) =>
-          requestResult<
-            SourceListingSharedRecord | ImportInboxRecord | undefined
-          >(storeFor(record).get(record.id)),
+          requestResult<SourceListingSharedRecord | ImportInboxRecord | undefined>(
+            storeFor(record).get(record.id),
+          ),
         ),
       )
       const sourceWinners = nonInboxIncoming.filter(
-        (record, index) =>
-          record.updatedAt > (persisted[index]?.updatedAt ?? -1),
+        (record, index) => record.updatedAt > (persisted[index]?.updatedAt ?? -1),
       )
       for (const listing of sourceWinners.filter(
-        (record): record is SourceListingRecord =>
-          'url' in record && !record.deletedAt,
+        (record): record is SourceListingRecord => 'url' in record && !record.deletedAt,
       )) {
         const existingInbox = comparedInbox.find(
           (record) =>
@@ -1069,10 +935,7 @@ export const createIndexedDbSourceListingRepository = (
             !record.deletedAt,
         )
         if (!existingInbox) continue
-        const timestamp = Math.max(
-          existingInbox.updatedAt + 1,
-          listing.updatedAt,
-        )
+        const timestamp = Math.max(existingInbox.updatedAt + 1, listing.updatedAt)
         const tombstone = {
           ...existingInbox,
           updatedAt: timestamp,
@@ -1088,11 +951,9 @@ export const createIndexedDbSourceListingRepository = (
       for (const record of inboxWinners) {
         const existing = importInbox.find(
           (candidate) =>
-            candidate.householdId === record.householdId &&
-            candidate.sourceId === record.sourceId,
+            candidate.householdId === record.householdId && candidate.sourceId === record.sourceId,
         )
-        if (existing && existing.id !== record.id)
-          inboxStore.delete(existing.id)
+        if (existing && existing.id !== record.id) inboxStore.delete(existing.id)
       }
       for (const record of winners) storeFor(record).put(record)
       await transactionComplete(transaction)

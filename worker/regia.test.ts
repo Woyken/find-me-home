@@ -21,10 +21,9 @@ describe('Regia Worker operation', () => {
       return Response.json(successFixture)
     })
     const response = await handleRequest(
-      new Request(
-        'https://worker.test/regia/address-search?query=Up%C4%97s%207-oji%207',
-        { headers: { Origin: 'https://woyken.github.io' } },
-      ),
+      new Request('https://worker.test/regia/address-search?query=Up%C4%97s%207-oji%207', {
+        headers: { Origin: 'https://woyken.github.io' },
+      }),
       { productionOrigin: 'https://woyken.github.io', fetch: fetcher },
     )
 
@@ -33,14 +32,10 @@ describe('Regia Worker operation', () => {
       expect.objectContaining({ address: 'Upės g. 7 - Vilnius' }),
     ])
     expect(bootstrap).toBe(2)
-    expect(
-      fetcher.mock.calls.filter(([url]) => String(url).includes('/settings?')),
-    ).toHaveLength(2)
-    expect(
-      fetcher.mock.calls.filter(([url]) =>
-        String(url).includes('/search/'),
-      )[0][0],
-    ).toContain('query=Up%25C4%2597s%25207%2520oji%25207')
+    expect(fetcher.mock.calls.filter(([url]) => String(url).includes('/settings?'))).toHaveLength(2)
+    expect(fetcher.mock.calls.filter(([url]) => String(url).includes('/search/'))[0][0]).toContain(
+      'query=Up%25C4%2597s%25207%2520oji%25207',
+    )
   })
 
   it('maps an upstream failure to unavailable instead of no result', async () => {
@@ -54,10 +49,9 @@ describe('Regia Worker operation', () => {
       return new Response('failure', { status: 503 })
     })
     const response = await handleRequest(
-      new Request(
-        'https://worker.test/regia/address-search?query=Up%C4%97s%20g.%207',
-        { headers: { Origin: 'https://woyken.github.io' } },
-      ),
+      new Request('https://worker.test/regia/address-search?query=Up%C4%97s%20g.%207', {
+        headers: { Origin: 'https://woyken.github.io' },
+      }),
       { productionOrigin: 'https://woyken.github.io', fetch: fetcher },
     )
 

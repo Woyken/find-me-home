@@ -27,23 +27,26 @@ const payload = {
 
 describe('Aruodas import fragment', () => {
   it('generates a short loader bookmarklet for the deployed app base URL', () => {
-    const bookmarklet = createAruodasBookmarklet(
-      'https://woyken.github.io/find-me-home/?x=1#y',
-    )
+    const bookmarklet = createAruodasBookmarklet('https://woyken.github.io/find-me-home/?x=1#y')
 
     expect(bookmarklet.startsWith('javascript:')).toBe(true)
-    expect(bookmarklet).toContain(
-      'var a="https://woyken.github.io/find-me-home/"',
-    )
+    expect(bookmarklet).toContain('var a="https://woyken.github.io/find-me-home/"')
     expect(bookmarklet).toContain('__fmhAppUrl=a')
-    expect(bookmarklet).toContain('aruodas-bookmarklet.js?t=')
+    expect(bookmarklet).toContain('new URL("aruodas-bookmarklet.js?t="+Date.now(),a).href')
     expect(bookmarklet).toContain('document.createElement("script")')
     // Short enough that browsers do not truncate it when pasted as a bookmark.
     expect(bookmarklet.length).toBeLessThan(600)
     expect(bookmarklet).not.toMatch(/[\r\n]/)
-    expect(
-      () => new Function(bookmarklet.slice('javascript:'.length)),
-    ).not.toThrow()
+    expect(() => new Function(bookmarklet.slice('javascript:'.length))).not.toThrow()
+  })
+
+  it('removes query parameters from the loader URL', () => {
+    expect(createAruodasBookmarklet('https://example.test/find-me-home/?e2e=run_42&x=1')).toContain(
+      'var a="https://example.test/find-me-home/"',
+    )
+    expect(createAruodasBookmarklet('https://example.test/find-me-home/?x=1')).toContain(
+      'var a="https://example.test/find-me-home/"',
+    )
   })
 
   it('serves a scraper that navigates the same tab with the import fragment', () => {
@@ -132,21 +135,37 @@ describe('Aruodas import fragment', () => {
           description: '19 a, Namų valda',
           areaAres: 19,
           priceEur: 21_500,
-          photos: [
-            'https://aruodas-img.dgn.lt/object_67_134641491/misko-g.jpg',
-          ],
+          photos: ['https://aruodas-img.dgn.lt/object_67_134641491/misko-g.jpg'],
         },
       ],
     })
   })
 
   it('accepts a bare mobile land advert URL and still rejects other categories', () => {
-    expect(
-      runBookmarklet('', 'https://m.aruodas.lt/11-1476517/?from_saved=1'),
-    ).toMatchObject({ kind: 'listing', imported: { sourceId: '11-1476517' } })
+    expect(runBookmarklet('', 'https://m.aruodas.lt/11-1476517/?from_saved=1')).toMatchObject({
+      kind: 'listing',
+      imported: { sourceId: '11-1476517' },
+    })
+    expect(() => runBookmarklet('', 'https://m.aruodas.lt/2-1776648/')).toThrow()
+  })
+
+  it('rejects sold or inactive markers in the individual advert header', () => {
     expect(() =>
-      runBookmarklet('', 'https://m.aruodas.lt/2-1776648/'),
+      runBookmarklet(
+        '<section class="action-bar-advert-always-sticky"><span class="list-sold-lt">Parduotas</span></section>',
+      ),
     ).toThrow()
+    expect(() =>
+      runBookmarklet(
+        '<section class="action-bar-advert-always-sticky"><span class="advert-is-passive">Neaktyvus</span></section>',
+      ),
+    ).toThrow()
+  })
+
+  it('does not reject an active advert because a related card is sold', () => {
+    expect(
+      runBookmarklet('<aside class="related"><span class="list-sold-lt">Parduotas</span></aside>'),
+    ).toMatchObject({ kind: 'listing' })
   })
 
   it('shows a heartbeat before running and a copyable crash report when it fails', () => {
@@ -155,9 +174,7 @@ describe('Aruodas import fragment', () => {
       get(target, key) {
         if (key === 'querySelectorAll') {
           return () => {
-            heartbeatSeen ??= document.body.textContent.includes(
-              'Find Me Home: working…',
-            )
+            heartbeatSeen ??= document.body.textContent.includes('Find Me Home: working…')
             throw new Error('boom from the page')
           }
         }
@@ -167,11 +184,7 @@ describe('Aruodas import fragment', () => {
     })
     const location = { href: 'https://m.aruodas.lt/isiminti-skelbimai/' }
     document.body.innerHTML = ''
-    new Function(
-      'window',
-      'document',
-      bookmarkletSource.replace(/[\r\n\t]/g, ''),
-    )(
+    new Function('window', 'document', bookmarkletSource.replace(/[\r\n\t]/g, ''))(
       {
         location,
         alert: () => undefined,
@@ -185,9 +198,7 @@ describe('Aruodas import fragment', () => {
     const report = document.querySelector('textarea')?.value ?? ''
     expect(report).toContain('Error: boom from the page')
     expect(report).toContain('https://m.aruodas.lt/isiminti-skelbimai/')
-    expect(document.body.textContent).toContain(
-      'Find Me Home could not import this page',
-    )
+    expect(document.body.textContent).toContain('Find Me Home could not import this page')
     expect(document.body.textContent).toContain('Copy details')
     expect(document.body.textContent).not.toContain('Find Me Home: working…')
   })
@@ -240,33 +251,38 @@ describe('Aruodas import fragment', () => {
     })
   })
 
+  it('imports a lazy-loaded advert photo', () => {
+    expect(
+      runBookmarklet('<img data-src="https://aruodas-img.dgn.lt/object_67_lazy/plot.jpg">'),
+    ).toMatchObject({
+      imported: {
+        photos: ['https://aruodas-img.dgn.lt/object_67_lazy/plot.jpg'],
+      },
+    })
+  })
+
   it('rejects invalid envelopes and payload text over 100,000 characters', () => {
-    expect(() => decodeImportFragment('not-base64url!')).toThrow(
-      'Invalid import',
+    expect(() => decodeImportFragment('not-base64url!')).toThrow('Invalid import')
+    expect(() => encodeImportFragment({ ...payload, description: 'x'.repeat(100_001) })).toThrow(
+      '100,000',
     )
-    expect(() =>
-      encodeImportFragment({ ...payload, description: 'x'.repeat(100_001) }),
-    ).toThrow('100,000')
   })
 
   it('accepts at most 50 HTTPS Aruodas or dgn.lt photos', () => {
-    const photos = Array.from(
-      { length: 50 },
-      (_, index) => `https://img.aruodas.lt/${index}.jpg`,
-    )
+    const photos = Array.from({ length: 50 }, (_, index) => `https://img.aruodas.lt/${index}.jpg`)
     expect(parseAruodasImport({ ...payload, photos }).photos).toHaveLength(50)
-    expect(() =>
-      parseAruodasImport({ ...payload, photos: [...photos, photos[0]] }),
-    ).toThrow('photos')
+    expect(() => parseAruodasImport({ ...payload, photos: [...photos, photos[0]] })).toThrow(
+      'photos',
+    )
     expect(() =>
       parseAruodasImport({
         ...payload,
         photos: ['http://img.aruodas.lt/a.jpg'],
       }),
     ).toThrow('photos')
-    expect(() =>
-      parseAruodasImport({ ...payload, photos: ['https://example.com/a.jpg'] }),
-    ).toThrow('photos')
+    expect(() => parseAruodasImport({ ...payload, photos: ['https://example.com/a.jpg'] })).toThrow(
+      'photos',
+    )
   })
 })
 
@@ -287,10 +303,7 @@ const runBookmarklet = (
     bookmarkletSource.replace(/[\r\n\t]/g, ''),
   )
 
-  bookmarklet(
-    { location, alert: () => undefined, __fmhAppUrl: 'https://example.test/' },
-    document,
-  )
+  bookmarklet({ location, alert: () => undefined, __fmhAppUrl: 'https://example.test/' }, document)
 
   const fragment = new URL(location.href).hash.slice('#import='.length)
   return decodeImportTransportFragment(fragment)

@@ -98,9 +98,7 @@ describe('ParcelRepository', () => {
         return new Response(manifest as BodyInit)
       }
       prefixRequests++
-      return new Response(
-        prefixRequests === 1 ? new Uint8Array([1, 2, 3]) : gzipSync('{}'),
-      )
+      return new Response(prefixRequests === 1 ? new Uint8Array([1, 2, 3]) : gzipSync('{}'))
     })
     const repository = new ParcelRepository('/parcels/', { fetch: fetcher })
 
@@ -111,9 +109,10 @@ describe('ParcelRepository', () => {
 
   it('evicts a corrupt cached shard and retries it from the network', async () => {
     const files = buildParcelAssetsInMemory(sources())
-    const manifest = JSON.parse(
-      new TextDecoder().decode(files.get('manifest.json')),
-    ) as { datasetVersion: string; cells: Record<string, { path: string }> }
+    const manifest = JSON.parse(new TextDecoder().decode(files.get('manifest.json'))) as {
+      datasetVersion: string
+      cells: Record<string, { path: string }>
+    }
     const assetPath = manifest.cells['100_1200'].path
     const cache = new Map<string, Response>([
       [
@@ -125,13 +124,11 @@ describe('ParcelRepository', () => {
       `${name}:${new URL(request.url).pathname.replace('/parcels/', '')}`
     const cacheStorage = {
       open: vi.fn(async (name: string) => ({
-        match: async (request: Request) =>
-          cache.get(cacheKey(name, request))?.clone(),
+        match: async (request: Request) => cache.get(cacheKey(name, request))?.clone(),
         put: async (request: Request, response: Response) => {
           cache.set(cacheKey(name, request), response.clone())
         },
-        delete: async (request: Request) =>
-          cache.delete(cacheKey(name, request)),
+        delete: async (request: Request) => cache.delete(cacheKey(name, request)),
       })),
       keys: async () => [],
     } as unknown as CacheStorage
@@ -145,9 +142,9 @@ describe('ParcelRepository', () => {
       cacheStorage,
     })
 
-    await expect(
-      repository.findAtLks94(500_010, 6_000_010),
-    ).resolves.toMatchObject({ uniqueNumber: '130012345678' })
+    await expect(repository.findAtLks94(500_010, 6_000_010)).resolves.toMatchObject({
+      uniqueNumber: '130012345678',
+    })
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
 
@@ -171,9 +168,9 @@ describe('ParcelRepository', () => {
       cacheStorage,
     })
 
-    await expect(
-      repository.findAtLks94(500_010, 6_000_010),
-    ).resolves.toMatchObject({ uniqueNumber: '130012345678' })
+    await expect(repository.findAtLks94(500_010, 6_000_010)).resolves.toMatchObject({
+      uniqueNumber: '130012345678',
+    })
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
 
@@ -200,9 +197,9 @@ describe('ParcelRepository', () => {
       cacheStorage,
     })
 
-    await expect(
-      repository.findAtLks94(500_010, 6_000_010),
-    ).resolves.toMatchObject({ uniqueNumber: '130012345678' })
+    await expect(repository.findAtLks94(500_010, 6_000_010)).resolves.toMatchObject({
+      uniqueNumber: '130012345678',
+    })
   })
 
   it('resolves a containing parcel whose registered area is unknown', async () => {
@@ -238,11 +235,7 @@ describe('ParcelRepository', () => {
     }
     const repository = new ParcelRepository('/parcels/', { fetch: fetcher })
 
-    await expect(repository.findByNumber('130012345678')).rejects.toThrow(
-      /HTTP 503/,
-    )
-    await expect(repository.findByNumber('130012345678')).resolves.toHaveLength(
-      1,
-    )
+    await expect(repository.findByNumber('130012345678')).rejects.toThrow(/HTTP 503/)
+    await expect(repository.findByNumber('130012345678')).resolves.toHaveLength(1)
   })
 })

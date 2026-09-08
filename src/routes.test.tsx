@@ -65,11 +65,7 @@ const listing = (
 
 describe('clippings deck order', () => {
   it('keeps the local order, drops removed clippings and appends new ones', () => {
-    expect(reconcileDeckOrder(['b', 'a', 'c'], ['a', 'c', 'd'])).toEqual([
-      'a',
-      'c',
-      'd',
-    ])
+    expect(reconcileDeckOrder(['b', 'a', 'c'], ['a', 'c', 'd'])).toEqual(['a', 'c', 'd'])
   })
   it('starts from the household order when nothing is sorted yet', () => {
     expect(reconcileDeckOrder([], ['x', 'y'])).toEqual(['x', 'y'])
@@ -83,28 +79,32 @@ describe('plots list sorting', () => {
     {
       priceEur: 90_000,
       areaAres: 5,
-      automaticChecks: [
-        { key: 'price', status: 'fail', value: '', detail: null },
-      ],
+      automaticChecks: [{ key: 'price', status: 'fail', value: '', detail: null }],
     },
     3,
   )
   const unknown = listing('unknown', {}, 2)
 
   it('puts the latest change first by default', () => {
-    expect(
-      sortListings([cheapOld, dearNew, unknown], 'new').map((l) => l.id),
-    ).toEqual(['dear', 'unknown', 'cheap'])
+    expect(sortListings([cheapOld, dearNew, unknown], 'new').map((l) => l.id)).toEqual([
+      'dear',
+      'unknown',
+      'cheap',
+    ])
   })
   it('sorts unknown prices last when sorting by cheapest', () => {
-    expect(
-      sortListings([dearNew, unknown, cheapOld], 'cheap').map((l) => l.id),
-    ).toEqual(['cheap', 'dear', 'unknown'])
+    expect(sortListings([dearNew, unknown, cheapOld], 'cheap').map((l) => l.id)).toEqual([
+      'cheap',
+      'dear',
+      'unknown',
+    ])
   })
   it('sorts biggest first', () => {
-    expect(
-      sortListings([dearNew, unknown, cheapOld], 'big').map((l) => l.id),
-    ).toEqual(['cheap', 'dear', 'unknown'])
+    expect(sortListings([dearNew, unknown, cheapOld], 'big').map((l) => l.id)).toEqual([
+      'cheap',
+      'dear',
+      'unknown',
+    ])
   })
   it('sorts plots with problems last', () => {
     expect(sortListings([dearNew, cheapOld], 'clean')[0].id).toBe('cheap')
@@ -119,10 +119,7 @@ describe('plots map', () => {
         resolvedLongitude: 25.1,
         resolvedPrecision: 'exact',
       })
-    const stops = plotsMapStops(
-      [located('a'), listing('nowhere', {}), located('b')],
-      ['b'],
-    )
+    const stops = plotsMapStops([located('a'), listing('nowhere', {}), located('b')], ['b'])
     expect(stops.map((stop) => stop.sourceListing.id)).toEqual(['a', 'b'])
     expect(stops.map((stop) => stop.going)).toEqual([false, true])
     expect(stops[0].location.label).toBe('a')

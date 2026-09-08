@@ -1,7 +1,4 @@
-import type {
-  CandidatePlotRecord,
-  SourceListingRecord,
-} from './source-listings/model'
+import type { CandidatePlotRecord, SourceListingRecord } from './source-listings/model'
 import type { CrimeDensity } from './external-service-client'
 import type { LivabilityResult } from './livability-service'
 import type { NoiseResult } from './noise-service'
@@ -65,10 +62,7 @@ export type AutomaticCheckServices = {
   }>
   crimeDensity?: (latitude: number, longitude: number) => Promise<CrimeDensity>
   noise?: (latitude: number, longitude: number) => Promise<NoiseResult>
-  livability?: (
-    latitude: number,
-    longitude: number,
-  ) => Promise<LivabilityResult>
+  livability?: (latitude: number, longitude: number) => Promise<LivabilityResult>
 }
 
 type Input = {
@@ -156,8 +150,7 @@ export const runAutomaticChecks = async (
           key: 'radius',
           status: distance <= 25 ? 'pass' : 'fail',
           value: `${distance.toLocaleString('lt-LT', { maximumFractionDigits: 1 })} km`,
-          detail:
-            'Straight-line distance from Vilnius center; household limit 25 km.',
+          detail: 'Straight-line distance from Vilnius center; household limit 25 km.',
         }
       })()
     : unknown('radius', 'Not available', 'Resolve the Candidate Plot location.')
@@ -176,8 +169,7 @@ export const runAutomaticChecks = async (
               ? 'pass'
               : 'unknown',
         value: purposeText,
-        detail:
-          'Classification uses the Candidate Plot purpose entered by the household.',
+        detail: 'Classification uses the Candidate Plot purpose entered by the household.',
       }
     : unknown('purpose', 'Not available', 'Enter the Candidate Plot purpose.')
   const utilityText = [
@@ -188,11 +180,8 @@ export const runAutomaticChecks = async (
     .filter(Boolean)
     .join(' ')
     .toLowerCase()
-  const cityUtilities = /vandentiek|kanaliz|miesto|centrin|komunikacij/.test(
-    utilityText,
-  )
-  const localUtilities =
-    /gręž|grezin|vietin|septik|šulin|sulin|nuotekų valymo/.test(utilityText)
+  const cityUtilities = /vandentiek|kanaliz|miesto|centrin|komunikacij/.test(utilityText)
+  const localUtilities = /gręž|grezin|vietin|septik|šulin|sulin|nuotekų valymo/.test(utilityText)
   const waterSewage: AutomaticCheck = {
     key: 'water_sewage',
     status: cityUtilities ? 'pass' : localUtilities ? 'warning' : 'unknown',
@@ -201,25 +190,19 @@ export const runAutomaticChecks = async (
       : localUtilities
         ? 'Local system mentioned'
         : 'Not stated clearly',
-    detail:
-      'Source advertisement text only; verify water and sewage independently.',
+    detail: 'Source advertisement text only; verify water and sewage independently.',
   }
   const describeFailure = (error: unknown): string => {
     if (!(error instanceof Error)) return String(error)
     const name = error.name && error.name !== 'Error' ? `${error.name}: ` : ''
     const message = error.message || 'no message'
-    const cause =
-      error.cause === undefined ? null : describeFailure(error.cause)
+    const cause = error.cause === undefined ? null : describeFailure(error.cause)
     // Skip the cause when the message already spells it out.
     const suffix = cause && !message.includes(cause) ? ` (cause: ${cause})` : ''
     return `${name}${message}${suffix}`
   }
   /** The service call was made and rejected; say exactly why. */
-  const unavailable = (
-    key: AutomaticCheckKey,
-    subject: string,
-    error: unknown,
-  ) =>
+  const unavailable = (key: AutomaticCheckKey, subject: string, error: unknown) =>
     unknown(
       key,
       'Unavailable',
@@ -253,28 +236,14 @@ export const runAutomaticChecks = async (
               : `€${estimate.feeInclVat.toLocaleString('en-US')} · Group ${estimate.group}`,
           detail: estimate.note,
         }))
-        .catch((error: unknown) =>
-          unavailable('eso_cost', 'ESO service', error),
-        )
-    : Promise.resolve(
-        unknown(
-          'eso_cost',
-          'Not available',
-          'Resolve the Candidate Plot location.',
-        ),
-      )
+        .catch((error: unknown) => unavailable('eso_cost', 'ESO service', error))
+    : Promise.resolve(unknown('eso_cost', 'Not available', 'Resolve the Candidate Plot location.'))
   const budget: Promise<AutomaticCheck> =
     plot.priceEur === null
-      ? Promise.resolve(
-          unknown('budget', 'Not available', 'Enter a Candidate Plot price.'),
-        )
+      ? Promise.resolve(unknown('budget', 'Not available', 'Enter a Candidate Plot price.'))
       : !location || !esoEstimate
         ? Promise.resolve(
-            unknown(
-              'budget',
-              'Not available',
-              'Resolve the Candidate Plot location.',
-            ),
+            unknown('budget', 'Not available', 'Resolve the Candidate Plot location.'),
           )
         : esoEstimate
             .then<AutomaticCheck>((estimate) => {
@@ -287,10 +256,7 @@ export const runAutomaticChecks = async (
               const technicalConditions = 41.89
               const internalWiring = 1_500
               const total = Math.round(
-                plot.priceEur! +
-                  estimate.feeInclVat +
-                  technicalConditions +
-                  internalWiring,
+                plot.priceEur! + estimate.feeInclVat + technicalConditions + internalWiring,
               )
               return {
                 key: 'budget',
@@ -299,9 +265,7 @@ export const runAutomaticChecks = async (
                 detail: `Plot €${plot.priceEur!.toLocaleString('en-US')} + ESO €${estimate.feeInclVat.toLocaleString('en-US')} + technical conditions €41.89 + internal wiring €1,500; household limit €65,000.`,
               }
             })
-            .catch((error: unknown) =>
-              unavailable('budget', 'ESO budget service', error),
-            )
+            .catch((error: unknown) => unavailable('budget', 'ESO budget service', error))
   const walkToStop: Promise<AutomaticCheck> = location
     ? services.walkToStop
       ? services
@@ -312,8 +276,7 @@ export const runAutomaticChecks = async (
                   key: 'walk_to_stop',
                   status: 'fail',
                   value: 'No stops nearby',
-                  detail:
-                    'No public-transport stops found within the Trafi search area.',
+                  detail: 'No public-transport stops found within the Trafi search area.',
                 }
               : {
                   key: 'walk_to_stop',
@@ -322,16 +285,10 @@ export const runAutomaticChecks = async (
                   detail: `${(result.durationSeconds / 60).toFixed(1)} min${result.distanceMeters === null ? '' : ` / ${Math.round(result.distanceMeters)} m`}; household limit 17 min.`,
                 },
           )
-          .catch((error: unknown) =>
-            unavailable('walk_to_stop', 'Trafi walking service', error),
-          )
+          .catch((error: unknown) => unavailable('walk_to_stop', 'Trafi walking service', error))
       : Promise.resolve(notConfigured('walk_to_stop', 'Trafi walking service'))
     : Promise.resolve(
-        unknown(
-          'walk_to_stop',
-          'Not available',
-          'Resolve the Candidate Plot location.',
-        ),
+        unknown('walk_to_stop', 'Not available', 'Resolve the Candidate Plot location.'),
       )
   const commute: Promise<AutomaticCheck> = location
     ? services.cityCentreCommute
@@ -352,17 +309,9 @@ export const runAutomaticChecks = async (
                   detail: `Best of ${result.routesFound} route(s) to the city centre${result.summary ? `: ${result.summary}` : ''}; arrive by ${result.arriveBy}; household limit 70 min.`,
                 },
           )
-          .catch((error: unknown) =>
-            unavailable('commute', 'Trafi route service', error),
-          )
+          .catch((error: unknown) => unavailable('commute', 'Trafi route service', error))
       : Promise.resolve(notConfigured('commute', 'Trafi route service'))
-    : Promise.resolve(
-        unknown(
-          'commute',
-          'Not available',
-          'Resolve the Candidate Plot location.',
-        ),
-      )
+    : Promise.resolve(unknown('commute', 'Not available', 'Resolve the Candidate Plot location.'))
   const crime: Promise<AutomaticCheck> = location
     ? services.crimeDensity
       ? services
@@ -379,26 +328,16 @@ export const runAutomaticChecks = async (
                   ? 'Moderate crime density; review the source map.'
                   : 'No elevated crime-density signal; rural coverage may under-report.',
           }))
-          .catch((error: unknown) =>
-            unavailable('crime', 'Crime-density service', error),
-          )
+          .catch((error: unknown) => unavailable('crime', 'Crime-density service', error))
       : Promise.resolve(notConfigured('crime', 'Crime-density service'))
-    : Promise.resolve(
-        unknown(
-          'crime',
-          'Not available',
-          'Resolve the Candidate Plot location.',
-        ),
-      )
+    : Promise.resolve(unknown('crime', 'Not available', 'Resolve the Candidate Plot location.'))
   const noise: Promise<AutomaticCheck> = location
     ? services.noise
       ? services
           .noise(location.latitude, location.longitude)
           .then<AutomaticCheck>((result) => {
             if (result.mode === 'city-band') {
-              const loudest = result.bands.find(
-                (band) => band.ldenLow === result.ldenLow,
-              )
+              const loudest = result.bands.find((band) => band.ldenLow === result.ldenLow)
               return {
                 key: 'noise',
                 status: result.ldenLow < 55 ? 'pass' : 'warning',
@@ -416,13 +355,9 @@ export const runAutomaticChecks = async (
                 key: 'noise',
                 status: 'warning',
                 value: result.sources
-                  .map(
-                    (source) =>
-                      `${source.kind} ${Math.round(source.distanceMeters)} m`,
-                  )
+                  .map((source) => `${source.kind} ${Math.round(source.distanceMeters)} m`)
                   .join(' · '),
-                detail:
-                  'Transport proximity is a noise proxy, not a measured noise level.',
+                detail: 'Transport proximity is a noise proxy, not a measured noise level.',
               }
             return {
               key: 'noise',
@@ -434,25 +369,15 @@ export const runAutomaticChecks = async (
                   : 'No nearby major transport-noise proxy found.',
             }
           })
-          .catch((error: unknown) =>
-            unavailable('noise', 'Noise service', error),
-          )
+          .catch((error: unknown) => unavailable('noise', 'Noise service', error))
       : Promise.resolve(notConfigured('noise', 'Noise service'))
-    : Promise.resolve(
-        unknown(
-          'noise',
-          'Not available',
-          'Resolve the Candidate Plot location.',
-        ),
-      )
+    : Promise.resolve(unknown('noise', 'Not available', 'Resolve the Candidate Plot location.'))
   const livability: Promise<AutomaticCheck> = location
     ? services.livability
       ? services
           .livability(location.latitude, location.longitude)
           .then<AutomaticCheck>((result) => {
-            const nearbyBad = result.badNeighbours.filter(
-              (item) => item.distanceMeters <= 500,
-            )
+            const nearbyBad = result.badNeighbours.filter((item) => item.distanceMeters <= 500)
             const remote = result.shop === null && result.school === null
             return {
               key: 'livability',
@@ -461,16 +386,10 @@ export const runAutomaticChecks = async (
               detail: `${nearbyBad.length ? `Nearby concerns: ${nearbyBad.map((item) => `${item.kind} ${item.distanceMeters} m`).join(', ')}. ` : ''}Fiber and 5G availability must be verified separately.`,
             }
           })
-          .catch((error: unknown) =>
-            unavailable('livability', 'Livability service', error),
-          )
+          .catch((error: unknown) => unavailable('livability', 'Livability service', error))
       : Promise.resolve(notConfigured('livability', 'Livability service'))
     : Promise.resolve(
-        unknown(
-          'livability',
-          'Not available',
-          'Resolve the Candidate Plot location.',
-        ),
+        unknown('livability', 'Not available', 'Resolve the Candidate Plot location.'),
       )
   const legal: Promise<AutomaticCheck> = location
     ? services
@@ -490,20 +409,12 @@ export const runAutomaticChecks = async (
               : available.length === results.length
                 ? 'No mapped flags'
                 : `${available.length} of ${results.length} checks available`,
-            detail: results
-              .map((result) => `${result.name}: ${result.detail}`)
-              .join(' · '),
+            detail: results.map((result) => `${result.name}: ${result.detail}`).join(' · '),
           }
         })
-        .catch((error: unknown) =>
-          unavailable('legal_flags', 'Legal map services', error),
-        )
+        .catch((error: unknown) => unavailable('legal_flags', 'Legal map services', error))
     : Promise.resolve(
-        unknown(
-          'legal_flags',
-          'Not available',
-          'Resolve the Candidate Plot location.',
-        ),
+        unknown('legal_flags', 'Not available', 'Resolve the Candidate Plot location.'),
       )
 
   const [
@@ -515,16 +426,7 @@ export const runAutomaticChecks = async (
     legalResult,
     noiseResult,
     livabilityResult,
-  ] = await Promise.all([
-    walkToStop,
-    commute,
-    eso,
-    budget,
-    crime,
-    legal,
-    noise,
-    livability,
-  ])
+  ] = await Promise.all([walkToStop, commute, eso, budget, crime, legal, noise, livability])
   return [
     price,
     area,

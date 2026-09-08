@@ -4,14 +4,8 @@ import type { HouseholdAccessState, HouseholdRuntimeState } from './model'
 import { createSharedRepository, synchronizeHousehold } from './synchronization'
 import type { HouseholdRoom } from './synchronization'
 import type { SourceListingRepository } from '../source-listings/indexeddb'
-import type {
-  CandidatePlotUpdate,
-  ReviewedImport,
-} from '../source-listings/model'
-import {
-  isLocationResolutionError,
-  recordedLocationClues,
-} from '../location-resolution'
+import type { CandidatePlotUpdate, ReviewedImport } from '../source-listings/model'
+import { isLocationResolutionError, recordedLocationClues } from '../location-resolution'
 import type { LocationResolver } from '../location-resolution'
 import { automaticCheckRevision, runAutomaticChecks } from '../automatic-checks'
 import type { AutomaticCheckServices } from '../automatic-checks'
@@ -42,15 +36,10 @@ export type HouseholdRuntime = {
     candidatePlotId: string,
     update: CandidatePlotUpdate,
   ) => Promise<void>
-  resolveCandidatePlotLocation: (
-    sourceListingId: string,
-    candidatePlotId: string,
-  ) => Promise<void>
+  resolveCandidatePlotLocation: (sourceListingId: string, candidatePlotId: string) => Promise<void>
   isCandidatePlotLocationRunning: (candidatePlotId: string) => boolean
   /** Human-readable trace of the latest location resolution attempt in this session. */
-  getCandidatePlotLocationDiagnostic: (
-    candidatePlotId: string,
-  ) => string | undefined
+  getCandidatePlotLocationDiagnostic: (candidatePlotId: string) => string | undefined
   runCandidatePlotAutomaticChecks: (
     sourceListingId: string,
     candidatePlotId: string,
@@ -81,10 +70,7 @@ export const createHouseholdRuntime = (dependencies: {
   now: () => number
   uuid: () => string
   eraseHousehold: (householdId: string) => Promise<void>
-  roomFactory?: (options: {
-    householdId: string
-    roomPassword: string
-  }) => HouseholdRoom
+  roomFactory?: (options: { householdId: string; roomPassword: string }) => HouseholdRoom
   invitationBaseUrl?: () => string
   locationResolver?: LocationResolver
   automaticCheckServices?: AutomaticCheckServices
@@ -103,30 +89,23 @@ export const createHouseholdRuntime = (dependencies: {
     state = next
     for (const listener of listeners) listener()
   }
-  const unsubscribeSourceListings = dependencies.sourceListings.subscribe(
-    () => {
-      lastMutationAt = Math.max(
-        lastMutationAt,
-        ...dependencies.sourceListings
-          .allRecords()
-          .map((record) => record.updatedAt),
-      )
-      for (const listener of listeners) listener()
-    },
-  )
+  const unsubscribeSourceListings = dependencies.sourceListings.subscribe(() => {
+    lastMutationAt = Math.max(
+      lastMutationAt,
+      ...dependencies.sourceListings.allRecords().map((record) => record.updatedAt),
+    )
+    for (const listener of listeners) listener()
+  })
   const unsubscribeHouseholds = dependencies.households.subscribe(() => {
     const household = dependencies.households.get()
     lastMutationAt = Math.max(
       lastMutationAt,
       ...dependencies.households.allRecords().map((record) => record.updatedAt),
     )
-    if (state.status === 'active' && household)
-      setState({ ...state, household })
+    if (state.status === 'active' && household) setState({ ...state, household })
     if (household) {
       localHouseholds = localHouseholds.map((local) =>
-        local.householdId === household.householdId
-          ? { ...local, name: household.name }
-          : local,
+        local.householdId === household.householdId ? { ...local, name: household.name } : local,
       )
     }
   })
@@ -138,12 +117,10 @@ export const createHouseholdRuntime = (dependencies: {
   let acceptingWrites = true
   let writeGeneration = 0
   const serializeWrite = <T>(write: () => Promise<T>) => {
-    if (!acceptingWrites)
-      return Promise.reject(new Error('Household is changing'))
+    if (!acceptingWrites) return Promise.reject(new Error('Household is changing'))
     const generation = writeGeneration
     const result = writes.then(() => {
-      if (generation !== writeGeneration)
-        throw new Error('Household write was cancelled')
+      if (generation !== writeGeneration) throw new Error('Household write was cancelled')
       return write()
     })
     writes = result.then(
@@ -162,9 +139,7 @@ export const createHouseholdRuntime = (dependencies: {
    * list refresh, room connection) has finished. Writes stay closed while a
    * later lifecycle is still queued behind this one.
    */
-  const settle = (
-    next: Extract<HouseholdRuntimeState, { status: 'active' | 'waiting' }>,
-  ) => {
+  const settle = (next: Extract<HouseholdRuntimeState, { status: 'active' | 'waiting' }>) => {
     acceptingWrites = pendingLifecycles <= 1
     setState(next)
   }
@@ -215,8 +190,7 @@ export const createHouseholdRuntime = (dependencies: {
   const sharedRepository = createSharedRepository({
     households: {
       ...dependencies.households,
-      applyRemote: (records) =>
-        serializeWrite(() => dependencies.households.applyRemote(records)),
+      applyRemote: (records) => serializeWrite(() => dependencies.households.applyRemote(records)),
     },
     sourceListings: {
       ...dependencies.sourceListings,
@@ -225,10 +199,7 @@ export const createHouseholdRuntime = (dependencies: {
     },
   })
   const connect = (
-    access: Extract<
-      HouseholdRuntimeState,
-      { status: 'active' | 'waiting' }
-    >['access'],
+    access: Extract<HouseholdRuntimeState, { status: 'active' | 'waiting' }>['access'],
     roomPassword: string,
   ) => {
     if (!dependencies.roomFactory) return
@@ -276,14 +247,9 @@ export const createHouseholdRuntime = (dependencies: {
       },
     })
   }
-  const activate = async (
-    access: HouseholdAccessState,
-    advanceLastOpened: boolean,
-  ) => {
+  const activate = async (access: HouseholdAccessState, advanceLastOpened: boolean) => {
     await stopAndDrain()
-    const credentials = await dependencies.credentials.derive(
-      access.invitationSecret,
-    )
+    const credentials = await dependencies.credentials.derive(access.invitationSecret)
     if (credentials.householdId !== access.householdId)
       throw new Error('Household access state is inconsistent')
     const openedAccess = advanceLastOpened
@@ -299,9 +265,7 @@ export const createHouseholdRuntime = (dependencies: {
     lastMutationAt = Math.max(
       lastMutationAt,
       household?.updatedAt ?? 0,
-      ...dependencies.sourceListings
-        .allRecords()
-        .map((record) => record.updatedAt),
+      ...dependencies.sourceListings.allRecords().map((record) => record.updatedAt),
     )
     if (!household && !openedAccess.initialized) {
       settle({
@@ -340,8 +304,7 @@ export const createHouseholdRuntime = (dependencies: {
     const expectedClues = recordedLocationClues(plot)
     const hasClue =
       Boolean(expectedClues.parcelNumberClue?.trim()) ||
-      (expectedClues.latitudeClue !== null &&
-        expectedClues.longitudeClue !== null) ||
+      (expectedClues.latitudeClue !== null && expectedClues.longitudeClue !== null) ||
       Boolean(expectedClues.addressClue?.trim())
     if (!hasClue) return
     console.info('[location] Candidate Plot retry started', {
@@ -386,16 +349,14 @@ export const createHouseholdRuntime = (dependencies: {
     } finally {
       runningLocationResolutions.delete(candidatePlotId)
       for (const listener of listeners) listener()
-      const queuedSourceListingId =
-        queuedLocationResolutions.get(candidatePlotId)
+      const queuedSourceListingId = queuedLocationResolutions.get(candidatePlotId)
       if (queuedSourceListingId) {
         queuedLocationResolutions.delete(candidatePlotId)
         queueMicrotask(
           () =>
-            void resolveCandidatePlotLocation(
-              queuedSourceListingId,
-              candidatePlotId,
-            ).catch(() => undefined),
+            void resolveCandidatePlotLocation(queuedSourceListingId, candidatePlotId).catch(
+              () => undefined,
+            ),
         )
       }
     }
@@ -411,9 +372,7 @@ export const createHouseholdRuntime = (dependencies: {
       return
     }
     const sourceListing = dependencies.sourceListings.get(sourceListingId)
-    const plot = sourceListing?.candidatePlots.find(
-      (candidate) => candidate.id === candidatePlotId,
-    )
+    const plot = sourceListing?.candidatePlots.find((candidate) => candidate.id === candidatePlotId)
     if (!sourceListing || !plot) throw new Error('Candidate Plot not found')
     const expectedRevision = automaticCheckRevision({ plot, sourceListing })
     runningAutomaticChecks.add(candidatePlotId)
@@ -441,10 +400,9 @@ export const createHouseholdRuntime = (dependencies: {
         queuedAutomaticChecks.delete(candidatePlotId)
         queueMicrotask(
           () =>
-            void runCandidatePlotAutomaticChecks(
-              queuedSourceListingId,
-              candidatePlotId,
-            ).catch(() => undefined),
+            void runCandidatePlotAutomaticChecks(queuedSourceListingId, candidatePlotId).catch(
+              () => undefined,
+            ),
         )
       }
     }
@@ -519,8 +477,7 @@ export const createHouseholdRuntime = (dependencies: {
     joinHousehold(invitationSecret) {
       return serializeLifecycle(async () => {
         try {
-          const credentials =
-            await dependencies.credentials.derive(invitationSecret)
+          const credentials = await dependencies.credentials.derive(invitationSecret)
           const existing = (await dependencies.accessStore.list()).find(
             (value) => value.householdId === credentials.householdId,
           )
@@ -571,8 +528,7 @@ export const createHouseholdRuntime = (dependencies: {
           const access = (await dependencies.accessStore.list()).find(
             (entry) => entry.householdId === householdId,
           )
-          if (!access)
-            throw new Error('Household is not available on this device')
+          if (!access) throw new Error('Household is not available on this device')
           await activate(access, true)
         } catch (error) {
           setState({
@@ -587,9 +543,7 @@ export const createHouseholdRuntime = (dependencies: {
       return serializeLifecycle(async () => {
         try {
           const entries = await dependencies.accessStore.list()
-          const removed = entries.find(
-            (entry) => entry.householdId === householdId,
-          )
+          const removed = entries.find((entry) => entry.householdId === householdId)
           if (!removed) return
           const activeHouseholdId =
             state.status === 'active' || state.status === 'waiting'
@@ -635,11 +589,7 @@ export const createHouseholdRuntime = (dependencies: {
       const updatedAt = mutationTime()
       return serializeWrite(async () => {
         if (state.status !== 'active') throw new Error('No Household is active')
-        await dependencies.households.rename(
-          state.household.id,
-          normalizedName,
-          updatedAt,
-        )
+        await dependencies.households.rename(state.household.id, normalizedName, updatedAt)
         setState({
           ...state,
           household: { ...state.household, name: normalizedName, updatedAt },
@@ -658,27 +608,19 @@ export const createHouseholdRuntime = (dependencies: {
     },
     removeImportInbox: (id) => {
       const updatedAt = mutationTime()
-      return serializeWrite(() =>
-        dependencies.sourceListings.removeImportInbox(id, updatedAt),
-      )
+      return serializeWrite(() => dependencies.sourceListings.removeImportInbox(id, updatedAt))
     },
     saveReviewedImport: (review) => {
       const updatedAt = mutationTime()
-      return serializeWrite(() =>
-        dependencies.sourceListings.saveReviewedImport(review, updatedAt),
-      )
+      return serializeWrite(() => dependencies.sourceListings.saveReviewedImport(review, updatedAt))
     },
     addCandidatePlot: (sourceListingId) =>
       serializeWrite(() =>
-        dependencies.sourceListings.addCandidatePlot(
-          sourceListingId,
-          mutationTime(),
-        ),
+        dependencies.sourceListings.addCandidatePlot(sourceListingId, mutationTime()),
       ),
     updateCandidatePlot: async (sourceListingId, candidatePlotId, update) => {
       validateCandidatePlotUpdate(update)
-      const sourceListingBefore =
-        dependencies.sourceListings.get(sourceListingId)
+      const sourceListingBefore = dependencies.sourceListings.get(sourceListingId)
       const plotBefore = sourceListingBefore?.candidatePlots.find(
         (candidate) => candidate.id === candidatePlotId,
       )
@@ -694,8 +636,7 @@ export const createHouseholdRuntime = (dependencies: {
         (plotBefore.parcelNumberClue !== update.parcelNumberClue ||
           plotBefore.latitudeClue !== update.latitudeClue ||
           plotBefore.longitudeClue !== update.longitudeClue ||
-          plotBefore.coordinateCluePrecision !==
-            update.coordinateCluePrecision ||
+          plotBefore.coordinateCluePrecision !== update.coordinateCluePrecision ||
           plotBefore.addressClue !== update.addressClue ||
           plotBefore.primaryLocationClue !== update.primaryLocationClue)
       const updatedAt = mutationTime()
@@ -707,8 +648,7 @@ export const createHouseholdRuntime = (dependencies: {
           updatedAt,
         ),
       )
-      const sourceListingAfter =
-        dependencies.sourceListings.get(sourceListingId)
+      const sourceListingAfter = dependencies.sourceListings.get(sourceListingId)
       const plotAfter = sourceListingAfter?.candidatePlots.find(
         (candidate) => candidate.id === candidatePlotId,
       )
@@ -722,20 +662,16 @@ export const createHouseholdRuntime = (dependencies: {
         }) !== revisionBefore
       const shouldReevaluate =
         revisionChanged &&
-        (plotBefore?.automaticChecks !== null ||
-          runningAutomaticChecks.has(candidatePlotId))
+        (plotBefore?.automaticChecks !== null || runningAutomaticChecks.has(candidatePlotId))
       if (!shouldReevaluate) return
       if (locationClueChanged) {
         void resolveCandidatePlotLocation(sourceListingId, candidatePlotId)
-          .then(() =>
-            runCandidatePlotAutomaticChecks(sourceListingId, candidatePlotId),
-          )
+          .then(() => runCandidatePlotAutomaticChecks(sourceListingId, candidatePlotId))
           .catch(() => undefined)
       } else {
-        void runCandidatePlotAutomaticChecks(
-          sourceListingId,
-          candidatePlotId,
-        ).catch(() => undefined)
+        void runCandidatePlotAutomaticChecks(sourceListingId, candidatePlotId).catch(
+          () => undefined,
+        )
       }
     },
     resolveCandidatePlotLocation,
@@ -756,19 +692,13 @@ export const createHouseholdRuntime = (dependencies: {
     markSourceListingVisited: (sourceListingId) => {
       const updatedAt = mutationTime()
       return serializeWrite(() =>
-        dependencies.sourceListings.markSourceListingVisited(
-          sourceListingId,
-          updatedAt,
-        ),
+        dependencies.sourceListings.markSourceListingVisited(sourceListingId, updatedAt),
       )
     },
     removeSourceListing: (sourceListingId) => {
       const updatedAt = mutationTime()
       return serializeWrite(() =>
-        dependencies.sourceListings.removeSourceListing(
-          sourceListingId,
-          updatedAt,
-        ),
+        dependencies.sourceListings.removeSourceListing(sourceListingId, updatedAt),
       )
     },
     getSourceListingRecords: () => dependencies.sourceListings.allRecords(),
@@ -810,42 +740,20 @@ const validateCandidatePlotUpdate = (update: CandidatePlotUpdate) => {
     throw new Error('Area must be a positive number')
   if ((update.latitudeClue === null) !== (update.longitudeClue === null))
     throw new Error('Latitude and longitude must be provided together')
-  if (
-    (update.latitudeClue === null) !==
-    (update.coordinateCluePrecision === null)
-  )
+  if ((update.latitudeClue === null) !== (update.coordinateCluePrecision === null))
     throw new Error('Coordinate precision must accompany coordinates')
-  if (
-    update.primaryLocationClue === 'parcel_number' &&
-    !update.parcelNumberClue?.trim()
-  )
+  if (update.primaryLocationClue === 'parcel_number' && !update.parcelNumberClue?.trim())
     throw new Error('Enter the unique parcel number to find it by')
-  if (
-    update.primaryLocationClue === 'coordinates' &&
-    update.latitudeClue === null
-  )
+  if (update.primaryLocationClue === 'coordinates' && update.latitudeClue === null)
     throw new Error('Enter the coordinates to find it by')
   if (update.primaryLocationClue === 'address' && !update.addressClue?.trim())
     throw new Error('Enter the address to find it by')
-  if (
-    update.latitudeClue !== null &&
-    (update.latitudeClue < -90 || update.latitudeClue > 90)
-  )
+  if (update.latitudeClue !== null && (update.latitudeClue < -90 || update.latitudeClue > 90))
     throw new Error('Latitude must be between -90 and 90')
-  if (
-    update.longitudeClue !== null &&
-    (update.longitudeClue < -180 || update.longitudeClue > 180)
-  )
+  if (update.longitudeClue !== null && (update.longitudeClue < -180 || update.longitudeClue > 180))
     throw new Error('Longitude must be between -180 and 180')
-  for (const rating of [
-    update.roadAccessRating,
-    update.areaFeelingRating,
-    update.viewRating,
-  ]) {
-    if (
-      rating !== null &&
-      (!Number.isInteger(rating) || rating < 1 || rating > 5)
-    )
+  for (const rating of [update.roadAccessRating, update.areaFeelingRating, update.viewRating]) {
+    if (rating !== null && (!Number.isInteger(rating) || rating < 1 || rating > 5))
       throw new Error('Manual Ratings must be whole numbers from 1 to 5')
   }
 }

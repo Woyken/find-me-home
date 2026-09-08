@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  ExternalServiceError,
-  createExternalServiceClient,
-} from './external-service-client'
+import { ExternalServiceError, createExternalServiceClient } from './external-service-client'
 
 describe('browser external-service client', () => {
   it('calls each fixed Worker operation and preserves no-result responses', async () => {
@@ -52,9 +49,7 @@ describe('browser external-service client', () => {
       majorRoadDistanceMeters: null,
     })
 
-    expect(
-      fetcher.mock.calls.map(([input]) => new URL(String(input)).pathname),
-    ).toEqual([
+    expect(fetcher.mock.calls.map(([input]) => new URL(String(input)).pathname)).toEqual([
       '/trafi/nearby-stops',
       '/trafi/walking-directions',
       '/trafi/route-search',
@@ -76,9 +71,7 @@ describe('browser external-service client', () => {
     await expect(unavailable.nearbyStops(54.7, 25.3)).rejects.toThrow(
       'External service unavailable',
     )
-    await expect(invalid.nearbyStops(54.7, 25.3)).rejects.toThrow(
-      'External service unavailable',
-    )
+    await expect(invalid.nearbyStops(54.7, 25.3)).rejects.toThrow('External service unavailable')
   })
 
   it('explains why a Worker call failed so the household can investigate', async () => {
@@ -97,13 +90,9 @@ describe('browser external-service client', () => {
 
     const plainBody = createExternalServiceClient(
       'https://worker.test',
-      vi.fn<typeof fetch>(
-        async () => new Response('Origin not allowed', { status: 403 }),
-      ),
+      vi.fn<typeof fetch>(async () => new Response('Origin not allowed', { status: 403 })),
     )
-    await expect(plainBody.crimeDensity(54.7, 25.3)).rejects.toThrow(
-      'HTTP 403: Origin not allowed',
-    )
+    await expect(plainBody.crimeDensity(54.7, 25.3)).rejects.toThrow('HTTP 403: Origin not allowed')
 
     const network = createExternalServiceClient(
       'https://worker.test',
@@ -111,9 +100,7 @@ describe('browser external-service client', () => {
         throw new TypeError('Failed to fetch')
       }),
     )
-    const networkError = await network
-      .crimeDensity(54.7, 25.3)
-      .catch((error: unknown) => error)
+    const networkError = await network.crimeDensity(54.7, 25.3).catch((error: unknown) => error)
     expect(networkError).toBeInstanceOf(ExternalServiceError)
     expect((networkError as Error).message).toContain(
       'network error (TypeError: Failed to fetch); the Worker at https://worker.test did not answer',
@@ -149,9 +136,7 @@ describe('browser external-service client', () => {
       ),
     )
 
-    await expect(network.nearbyStops(54.7, 25.3)).rejects.toThrow(
-      'External service unavailable',
-    )
+    await expect(network.nearbyStops(54.7, 25.3)).rejects.toThrow('External service unavailable')
     await expect(
       invalidRoute.searchRoutes(
         { latitude: 54.7, longitude: 25.3 },

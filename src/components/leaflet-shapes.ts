@@ -17,10 +17,7 @@ export type PlotShape = Leaflet.Layer
  */
 export const shapeLayer = (
   leaflet: typeof Leaflet,
-  item: Pick<
-    CandidatePlotMapItem,
-    'latitude' | 'longitude' | 'boundary' | 'precision'
-  >,
+  item: Pick<CandidatePlotMapItem, 'latitude' | 'longitude' | 'boundary' | 'precision'>,
   color: string,
   selected = false,
 ): PlotShape => {
@@ -51,10 +48,7 @@ export const shapeLayer = (
  */
 export const shapeBounds = (
   leaflet: typeof Leaflet,
-  item: Pick<
-    CandidatePlotMapItem,
-    'latitude' | 'longitude' | 'boundary' | 'precision'
-  >,
+  item: Pick<CandidatePlotMapItem, 'latitude' | 'longitude' | 'boundary' | 'precision'>,
 ): Leaflet.LatLngBounds => {
   if (item.boundary) {
     const feature: Feature<Polygon> = {
@@ -72,12 +66,7 @@ export const shapeBounds = (
 /** Bounds around every item, or undefined when there are none. */
 export const itemsBounds = (
   leaflet: typeof Leaflet,
-  items: Array<
-    Pick<
-      CandidatePlotMapItem,
-      'latitude' | 'longitude' | 'boundary' | 'precision'
-    >
-  >,
+  items: Array<Pick<CandidatePlotMapItem, 'latitude' | 'longitude' | 'boundary' | 'precision'>>,
 ) => {
   const bounds = leaflet.latLngBounds([])
   for (const item of items) bounds.extend(shapeBounds(leaflet, item))

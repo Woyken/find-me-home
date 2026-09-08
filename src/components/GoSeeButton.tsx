@@ -9,8 +9,7 @@ export function GoSeeButton(props: { sourceListingId: string }) {
   const household = useHousehold()
   const [busy, setBusy] = createSignal(false)
   const [error, setError] = createSignal('')
-  const going = () =>
-    household.getVisitPlan().sourceListingIds.includes(props.sourceListingId)
+  const going = () => household.getVisitPlan().sourceListingIds.includes(props.sourceListingId)
   const toggle = async () => {
     const ids = household.getVisitPlan().sourceListingIds
     setBusy(true)

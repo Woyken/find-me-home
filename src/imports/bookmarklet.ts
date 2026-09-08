@@ -19,7 +19,7 @@ export const createAruodasBookmarklet = (appUrl: string) => {
     `var a=${base};`,
     'window.__fmhAppUrl=a;',
     'var s=document.createElement("script");',
-    `s.src=a+"${aruodasBookmarkletScriptName}?t="+Date.now();`,
+    `s.src=new URL("${aruodasBookmarkletScriptName}?t="+Date.now(),a).href;`,
     's.onerror=function(){',
     'fetch(s.src).then(function(r){return r.text()}).then(function(t){(0,eval)(t)})',
     '.catch(function(e){alert("Find Me Home: could not load the import script ("+e+"). Check your connection and try again.")})',

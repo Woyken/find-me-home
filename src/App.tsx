@@ -11,14 +11,11 @@ import { ImportProvider, useImport } from './imports/context'
 import ImportReview from './routes/import-review'
 import './styles.css'
 
-export default function App(
-  props: ParentProps<{ runtime?: HouseholdRuntime }>,
-) {
-  if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-    void navigator.serviceWorker.register(
-      `${import.meta.env.BASE_URL}service-worker.js`,
-      { scope: import.meta.env.BASE_URL },
-    )
+export default function App(props: ParentProps<{ runtime?: HouseholdRuntime; e2e?: boolean }>) {
+  if (import.meta.env.PROD && !props.e2e && 'serviceWorker' in navigator) {
+    void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}service-worker.js`, {
+      scope: import.meta.env.BASE_URL,
+    })
   }
   const runtime = props.runtime ?? createBrowserHouseholdRuntime()
   return (
@@ -59,15 +56,10 @@ function HouseholdBoundary(props: ParentProps) {
           <div class="panel start center danger">
             <h2>The saved plots couldn't be opened</h2>
             <p role="alert">
-              This browser blocked the storage this app uses (often
-              private/incognito mode). Open Find Me Home in a normal window, or
-              on another device in the search.
+              This browser blocked the storage this app uses (often private/incognito mode). Open
+              Find Me Home in a normal window, or on another device in the search.
             </p>
-            <button
-              class="btn"
-              type="button"
-              onClick={() => window.location.reload()}
-            >
+            <button class="btn" type="button" onClick={() => window.location.reload()}>
               Try again
             </button>
           </div>
@@ -91,9 +83,7 @@ function HouseholdBoundary(props: ParentProps) {
           (props.children ?? (
             <Router>
               {(routerProps) => (
-                <Loading fallback={<main class="start-screen" />}>
-                  {routerProps.children}
-                </Loading>
+                <Loading fallback={<main class="start-screen" />}>{routerProps.children}</Loading>
               )}
             </Router>
           ))
