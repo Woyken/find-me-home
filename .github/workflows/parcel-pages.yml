@@ -79,6 +79,9 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm check
+      - name: Install browser for E2E Pages readiness
+        if: inputs.e2e-pages == true
+        run: pnpm exec playwright install --with-deps chromium
       - name: Refresh Registered Parcel assets
         if: github.event_name != 'push' && inputs.e2e-pages != true
         run: pnpm generate:parcels public/parcels
