@@ -51,9 +51,9 @@ const bookmarkletPlugin = (): Plugin => ({
 })
 
 export default defineConfig(({ mode }) => ({
-  // PR browser tests always run at the localhost root, even in GitHub Actions.
+  // Local browser tests run at the root; deployed E2E artifacts retain Pages scope.
   base:
-    mode === 'e2e'
+    mode === 'e2e' && process.env.VITE_E2E_PAGES !== 'true'
       ? '/'
       : process.env.GITHUB_ACTIONS === 'true'
         ? `/${process.env.GITHUB_REPOSITORY?.split('/')[1] ?? ''}/`

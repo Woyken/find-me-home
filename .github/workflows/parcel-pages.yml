@@ -6,6 +6,12 @@ on:
   schedule:
     - cron: '0 18 * * 5'
   workflow_dispatch:
+    inputs:
+      e2e-pages:
+        description: Deploy an E2E-enabled Pages artifact without touching the Worker
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -16,6 +22,7 @@ concurrency:
 
 jobs:
   deploy-worker:
+    if: inputs.e2e-pages != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +43,8 @@ jobs:
           VITE_WORKER_URL: ${{ secrets.VITE_WORKER_URL }}
 
   build-and-deploy:
-    needs: deploy-worker
+    needs: [deploy-worker]
+    if: always() && (inputs.e2e-pages == true || needs.deploy-worker.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -62,11 +70,19 @@ jobs:
         run: pnpm generate:parcels public/parcels
       - name: Validate Registered Parcel assets
         run: pnpm validate:parcels public/parcels
+      - name: Build E2E Pages artifact
+        if: inputs.e2e-pages == true
+        run: pnpm build:e2e:pages
+        env:
+          VITE_WORKER_URL: ${{ secrets.VITE_WORKER_URL }}
+          VITE_E2E_PAGES: 'true'
       - name: Build production Pages artifact
+        if: inputs.e2e-pages != true
         run: pnpm build
         env:
           VITE_WORKER_URL: ${{ secrets.VITE_WORKER_URL }}
       - name: Verify production Worker configuration
+        if: inputs.e2e-pages != true
         run: pnpm verify:worker-build dist/client
         env:
           VITE_WORKER_URL: ${{ secrets.VITE_WORKER_URL }}
@@ -78,6 +94,6 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
       - name: Smoke-test live Pages application
-        run: pnpm smoke:pages "${{ steps.deployment.outputs.page_url }}" "$VITE_WORKER_URL"
+        run: pnpm smoke:pages "${{ steps.deployment.outputs.page_url }}" "$VITE_WORKER_URL" "${{ inputs.e2e-pages && 'e2e' || '' }}"
         env:
           VITE_WORKER_URL: ${{ secrets.VITE_WORKER_URL }}
