@@ -1,3 +1,8 @@
+## General guidelines
+
+Avoid `as` type casting. Reuse types and be specific. Inferred types are best types.
+If you see messages `[STRICT_READ_UNTRACKED]` `[NO_OWNER_EFFECT]` `[REACTIVITY_HALTED]` always treat it as error. Must be fixed.
+
 ## Agent Skills
 
 ### Issue Tracker
