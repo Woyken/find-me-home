@@ -108,6 +108,95 @@ test('presents complete listing details, gallery, marked areas, edits and listin
   await expect(secondArea.getByRole('textbox', { name: 'Address' })).toHaveValue('Second field 2')
 })
 
+test('offers coordinate-only Waze and Google Maps choices in listing and area direction menus', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 700 })
+  await openSeededListing(page, {
+    id: '107',
+    title: 'Directions fixture',
+    latitude: 54.7,
+    longitude: 25.3,
+    coordinatePrecision: 'exact',
+  })
+
+  const headerDirections = page.locator('header.head').getByRole('button', { name: 'Directions' })
+  await headerDirections.click()
+  const headerPicker = page.locator('header.head').locator('.directions-menu')
+  await expect(headerPicker.getByText('Drive with Waze')).toHaveAttribute(
+    'href',
+    'https://waze.com/ul?ll=54.7,25.3&navigate=yes',
+  )
+  await expect(headerPicker.getByText('View in Google Maps')).toHaveAttribute(
+    'href',
+    'https://www.google.com/maps/search/?api=1&query=54.7,25.3',
+  )
+  await expect(headerPicker.getByText('View in Google Maps')).not.toHaveAttribute('href', /\/dir\//)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.directions-menu')).toHaveCount(0)
+
+  const areaDirections = page
+    .locator('article.area')
+    .first()
+    .getByRole('button', { name: 'Directions' })
+  await areaDirections.focus()
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Tab')
+  await expect(page.getByText('Drive with Waze')).toBeFocused()
+  await expect(page.locator('.directions-menu')).toHaveCSS('max-width', '280px')
+})
+
+test('uses the exact imported primary destination over an approximate competing marked area', async ({
+  page,
+}) => {
+  await openSeededListing(page, {
+    id: '109',
+    title: 'Directions ranking fixture',
+    latitude: 54.7,
+    longitude: 25.3,
+    coordinatePrecision: 'exact',
+  })
+  await page.getByRole('button', { name: 'Mark another area' }).click()
+  const secondArea = page.locator('article.area').nth(1)
+  await secondArea.getByLabel('Find it by').selectOption('coordinates')
+  await secondArea.getByLabel('Latitude').fill('54.8')
+  await secondArea.getByLabel('Longitude').fill('25.4')
+  await secondArea.getByLabel('How exact').selectOption('approx')
+  await secondArea.getByRole('button', { name: 'Save this area' }).click()
+  const secondDirections = secondArea.getByRole('button', { name: 'Directions' })
+  await expect(secondDirections).toBeEnabled()
+  await secondDirections.click()
+  await expect(secondArea.locator('.directions-menu').getByText('Drive with Waze')).toHaveAttribute(
+    'href',
+    'https://waze.com/ul?ll=54.8,25.4&navigate=yes',
+  )
+
+  await page.locator('header.head').getByRole('button', { name: 'Directions' }).click()
+  await expect(
+    page.locator('header.head .directions-menu').getByText('Drive with Waze'),
+  ).toHaveAttribute('href', 'https://waze.com/ul?ll=54.7,25.3&navigate=yes')
+})
+
+test('disables directions when a listing has no coordinate destination', async ({ page }) => {
+  await initializeE2ePage(page)
+  const result = await seed(page, [
+    {
+      id: '108',
+      title: 'No directions fixture',
+      latitude: null,
+      longitude: null,
+    },
+  ])
+  await page.goto(appUrl(`source-listings/${result.sourceListingIds[0]}`), {
+    waitUntil: 'domcontentloaded',
+  })
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('No directions fixture')
+  const directions = page.getByRole('button', { name: 'Directions' })
+  await expect(directions).toHaveCount(2)
+  await expect(directions.nth(0)).toBeDisabled()
+  await expect(directions.nth(1)).toBeDisabled()
+})
+
 test('validates numeric and location clue inputs at boundaries', async ({ page }) => {
   await openSeededListing(page, { id: '102', title: 'Validation fixture' })
   const area = page.locator('article.area').first()

@@ -14,7 +14,13 @@ import type { MapFocusRequest } from '../components/CandidatePlotsMap'
 import { CheckStrip, CheckSummaryText } from '../components/CheckStrip'
 import { FannedStack } from '../components/FannedStack'
 import { GoSeeButton } from '../components/GoSeeButton'
-import { CheckIcon, PinIcon } from '../components/icons'
+import { DirectionsPicker } from '../components/DirectionsPicker'
+import { CheckIcon } from '../components/icons'
+import {
+  candidatePlotDirectionsDestination,
+  sourceListingDirectionsDestination,
+  validCoordinate,
+} from '../directions'
 import { useHousehold } from '../households/context'
 import { paths, routes } from '../paths'
 import type {
@@ -154,6 +160,9 @@ export default function SourceListingPage(props: { params: Record<string, string
               </div>
             </div>
             <div>
+              <DirectionsPicker
+                destination={() => sourceListingDirectionsDestination(listing()!)}
+              />
               <GoSeeButton sourceListingId={listing()!.id} />
             </div>
           </header>
@@ -367,20 +376,7 @@ function CandidatePlotEditor(props: {
 
   const heading = () => candidatePlotName(props.plot(), props.number() - 1, props.total())
   const located = () =>
-    props.plot().resolvedLatitude !== null && props.plot().resolvedLongitude !== null
-  const directionsDestination = () => {
-    const plot = props.plot()
-    if (located()) return `${plot.resolvedLatitude},${plot.resolvedLongitude}`
-    if (plot.latitudeClue !== null && plot.longitudeClue !== null)
-      return `${plot.latitudeClue},${plot.longitudeClue}`
-    return plot.addressClue
-  }
-  const directionsUrl = () => {
-    const destination = directionsDestination()
-    return destination
-      ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`
-      : null
-  }
+    validCoordinate(props.plot().resolvedLatitude, props.plot().resolvedLongitude) !== null
   const needsLocationRetry = () =>
     props.plot().locationResolutionState !== 'resolved' ||
     ((props.plot().latitudeClue !== null || props.plot().longitudeClue !== null) &&
@@ -495,11 +491,7 @@ function CandidatePlotEditor(props: {
               REGIA
             </a>
           </Show>
-          <Show when={directionsUrl()}>
-            <a class="btn ghost sm" href={directionsUrl() ?? ''} target="_blank" rel="noreferrer">
-              <PinIcon /> Directions
-            </a>
-          </Show>
+          <DirectionsPicker destination={() => candidatePlotDirectionsDestination(props.plot())} />
           <Show when={located()}>
             <button class="btn ghost sm" type="button" onClick={props.onShowOnMap}>
               Show on map

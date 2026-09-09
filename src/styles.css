@@ -692,6 +692,32 @@
     width: auto;
     min-width: 0;
   }
+  .directions-picker {
+    position: relative;
+    display: inline-block;
+  }
+  .directions-menu {
+    position: absolute;
+    z-index: 10;
+    right: 0;
+    top: calc(100% + 4px);
+    display: grid;
+    min-width: max-content;
+    max-width: min(280px, calc(100vw - 40px));
+    padding: 4px;
+    border: 2px solid var(--ink);
+    background: var(--white);
+    box-shadow: 3px 3px 0 var(--line);
+  }
+  .directions-menu a {
+    padding: 9px 10px;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+  }
+  .directions-menu a:hover,
+  .directions-menu a:focus-visible {
+    background: var(--blue-soft);
+  }
   .seg {
     display: inline-flex;
     border: 2px solid var(--ink);
