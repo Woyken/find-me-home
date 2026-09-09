@@ -417,6 +417,90 @@ describe('Household runtime', () => {
     }
   })
 
+  it('propagates a joined peer Visit Plan reorder after initial synchronization', async () => {
+    const prefix = `joined-plan-reorder-${crypto.randomUUID()}`
+    databasePrefixes.push(prefix)
+    const network = createInMemoryRoomNetwork()
+    let uuid = 0
+    const replayJoins = new Map<string, (peerId: string) => void>()
+    const joinedPeers = new Map<string, string>()
+    const createRuntime = (device: string) =>
+      createBrowserHouseholdRuntime({
+        accessDatabaseName: `${prefix}-${device}-access`,
+        sharedDatabasePrefix: `${prefix}-${device}`,
+        crypto,
+        now: () => 10_000,
+        uuid: () => `${device}-${++uuid}`,
+        roomFactory: (options) => {
+          const room = network(options)
+          const onPeerJoin = room.onPeerJoin.bind(room)
+          room.onPeerJoin = (listener) => {
+            const trackPeer = (peerId: string) => {
+              joinedPeers.set(device, peerId)
+              listener(peerId)
+            }
+            replayJoins.set(device, trackPeer)
+            return onPeerJoin(trackPeer)
+          }
+          return room
+        },
+      })
+    const origin = createRuntime('origin')
+    const joined = createRuntime('joined')
+    const review = (sourceId: string, listingId: string) => ({
+      imported: parseAruodasImport({
+        url: `https://www.aruodas.lt/sklypai-vilniuje-${sourceId}-${listingId}/`,
+        title: `Shared ${sourceId}`,
+        photos: [],
+        features: [],
+      }),
+      priceEur: null,
+      areaAres: null,
+      purposeText: null,
+      notes: null,
+      parcelNumberClue: null,
+      latitudeClue: null,
+      longitudeClue: null,
+      coordinateCluePrecision: null,
+      addressClue: null,
+    })
+    try {
+      await origin.start()
+      await origin.createHousehold()
+      const first = await origin.saveReviewedImport(review('first-e2e', '3-3'))
+      const second = await origin.saveReviewedImport(review('second-e2e', '5-5'))
+      await origin.setVisitPlan([first.sourceListingId, second.sourceListingId])
+      const state = origin.state()
+      if (state.status !== 'active') throw new Error('Household was not active')
+
+      await joined.joinHousehold(state.access.invitationSecret)
+      await waitFor(() => joined.getVisitPlan().sourceListingIds.length === 2)
+      expect(joined.getVisitPlan().sourceListingIds).toEqual([
+        first.sourceListingId,
+        second.sourceListingId,
+      ])
+
+      const originPeerId = joinedPeers.get('joined')
+      if (!originPeerId) throw new Error('Origin peer did not join')
+      replayJoins.get('joined')?.(originPeerId)
+
+      await joined.setVisitPlan([second.sourceListingId, first.sourceListingId])
+
+      await waitFor(
+        () =>
+          origin.getVisitPlan().sourceListingIds.join(',') ===
+          [second.sourceListingId, first.sourceListingId].join(','),
+      )
+      expect(origin.getVisitPlan().sourceListingIds).toEqual([
+        second.sourceListingId,
+        first.sourceListingId,
+      ])
+    } finally {
+      origin.dispose()
+      joined.dispose()
+    }
+  })
+
   it('converges three independently edited runtimes to the newest complete record', async () => {
     const prefix = `multi-peer-${crypto.randomUUID()}`
     databasePrefixes.push(prefix)

@@ -298,8 +298,10 @@ export const synchronizeHousehold = (options: {
   }
   const unsubs = [
     options.room.onPeerJoin((peerId) => {
-      peers.set(peerId, { pending: null, pendingAcknowledgements: new Map(), compatible: false })
-      updateStatus()
+      if (!peers.has(peerId)) {
+        peers.set(peerId, { pending: null, pendingAcknowledgements: new Map(), compatible: false })
+        updateStatus()
+      }
       options.room.sendManifest(makeManifest(options.repository.allRecords()), peerId)
     }),
     options.room.onPeerLeave((peerId) => {
@@ -342,7 +344,8 @@ export const synchronizeHousehold = (options: {
         return
       }
       const local = makeManifest(options.repository.allRecords())
-      const previousPeer = peers.get(peerId)
+      const peer = peers.get(peerId)
+      if (!peer) return
       const request: RecordKey[] = []
       const send: SharedRecord[] = []
       for (const type of types) {
@@ -355,17 +358,10 @@ export const synchronizeHousehold = (options: {
           .filter((candidate) => candidate.type === type))
           if (record.record.updatedAt > (remoteSection[record.record.id] ?? -1)) send.push(record)
       }
-      peers.set(peerId, {
-        pending: new Map(
-          request.map((key) => [
-            `${key.type}:${key.id}`,
-            (manifest.output[key.type] ?? {})[key.id],
-          ]),
-        ),
-        pendingAcknowledgements: previousPeer?.pendingAcknowledgements ?? new Map(),
-        compatible: true,
-        warning: previousPeer?.warning,
-      })
+      peer.pending = new Map(
+        request.map((key) => [`${key.type}:${key.id}`, (manifest.output[key.type] ?? {})[key.id]]),
+      )
+      peer.compatible = true
       updateWarning()
       if (request.length)
         options.room.sendRequest({ requestId: requestId(), records: request }, peerId)

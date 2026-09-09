@@ -562,6 +562,138 @@ describe('Household synchronization', () => {
     ])
   })
 
+  it('resends its manifest when a peer reannounces before the handshake completes', () => {
+    let current = household(10)
+    const { room, listeners, sent } = createRoom()
+    synchronizeHousehold({
+      householdId: 'household-id',
+      room,
+      repository: {
+        allRecords: () => [current],
+        applyRemote: async () => [],
+        subscribeLocalMutations: () => () => undefined,
+      },
+      onStatus: () => undefined,
+      onInitialSync: async () => undefined,
+      onError: () => undefined,
+    })
+
+    listeners.join('peer')
+    current = household(20)
+    listeners.join('peer')
+
+    expect(sent.manifests).toEqual([
+      expect.objectContaining({
+        peerId: 'peer',
+        value: expect.objectContaining({ household: { 'household-record': 10 } }),
+      }),
+      expect.objectContaining({
+        peerId: 'peer',
+        value: expect.objectContaining({ household: { 'household-record': 20 } }),
+      }),
+    ])
+  })
+
+  it('preserves a reconciled peer when it reannounces and propagates later mutations', () => {
+    const statuses: string[] = []
+    let publishLocal!: (records: SharedRecord[]) => void
+    const { room, listeners, sent } = createRoom()
+    synchronizeHousehold({
+      householdId: 'household-id',
+      room,
+      repository: {
+        allRecords: () => [household(10)],
+        applyRemote: async () => [],
+        subscribeLocalMutations(listener) {
+          publishLocal = listener
+          return () => undefined
+        },
+      },
+      onStatus: (status) => statuses.push(status),
+      onInitialSync: async () => undefined,
+      onError: () => undefined,
+    })
+
+    listeners.join('peer')
+    listeners.manifest(
+      {
+        protocolVersion: 2,
+        household: { 'household-record': 10 },
+        'source-listing': {},
+        'candidate-plot': {},
+        'visit-plan': {},
+        'import-inbox': {},
+      },
+      'peer',
+    )
+    listeners.join('peer')
+    publishLocal([household(20)])
+    const requestId = sent.records.at(-1)?.value.requestId
+    if (!requestId) throw new Error('Expected the reannounced peer to receive a mutation')
+    listeners.acknowledgement({ requestId, accepted: true }, 'peer')
+
+    expect(sent.manifests).toHaveLength(2)
+    expect(sent.records.at(-1)).toEqual(
+      expect.objectContaining({
+        peerId: 'peer',
+        value: expect.objectContaining({ records: [household(20)] }),
+      }),
+    )
+    expect(statuses.at(-1)).toBe('connected')
+  })
+
+  it('retains acknowledgement state when a compatible manifest is replayed after a duplicate join', () => {
+    vi.useFakeTimers()
+    const statuses: string[] = []
+    const warnings: unknown[] = []
+    let publishLocal!: (records: SharedRecord[]) => void
+    const { room, listeners, sent } = createRoom()
+    const stop = synchronizeHousehold({
+      householdId: 'household-id',
+      room,
+      repository: {
+        allRecords: () => [],
+        applyRemote: async () => [],
+        subscribeLocalMutations(listener) {
+          publishLocal = listener
+          return () => undefined
+        },
+      },
+      onStatus: (status) => statuses.push(status),
+      onInitialSync: async () => undefined,
+      onWarning: (warning) => warnings.push(warning),
+      onError: () => undefined,
+    })
+    const manifest = {
+      protocolVersion: 2,
+      household: {},
+      'source-listing': {},
+      'candidate-plot': {},
+      'visit-plan': {},
+      'import-inbox': {},
+    }
+
+    listeners.join('peer')
+    listeners.manifest(manifest, 'peer')
+    publishLocal([household(20)])
+    const acknowledgedRequestId = sent.records.at(-1)!.value.requestId
+    listeners.join('peer')
+    listeners.manifest(manifest, 'peer')
+    listeners.acknowledgement({ requestId: acknowledgedRequestId, accepted: true }, 'peer')
+
+    expect(statuses.at(-1)).toBe('connected')
+
+    publishLocal([household(30)])
+    listeners.join('peer')
+    listeners.manifest(manifest, 'peer')
+    vi.advanceTimersByTime(10_000)
+
+    expect(statuses.at(-1)).toBe('syncing')
+    expect(warnings.at(-1)).toBe('synchronization')
+    void stop()
+    vi.useRealTimers()
+  })
+
   it('broadcasts local mutations once and does not echo remote winners', async () => {
     let publishLocal!: (records: SharedRecord[]) => void
     const applyRemote = vi.fn(async (records: SharedRecord[]) => records)
