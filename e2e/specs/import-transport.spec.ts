@@ -77,10 +77,8 @@ test('moves favorites to the IndexedDB inbox, then returns after saving an adver
   await inbox.openAdvert()
   await page.waitForURL(/https:\/\/www\.aruodas\.lt\/11-424242\/#find-me-home-return/)
   await runAddPlotDialogBookmarklet(page, href, await actualBookmarkletSource(page))
-  const review = new ImportReviewPage(page)
-  await review.expectListing('11-424242')
-  await review.save()
-  await expect(page).toHaveURL(/\/import-inbox$/)
+  await expect(page).toHaveURL(/\/source-listings\//)
+  await page.goto(appUrl('import-inbox'))
   await inbox.expectClippings(1)
 })
 

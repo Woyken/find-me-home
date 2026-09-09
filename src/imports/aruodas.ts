@@ -116,6 +116,91 @@ export type ImportTransport =
       unreadable: number
     }
 
+const storedAruodasImportSchema = v.strictObject({
+  source: v.literal('aruodas'),
+  sourceId: v.string(),
+  url: v.string(),
+  title: optionalText,
+  address: optionalText,
+  priceEur: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(100_000_000))),
+  areaAres: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(100_000))),
+  purposeText: optionalText,
+  uniqueRegistryNumber: v.optional(v.pipe(v.string(), v.regex(/^\d{4}-\d{4}-\d{4}$/))),
+  lat: v.optional(v.pipe(v.number(), v.minValue(53.5), v.maxValue(56))),
+  lng: v.optional(v.pipe(v.number(), v.minValue(23), v.maxValue(27))),
+  locationConfidence: v.picklist(['exact', 'approx', 'unknown']),
+  description: optionalText,
+  photos: v.pipe(v.array(photo), v.maxLength(50, 'Import photos are limited to 50')),
+  utilities: v.optional(
+    v.strictObject({
+      electricity: optionalText,
+      water: optionalText,
+      sewage: optionalText,
+      gas: optionalText,
+    }),
+  ),
+  raw: v.strictObject({
+    importedBy: v.literal('aruodas-bookmarklet'),
+    features: v.pipe(v.array(v.pipe(v.string(), v.maxLength(500))), v.maxLength(100)),
+  }),
+})
+
+const storedImportTransportSchema = v.variant('kind', [
+  v.strictObject({
+    kind: v.literal('listing'),
+    imported: storedAruodasImportSchema,
+    returnTo: v.optional(v.literal('import-inbox')),
+  }),
+  v.strictObject({
+    kind: v.literal('favorites'),
+    items: v.array(storedAruodasImportSchema),
+    skippedNonLand: v.pipe(v.number(), v.integer(), v.minValue(0)),
+    skippedInactive: v.pipe(v.number(), v.integer(), v.minValue(0)),
+    unreadable: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  }),
+])
+
+const restoreStoredAruodasImport = (stored: v.InferOutput<typeof storedAruodasImportSchema>) =>
+  parseAruodasImport({
+    url: stored.url,
+    title: stored.title,
+    address: stored.address,
+    priceEur: stored.priceEur,
+    areaAres: stored.areaAres,
+    purposeText: stored.purposeText,
+    uniqueRegistryNumber: stored.uniqueRegistryNumber,
+    lat: stored.lat,
+    lng: stored.lng,
+    locationConfidence: stored.locationConfidence,
+    description: stored.description,
+    photos: stored.photos,
+    features: stored.raw.features,
+    utilities: stored.utilities,
+  })
+
+/** Revalidates persisted drafts before they can be resumed or automatically saved. */
+export const restoreImportTransport = (input: unknown): ImportTransport => {
+  const legacy = v.safeParse(storedAruodasImportSchema, input)
+  if (legacy.success) {
+    return { kind: 'listing', imported: restoreStoredAruodasImport(legacy.output) }
+  }
+  const stored = v.parse(storedImportTransportSchema, input)
+  if (stored.kind === 'listing') {
+    return {
+      kind: 'listing',
+      imported: restoreStoredAruodasImport(stored.imported),
+      ...(stored.returnTo ? { returnTo: stored.returnTo } : {}),
+    }
+  }
+  return {
+    kind: 'favorites',
+    items: stored.items.map(restoreStoredAruodasImport),
+    skippedNonLand: stored.skippedNonLand,
+    skippedInactive: stored.skippedInactive,
+    unreadable: stored.unreadable,
+  }
+}
+
 export const parseAruodasImport = (input: unknown): AruodasImport => {
   const payload = v.parse(payloadSchema, input)
   const url = new URL(payload.url)

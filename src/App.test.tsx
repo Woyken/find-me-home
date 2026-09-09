@@ -695,6 +695,233 @@ describe('App Household boundary', () => {
     expect(sessionStorage.getItem('find-me-home-import-draft')).toContain('Žemųjų Rusokų sklypas')
   })
 
+  it('automatically saves a priced Aruodas listing and opens the saved listing', async () => {
+    const fragment = encodeImportFragment({
+      url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-upes-g-sklypas-11-1472707/',
+      title: 'Žemųjų Rusokų sklypas',
+      priceEur: 55_000,
+      photos: [],
+      features: [],
+    })
+    const runtime = createTestRuntime()
+    const save = vi.fn(async () => ({
+      sourceListingId: 'saved-listing-id',
+      candidatePlotId: 'plot-id',
+      created: true,
+    }))
+    runtime.start = runtime.createHousehold
+    runtime.saveReviewedImport = save
+    history.replaceState(null, '', `/#import=${fragment}`)
+
+    mountRouter(runtime)
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imported: expect.objectContaining({ sourceId: '11-1472707', priceEur: 55_000 }),
+        priceEur: 55_000,
+        areaAres: null,
+        purposeText: null,
+        notes: null,
+      }),
+    )
+    expect(sessionStorage.getItem('find-me-home-import-draft')).toBeNull()
+  })
+
+  it('keeps an Aruodas listing for review when its price is missing', async () => {
+    const fragment = encodeImportFragment({
+      url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-upes-g-sklypas-11-1472707/',
+      title: 'Žemųjų Rusokų sklypas',
+      photos: [],
+      features: [],
+    })
+    const runtime = createTestRuntime()
+    const save = vi.fn(async () => ({
+      sourceListingId: 'saved-listing-id',
+      candidatePlotId: 'plot-id',
+      created: true,
+    }))
+    runtime.start = runtime.createHousehold
+    runtime.saveReviewedImport = save
+    history.replaceState(null, '', `/#import=${fragment}`)
+
+    mountRouter(runtime)
+
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('Check what we found, then save'),
+    )
+    expect(save).not.toHaveBeenCalled()
+    expect(sessionStorage.getItem('find-me-home-import-draft')).toContain('Žemųjų Rusokų sklypas')
+  })
+
+  it('keeps the review open with the save error when automatic import fails', async () => {
+    const fragment = encodeImportFragment({
+      url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-upes-g-sklypas-11-1472707/',
+      title: 'Žemųjų Rusokų sklypas',
+      priceEur: 55_000,
+      photos: [],
+      features: [],
+    })
+    const runtime = createTestRuntime()
+    let attempts = 0
+    const save = vi.fn(async () => {
+      attempts += 1
+      if (attempts === 1) throw new Error('Could not save the listing')
+      return {
+        sourceListingId: 'saved-listing-id',
+        candidatePlotId: 'plot-id',
+        created: true,
+      }
+    })
+    runtime.start = runtime.createHousehold
+    runtime.saveReviewedImport = save
+    history.replaceState(null, '', `/#import=${fragment}`)
+
+    mountRouter(runtime)
+
+    await waitFor(() => expect(document.body.textContent).toContain('Could not save the listing'))
+    expect(save).toHaveBeenCalledTimes(1)
+    expect(sessionStorage.getItem('find-me-home-import-draft')).toContain('Žemųjų Rusokų sklypas')
+
+    findButton('Save plot')?.click()
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(sessionStorage.getItem('find-me-home-import-draft')).toBeNull())
+  })
+
+  it('shows a recoverable error instead of restoring an invalid persisted import', async () => {
+    sessionStorage.setItem(
+      'find-me-home-import-draft',
+      JSON.stringify({ kind: 'listing', imported: { source: 'aruodas' } }),
+    )
+    const runtime = createTestRuntime()
+    runtime.start = runtime.createHousehold
+    const save = vi.fn()
+    runtime.saveReviewedImport = save
+
+    mountRouter(runtime)
+
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('This saved import could not be read.'),
+    )
+    expect(save).not.toHaveBeenCalled()
+    expect(sessionStorage.getItem('find-me-home-import-draft')).toBeNull()
+  })
+
+  it('does not duplicate or redirect an automatic save after its view is disposed', async () => {
+    const fragment = encodeImportFragment({
+      url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-upes-g-sklypas-11-1472707/',
+      title: 'Žemųjų Rusokų sklypas',
+      priceEur: 55_000,
+      photos: [],
+      features: [],
+    })
+    let resolveSave:
+      | ((result: { sourceListingId: string; candidatePlotId: string; created: boolean }) => void)
+      | undefined
+    const runtime = createTestRuntime()
+    const save = vi.fn(
+      () =>
+        new Promise<{
+          sourceListingId: string
+          candidatePlotId: string
+          created: boolean
+        }>((resolve) => {
+          resolveSave = resolve
+        }),
+    )
+    runtime.start = runtime.createHousehold
+    runtime.saveReviewedImport = save
+    history.replaceState(null, '', `/#import=${fragment}`)
+
+    mountRouter(runtime)
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    location.hash = `import=${fragment}`
+    await new Promise((resolve) => setTimeout(resolve))
+    expect(save).toHaveBeenCalledTimes(1)
+    dispose?.()
+    resolveSave?.({
+      sourceListingId: 'saved-listing-id',
+      candidatePlotId: 'plot-id',
+      created: true,
+    })
+    await new Promise((resolve) => setTimeout(resolve))
+    expect(sessionStorage.getItem('find-me-home-import-draft')).toContain('Žemųjų Rusokų sklypas')
+  })
+
+  it('retires a deferred automatic save when an unpriced draft replaces it', async () => {
+    const first = encodeImportFragment({
+      url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-first-11-1472707/',
+      priceEur: 55_000,
+      photos: [],
+      features: [],
+    })
+    const second = encodeImportFragment({
+      url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-second-11-1472708/',
+      photos: [],
+      features: [],
+    })
+    let resolveSave:
+      | ((result: { sourceListingId: string; candidatePlotId: string; created: boolean }) => void)
+      | undefined
+    const runtime = createTestRuntime()
+    const save = vi.fn(
+      () =>
+        new Promise<{
+          sourceListingId: string
+          candidatePlotId: string
+          created: boolean
+        }>((resolve) => {
+          resolveSave = resolve
+        }),
+    )
+    runtime.start = runtime.createHousehold
+    runtime.saveReviewedImport = save
+    history.replaceState(null, '', `/#import=${first}`)
+    mountRouter(runtime)
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    location.hash = `import=${second}`
+    await waitFor(() => expect(findButton('Save plot')?.disabled).toBe(false))
+    expect(document.querySelector<HTMLInputElement>('input[aria-label="Price"]')?.value).toBe('')
+    resolveSave?.({ sourceListingId: 'first-id', candidatePlotId: 'plot-id', created: true })
+    await new Promise((resolve) => setTimeout(resolve))
+    expect(save).toHaveBeenCalledTimes(1)
+    expect(sessionStorage.getItem('find-me-home-import-draft')).toContain('11-1472708')
+  })
+
+  it('automatically saves a corrected fresh draft for the same Aruodas advert', async () => {
+    const first = encodeImportFragment({
+      url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-upes-g-sklypas-11-1472707/',
+      priceEur: 55_000,
+      photos: [],
+      features: [],
+    })
+    const corrected = encodeImportFragment({
+      url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-upes-g-sklypas-11-1472707/',
+      priceEur: 60_000,
+      photos: [],
+      features: [],
+    })
+    let attempts = 0
+    const runtime = createTestRuntime()
+    const save = vi.fn(async () => {
+      attempts += 1
+      if (attempts === 1) throw new Error('Temporary save failure')
+      return { sourceListingId: 'saved-listing-id', candidatePlotId: 'plot-id', created: true }
+    })
+    runtime.start = runtime.createHousehold
+    runtime.saveReviewedImport = save
+    history.replaceState(null, '', `/#import=${first}`)
+    mountRouter(runtime)
+
+    await waitFor(() => expect(document.body.textContent).toContain('Temporary save failure'))
+    location.hash = `import=${corrected}`
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+    expect(save).toHaveBeenLastCalledWith(expect.objectContaining({ priceEur: 60_000 }))
+  })
+
   it('captures an import fragment added after the application has started', async () => {
     const fragment = encodeImportFragment({
       url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-upes-g-sklypas-11-1472707/',
