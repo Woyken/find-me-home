@@ -2,10 +2,12 @@ import {
   For,
   Show,
   action,
+  affects,
   createEffect,
   createMemo,
   createOptimistic,
   createSignal,
+  isPending,
   untrack,
 } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
@@ -55,7 +57,6 @@ export default function SourceListingPage(props: { params: Record<string, string
   let focusNonce = 0
   const [photoIndex, setPhotoIndex] = createSignal(0)
   const [error, setError] = createSignal('')
-  const [busy, setBusy] = createSignal(false)
   const positionedPlots = createMemo(() => {
     const current = listing()
     return current ? sourceListingMapItems(current) : []
@@ -83,32 +84,45 @@ export default function SourceListingPage(props: { params: Record<string, string
     scrollTo('bigmap')
   }
 
-  const run = async (operation: () => Promise<void>) => {
-    setBusy(true)
+  const addPlot = action(function* () {
+    affects(listing)
     setError('')
     try {
-      await operation()
-    } catch (caught) {
-      setError(errorMessage(caught))
-    } finally {
-      setBusy(false)
-    }
-  }
-  const addPlot = () =>
-    run(async () => {
       const current = listing()
       if (!current) return
-      const id = await household.addCandidatePlot(current.id)
+      const id = yield household.addCandidatePlot(current.id)
       setSelectedPlotId(id)
       scrollTo(`area-${id}`)
-    })
-  const completeVisit = () =>
-    run(async () => {
+    } catch (caught) {
+      setError(errorMessage(caught))
+      throw caught
+    }
+  })
+  const completeVisit = action(function* () {
+    affects(listing)
+    setError('')
+    try {
       const current = listing()
       if (!current) return
-      await household.markSourceListingVisited(current.id)
+      yield household.markSourceListingVisited(current.id)
       navigate(routes.visitPlan)
-    })
+    } catch (caught) {
+      setError(errorMessage(caught))
+      throw caught
+    }
+  })
+  const removeListing = action(function* (id: string) {
+    affects(listing)
+    setError('')
+    try {
+      yield household.removeSourceListing(id)
+      navigate(routes.home)
+    } catch (caught) {
+      setError(errorMessage(caught))
+      throw caught
+    }
+  })
+  const busy = () => isPending(listing)
   const remove = () => {
     const current = listing()
     if (!current) return
@@ -118,10 +132,7 @@ export default function SourceListingPage(props: { params: Record<string, string
       )
     )
       return
-    void run(async () => {
-      await household.removeSourceListing(current.id)
-      navigate(routes.home)
-    })
+    void removeListing(current.id).catch(() => undefined)
   }
 
   return (
@@ -203,7 +214,7 @@ export default function SourceListingPage(props: { params: Record<string, string
                   class="btn stake ghost"
                   type="button"
                   disabled={busy()}
-                  onClick={() => void addPlot()}
+                  onClick={() => void addPlot().catch(() => undefined)}
                 >
                   + Mark another area
                 </button>
@@ -216,7 +227,7 @@ export default function SourceListingPage(props: { params: Record<string, string
               <For each={listing()?.candidatePlots ?? []} keyed={(plot) => plot.id}>
                 {(plot, index) => (
                   <CandidatePlotEditor
-                    plot={() => plot()}
+                    plot={plot}
                     sourceListing={listing}
                     importedAddress={() => listing()?.address ?? null}
                     number={() => index() + 1}
@@ -298,7 +309,7 @@ export default function SourceListingPage(props: { params: Record<string, string
                   class="btn stake wide"
                   type="button"
                   disabled={busy()}
-                  onClick={() => void completeVisit()}
+                  onClick={() => void completeVisit().catch(() => undefined)}
                 >
                   <CheckIcon /> Mark as visited
                 </button>
@@ -446,10 +457,11 @@ function CandidatePlotEditor(props: {
     },
   )
 
-  const save = async () => {
-    setStatus({ text: 'Saving…', bad: false })
+  const save = action(function* () {
+    affects(props.plot)
+    setStatus(undefined)
     try {
-      await props.onSave({
+      yield props.onSave({
         name: optionalText(name()),
         priceEur: optionalNumber(price()),
         areaAres: optionalNumber(area()),
@@ -465,8 +477,10 @@ function CandidatePlotEditor(props: {
       setStatus({ text: 'Saved', bad: false })
     } catch (caught) {
       setStatus({ text: errorMessage(caught), bad: true })
+      throw caught
     }
-  }
+  })
+  const saving = () => isPending(props.plot)
 
   return (
     <article
@@ -508,7 +522,7 @@ function CandidatePlotEditor(props: {
               class="btn blue sm"
               type="button"
               disabled={household.isCandidatePlotLocationRunning(props.plot().id)}
-              onClick={() => void resolveLocation()}
+              onClick={() => void resolveLocation()?.catch(() => undefined)}
             >
               {household.isCandidatePlotLocationRunning(props.plot().id)
                 ? 'Looking up…'
@@ -557,7 +571,7 @@ function CandidatePlotEditor(props: {
             class="btn ghost sm"
             type="button"
             disabled={household.isCandidatePlotAutomaticChecksRunning(props.plot().id)}
-            onClick={() => void runAutomaticChecks()}
+            onClick={() => void runAutomaticChecks().catch(() => undefined)}
           >
             {household.isCandidatePlotAutomaticChecksRunning(props.plot().id)
               ? 'Checking…'
@@ -675,15 +689,29 @@ function CandidatePlotEditor(props: {
       </section>
 
       <div class="rowline" style={{ 'margin-top': '16px' }}>
-        <button class="btn" type="button" onClick={() => void save()}>
+        <button
+          class="btn"
+          type="button"
+          disabled={saving()}
+          onClick={() => void save().catch(() => undefined)}
+        >
           Save this area
         </button>
-        <Show when={status()}>
-          {(current) => (
-            <span class={`status-text ${current().bad ? 'bad' : ''}`} role="status">
-              {current().text}
-            </span>
-          )}
+        <Show
+          when={saving()}
+          fallback={
+            <Show when={status()}>
+              {(current) => (
+                <span class={`status-text ${current().bad ? 'bad' : ''}`} role="status">
+                  {current().text}
+                </span>
+              )}
+            </Show>
+          }
+        >
+          <span class="status-text" role="status">
+            Saving…
+          </span>
         </Show>
       </div>
     </article>

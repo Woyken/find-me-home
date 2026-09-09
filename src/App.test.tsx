@@ -287,7 +287,14 @@ describe('App Household boundary', () => {
     findButton('Look up again')?.click()
     await waitFor(() => expect(runtime.resolveCandidatePlotLocation).toHaveBeenCalledTimes(2))
 
-    const updateCandidatePlot = vi.spyOn(runtime, 'updateCandidatePlot')
+    let rejectSave: ((error: Error) => void) | undefined
+    const updateCandidatePlot = vi.fn(
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectSave = reject
+        }),
+    )
+    runtime.updateCandidatePlot = updateCandidatePlot
     const clueKind = document.querySelector<HTMLSelectElement>('select[name="clue-kind"]')
     if (!clueKind) throw new Error('Location hint selector is missing')
     clueKind.value = 'address'
@@ -314,6 +321,34 @@ describe('App Household boundary', () => {
         }),
       ),
     )
+    const saveButtons = () =>
+      [...document.querySelectorAll<HTMLButtonElement>('button')].filter(
+        (button) => button.textContent.trim() === 'Save this area',
+      )
+    await waitFor(() => {
+      expect(saveButtons()[0].disabled).toBe(true)
+      expect(document.querySelector('article.area .status-text')?.textContent).toContain('Saving')
+    })
+    listing = {
+      ...listing,
+      candidatePlots: [
+        ...listing.candidatePlots,
+        { ...listing.candidatePlots[0], id: 'second-plot-id', importKey: null },
+      ],
+    }
+    await runtime.renameActiveHousehold('A second area arrived')
+    await waitFor(() => {
+      expect(saveButtons()).toHaveLength(2)
+      expect(saveButtons()[0].disabled).toBe(true)
+      expect(saveButtons()[1].disabled).toBe(false)
+    })
+    rejectSave?.(new Error('Could not save area'))
+    await waitFor(() => {
+      expect(saveButtons()[0].disabled).toBe(false)
+      expect(document.querySelector('article.area .status-text')?.textContent).toContain(
+        'Could not save area',
+      )
+    })
 
     listing = {
       ...listing,
@@ -954,6 +989,38 @@ describe('App Household boundary', () => {
 
     await waitFor(() => expect(document.body.textContent).toContain('Our home search'))
     expect(document.body.textContent).toContain('Existing product flows')
+  })
+
+  it('shares pending lifecycle state between create and join, then recovers from an error', async () => {
+    const runtime = createTestRuntime()
+    const createHousehold = runtime.createHousehold
+    let rejectCreate: ((error: Error) => void) | undefined
+    runtime.createHousehold = vi.fn(
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectCreate = reject
+        }),
+    )
+    mount(runtime)
+
+    await waitFor(() => expect(findButton('Start a search')).toBeTruthy())
+    findButton('Start a search')?.click()
+    await waitFor(() => {
+      expect(findButton('Creating…')?.disabled).toBe(true)
+      expect(findButton('Join')?.disabled).toBe(true)
+    })
+    rejectCreate?.(new Error('Could not create search'))
+    await waitFor(() => {
+      expect(findButton('Start a search')?.disabled).toBe(false)
+      expect(findButton('Join')?.disabled).toBe(false)
+      expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+        'Could not create search',
+      )
+    })
+
+    runtime.createHousehold = createHousehold
+    findButton('Start a search')?.click()
+    await waitFor(() => expect(document.body.textContent).toContain('Existing product flows'))
   })
 
   it('renames the active search through the runtime', async () => {
