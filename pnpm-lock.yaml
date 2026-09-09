@@ -123,13 +123,13 @@ importers:
         version: 0.8.7(typescript@7.0.2)
       '@types/proj4':
         specifier: ^2.5.6
-        version: 2.5.6
+        version: 2.19.0
       leaflet:
         specifier: ^1.9.4
         version: 1.9.4
       proj4:
         specifier: ^2.20.9
-        version: 2.20.9
+        version: 2.22.0
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
@@ -1389,8 +1389,9 @@ packages:
   '@types/node@26.4.1':
     resolution: {integrity: sha512-k97ENvZWtvA6yqz5/FS6a7duDgOPEeOQOc2iKS/nY6mX6qJUKtLnWzQS+Xj6tXweyj6ZcTAK2Qecetnvi9nCLA==}
 
-  '@types/proj4@2.5.6':
-    resolution: {integrity: sha512-zfMrPy9fx+8DchqM0kIUGeu2tTVB5ApO1KGAYcSGFS8GoqRIkyL41xq2yCx/iV3sOLzo7v4hEgViSLTiPI1L0w==}
+  '@types/proj4@2.19.0':
+    resolution: {integrity: sha512-mirdnXu5sW9+IphQ4r+ZVii2JVLDbXgMp1lxqbiCppdgL22EwMwL4Dy/cyHVaJ2y/mi7LUQHghpILd3w3j2bnA==}
+    deprecated: This is a stub types definition. proj4 provides its own type definitions, so you do not need this installed.
 
   '@types/qrcode@1.5.6':
     resolution: {integrity: sha512-te7NQcV2BOvdj2b1hCAHzAoMNuj65kNBMz0KBaxM6c3VGBOhU0dURQKOtH8CFNI/dsKkwlv32p26qYQTWoB5bw==}
@@ -1977,8 +1978,8 @@ packages:
     resolution: {integrity: sha512-Qb1gy5OrP5+zDf2Bvnzdl3jsTf1qXVMazbvCoKhtKqVs4/YK4ozX4gKQJJVyNe+cajNPn0KoC0MC3FUmaHWEmQ==}
     engines: {node: ^10.13.0 || ^12.13.0 || ^14.15.0 || >=15.0.0}
 
-  proj4@2.20.9:
-    resolution: {integrity: sha512-GLBGqXaTcdWnppre3o1sMmy4DcMGSGq/ng+9k2MTNddarRK6SveINqlqYzi3xEXuy06ljY1TTrC6H9C4f360IQ==}
+  proj4@2.22.0:
+    resolution: {integrity: sha512-MVvH09QrYm3A235rcX39WDiCKanrBiblu28l0KYIn/B2DofmYhvP/LLS43kE66jNDfx/P1l/nah3JmsAq8UgbQ==}
     peerDependencies:
       geotiff: '*'
     peerDependenciesMeta:
@@ -3218,7 +3219,11 @@ snapshots:
     dependencies:
       undici-types: 8.3.0
 
-  '@types/proj4@2.5.6': {}
+  '@types/proj4@2.19.0':
+    dependencies:
+      proj4: 2.22.0
+    transitivePeerDependencies:
+      - geotiff
 
   '@types/qrcode@1.5.6':
     dependencies:
@@ -3710,7 +3715,7 @@ snapshots:
       ansi-styles: 5.2.0
       react-is: 17.0.2
 
-  proj4@2.20.9:
+  proj4@2.22.0:
     dependencies:
       mgrs: 1.0.0
       wkt-parser: 1.5.5
