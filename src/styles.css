@@ -1315,6 +1315,12 @@
   .aside-p.first {
     margin-top: 0;
   }
+  .listing-removal {
+    margin-top: 14px;
+  }
+  .listing-removal-bottom {
+    display: none;
+  }
 
   /* ---------- going to see ---------- */
   .trip-head {
@@ -1784,6 +1790,13 @@
     }
     .cols aside {
       order: -1;
+    }
+    .listing-removal-aside {
+      display: none;
+    }
+    .listing-removal-bottom {
+      display: block;
+      margin-top: 26px;
     }
   }
   @media (max-width: 760px) {

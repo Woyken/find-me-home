@@ -318,6 +318,31 @@ test('removes a listing and restores the saved area when the advert is saved aga
   ).toHaveAttribute('aria-pressed', 'true')
 })
 
+test('keeps removal in the aside on desktop and after marked areas on mobile', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await openSeededListing(page, { id: '110', title: 'Removal placement fixture' })
+
+  const asideRemoval = page.locator('.listing-removal-aside')
+  const bottomRemoval = page.locator('.listing-removal-bottom')
+  await expect(asideRemoval).toBeVisible()
+  await expect(bottomRemoval).toBeHidden()
+  await expect(page.locator('aside .listing-removal-aside')).toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Remove plot' })).toHaveCount(1)
+
+  await page.setViewportSize({ width: 375, height: 700 })
+  await expect(asideRemoval).toBeHidden()
+  await expect(bottomRemoval).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Remove plot' })).toHaveCount(1)
+  expect(
+    await bottomRemoval.evaluate((removal) => {
+      const lastArea = document.querySelector('article.area:last-of-type')
+      return lastArea
+        ? Boolean(lastArea.compareDocumentPosition(removal) & Node.DOCUMENT_POSITION_FOLLOWING)
+        : false
+    }),
+  ).toBe(true)
+})
+
 test('saves listing ratings immediately without saving an area and shares them across areas', async ({
   page,
 }) => {
