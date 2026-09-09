@@ -36,6 +36,10 @@ export type HouseholdRuntime = {
     candidatePlotId: string,
     update: CandidatePlotUpdate,
   ) => Promise<void>
+  updateSourceListingRatings: (
+    sourceListingId: string,
+    ratings: Parameters<SourceListingRepository['updateSourceListingRatings']>[1],
+  ) => Promise<void>
   resolveCandidatePlotLocation: (sourceListingId: string, candidatePlotId: string) => Promise<void>
   isCandidatePlotLocationRunning: (candidatePlotId: string) => boolean
   /** Human-readable trace of the latest location resolution attempt in this session. */
@@ -236,6 +240,21 @@ export const createHouseholdRuntime = (dependencies: {
           household,
           roomPassword: state.roomPassword,
           syncStatus,
+        })
+      },
+      onWarning(warning) {
+        if (!isCurrent() || state.status !== 'active') return
+        if (!warning) {
+          const { syncWarning: _, ...next } = state
+          setState(next)
+          return
+        }
+        setState({
+          ...state,
+          syncWarning:
+            warning === 'refresh'
+              ? 'A newer version is available. Refresh to sync.'
+              : 'Synchronization needs an app refresh to continue.',
         })
       },
       onError(error) {
@@ -674,6 +693,23 @@ export const createHouseholdRuntime = (dependencies: {
         )
       }
     },
+    updateSourceListingRatings: (sourceListingId, ratings) => {
+      for (const rating of [
+        ratings.roadAccessRating,
+        ratings.areaFeelingRating,
+        ratings.viewRating,
+      ]) {
+        if (rating !== null && (!Number.isInteger(rating) || rating < 1 || rating > 5))
+          throw new Error('Manual Ratings must be whole numbers from 1 to 5')
+      }
+      return serializeWrite(() =>
+        dependencies.sourceListings.updateSourceListingRatings(
+          sourceListingId,
+          ratings,
+          mutationTime(),
+        ),
+      )
+    },
     resolveCandidatePlotLocation,
     isCandidatePlotLocationRunning: (candidatePlotId) =>
       runningLocationResolutions.has(candidatePlotId),
@@ -752,8 +788,4 @@ const validateCandidatePlotUpdate = (update: CandidatePlotUpdate) => {
     throw new Error('Latitude must be between -90 and 90')
   if (update.longitudeClue !== null && (update.longitudeClue < -180 || update.longitudeClue > 180))
     throw new Error('Longitude must be between -180 and 180')
-  for (const rating of [update.roadAccessRating, update.areaFeelingRating, update.viewRating]) {
-    if (rating !== null && (!Number.isInteger(rating) || rating < 1 || rating > 5))
-      throw new Error('Manual Ratings must be whole numbers from 1 to 5')
-  }
 }

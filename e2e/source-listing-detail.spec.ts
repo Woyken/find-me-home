@@ -24,12 +24,28 @@ const openSeededListing = async (page: Page, listing: E2eListingSeed) => {
     listing.title ?? `E2E plot ${listing.id}`,
   )
   await expect(page.locator('.check').filter({ hasText: 'Noise' })).toContainText('Quiet')
+  return result
 }
 
-test('presents complete listing details, gallery, marked areas, edits and ratings', async ({
+const waitForRating = async (
+  page: Page,
+  sourceListingId: string,
+  ratingField: 'roadAccessRating' | 'areaFeelingRating' | 'viewRating',
+  value: number,
+) =>
+  expect
+    .poll(() =>
+      page.evaluate(
+        (input) => window.__FMH_E2E__?.getSourceListingRatings(input.id)?.[input.ratingField],
+        { id: sourceListingId, ratingField },
+      ),
+    )
+    .toBe(value)
+
+test('presents complete listing details, gallery, marked areas, edits and listing ratings', async ({
   page,
 }) => {
-  await openSeededListing(page, {
+  const result = await openSeededListing(page, {
     id: '101',
     title: 'Complete fixture',
     address: 'Fixture road 1',
@@ -64,16 +80,23 @@ test('presents complete listing details, gallery, marked areas, edits and rating
   await area.getByLabel('Area (ares)').fill('12,5')
   await area.getByLabel('Land purpose').fill('Namų valda')
   await area.getByLabel('Our notes').fill('Sunny after lunch')
-  await area
+  const ratings = page.getByRole('region', { name: 'Our ratings' })
+  await ratings
     .getByRole('group', { name: 'Road & access' })
     .getByRole('button', { name: '4 of 5' })
     .click()
-  await area
+  await waitForRating(page, result.sourceListingIds[0], 'roadAccessRating', 4)
+  await ratings
     .getByRole('group', { name: 'Feel of the area' })
     .getByRole('button', { name: '3 of 5' })
     .click()
-  await area.getByRole('group', { name: 'View' }).getByRole('button', { name: '5 of 5' }).click()
+  await waitForRating(page, result.sourceListingIds[0], 'areaFeelingRating', 3)
+  await ratings.getByRole('group', { name: 'View' }).getByRole('button', { name: '5 of 5' }).click()
+  await waitForRating(page, result.sourceListingIds[0], 'viewRating', 5)
   await area.getByRole('button', { name: 'Save this area' }).click()
+  await expect(area.getByLabel('Price (€)')).toHaveValue('40500,5')
+  await expect(area.locator('.status-text[role="status"]')).toHaveText('Saved')
+  await page.reload()
   await expect(area.getByLabel('Price (€)')).toHaveValue('40500.5')
 
   await page.getByRole('button', { name: 'Mark another area' }).click()
@@ -149,7 +172,7 @@ test('supports map controls and visit-plan transitions', async ({ page, context 
     longitude: 25.3,
     accuracy: 20,
   })
-  await openSeededListing(page, { id: '104', title: 'Map and visit fixture' })
+  const result = await openSeededListing(page, { id: '104', title: 'Map and visit fixture' })
   const area = page.locator('article.area').first()
   await expect(page.getByLabel('Map of the marked areas')).toBeVisible()
   await area.getByRole('button', { name: 'Show on map' }).click()
@@ -160,7 +183,9 @@ test('supports map controls and visit-plan transitions', async ({ page, context 
   await page.getByRole('button', { name: 'Exit full screen' }).click()
 
   await page.getByRole('button', { name: 'Go see it' }).click()
-  await expect(page.getByRole('button', { name: 'Going to see' })).toBeVisible()
+  await expect
+    .poll(() => page.evaluate(() => window.__FMH_E2E__?.getVisitPlanSourceListingIds()))
+    .toEqual(result.sourceListingIds)
   await page.getByRole('button', { name: 'Mark as visited' }).click()
   await expect(page).toHaveURL(/visit-plan/)
   await expect(page.getByRole('heading', { name: 'No visits planned yet' })).toBeVisible()
@@ -170,10 +195,15 @@ test('removes a listing and restores the saved area when the advert is saved aga
   page,
 }) => {
   const listing = { id: '105', title: 'Restore fixture' }
-  await openSeededListing(page, listing)
+  const result = await openSeededListing(page, listing)
   const area = page.locator('article.area').first()
   await area.getByLabel('Name for this area').fill('Keep this note')
-  await area.getByRole('group', { name: 'View' }).getByRole('button', { name: '4 of 5' }).click()
+  await page
+    .getByRole('region', { name: 'Our ratings' })
+    .getByRole('group', { name: 'View' })
+    .getByRole('button', { name: '4 of 5' })
+    .click()
+  await waitForRating(page, result.sourceListingIds[0], 'viewRating', 4)
   await area.getByRole('button', { name: 'Save this area' }).click()
   await expect(area.getByLabel('Name for this area')).toHaveValue('Keep this note')
 
@@ -192,6 +222,33 @@ test('removes a listing and restores the saved area when the advert is saved aga
   const restoredArea = page.locator('article.area').first()
   await expect(restoredArea.getByLabel('Name for this area')).toHaveValue('Keep this note')
   await expect(
-    restoredArea.getByRole('group', { name: 'View' }).getByRole('button', { name: '4 of 5' }),
+    page
+      .getByRole('region', { name: 'Our ratings' })
+      .getByRole('group', { name: 'View' })
+      .getByRole('button', { name: '4 of 5' }),
+  ).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('saves listing ratings immediately without saving an area and shares them across areas', async ({
+  page,
+}) => {
+  const result = await openSeededListing(page, { id: '106', title: 'Listing ratings fixture' })
+  const ratings = page.getByRole('region', { name: 'Our ratings' })
+  await ratings
+    .getByRole('group', { name: 'Road & access' })
+    .getByRole('button', { name: '4 of 5' })
+    .click()
+  await waitForRating(page, result.sourceListingIds[0], 'roadAccessRating', 4)
+  await expect(
+    ratings.getByRole('group', { name: 'Road & access' }).getByRole('button', { name: '4 of 5' }),
+  ).toHaveAttribute('aria-pressed', 'true')
+  await page.getByRole('button', { name: 'Mark another area' }).click()
+  await expect(page.locator('article.area')).toHaveCount(2)
+  await page.reload()
+  await expect(
+    page
+      .getByRole('region', { name: 'Our ratings' })
+      .getByRole('group', { name: 'Road & access' })
+      .getByRole('button', { name: '4 of 5' }),
   ).toHaveAttribute('aria-pressed', 'true')
 })

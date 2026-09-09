@@ -1,4 +1,13 @@
-import { For, Show, createMemo, createSignal } from 'solid-js'
+import {
+  For,
+  Show,
+  action,
+  affects,
+  createMemo,
+  createOptimistic,
+  createSignal,
+  isPending,
+} from 'solid-js'
 import { CheckStrip } from '../components/CheckStrip'
 import { FannedStack } from '../components/FannedStack'
 import { HouseholdHeader } from '../components/HouseholdHeader'
@@ -28,37 +37,42 @@ export const routeUrl = (listings: Array<SourceListingDetail>) => {
 
 export default function VisitPlanPage() {
   const household = useHousehold()
-  const [busy, setBusy] = createSignal(false)
   const [error, setError] = createSignal('')
   const [view, setView] = createSignal<'list' | 'map'>('list')
-  const plan = createMemo(() => household.getVisitPlan())
+  const [plan, setPlan] = createOptimistic(() => household.getVisitPlan().sourceListingIds, {
+    loadingValue: [],
+  })
   const listings = createMemo(() =>
-    plan().sourceListingIds.flatMap((id) => {
+    plan().flatMap((id) => {
       const listing = household.getSourceListing(id)
       return listing ? [listing] : []
     }),
   )
-  const replacePlan = async (ids: Array<string>) => {
-    setBusy(true)
+  const replacePlan = action(function* (ids: Array<string>) {
+    affects(plan)
     setError('')
+    setPlan(ids)
     try {
-      await household.setVisitPlan(ids)
+      yield household.setVisitPlan(ids)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
-    } finally {
-      setBusy(false)
+      throw caught
     }
-  }
+  })
+  const busy = () => isPending(plan)
   const move = (id: string, offset: -1 | 1) => {
-    const index = plan().sourceListingIds.indexOf(id)
+    if (busy()) return
+    const index = plan().indexOf(id)
     const destination = index + offset
-    if (index < 0 || destination < 0 || destination >= plan().sourceListingIds.length) return
-    const ids = [...plan().sourceListingIds]
+    if (index < 0 || destination < 0 || destination >= plan().length) return
+    const ids = [...plan()]
     ;[ids[index], ids[destination]] = [ids[destination], ids[index]]
-    void replacePlan(ids)
+    void replacePlan(ids).catch(() => undefined)
   }
-  const drop = (id: string) =>
-    void replacePlan(plan().sourceListingIds.filter((other) => other !== id))
+  const drop = (id: string) => {
+    if (busy()) return
+    void replacePlan(plan().filter((other) => other !== id)).catch(() => undefined)
+  }
 
   const stop = (listing: SourceListingDetail, index: number, compact: boolean) => {
     const plot = listing.candidatePlots[0] as
@@ -103,10 +117,7 @@ export default function VisitPlanPage() {
             class="iconbtn"
             type="button"
             aria-label={`Move ${title} down`}
-            disabled={
-              busy() ||
-              plan().sourceListingIds.indexOf(listing.id) === plan().sourceListingIds.length - 1
-            }
+            disabled={busy() || plan().indexOf(listing.id) === plan().length - 1}
             onClick={() => move(listing.id, 1)}
           >
             <DownIcon />

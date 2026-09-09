@@ -1,4 +1,4 @@
-import { createSignal } from 'solid-js'
+import { createOptimistic, createSignal } from 'solid-js'
 import { useHousehold } from '../households/context'
 import { formatAgo } from '../format'
 import { paths } from '../paths'
@@ -22,19 +22,22 @@ export function HouseholdHeader(props: { active?: 'plots' | 'trip' }) {
     return state.status === 'active' ? state : undefined
   }
   const name = () => active()?.household.name ?? ''
+  const [displayName, setDisplayName] = createOptimistic(name, { loadingValue: '' })
   const sync = () => active()?.syncStatus ?? 'alone'
+  const syncWarning = () => active()?.syncWarning
   const plotCount = () => household.listSourceListings().length
   const tripCount = () => household.getVisitPlan().sourceListingIds.length
 
   return (
     <header class="top">
       <div>
-        <h1>{name()}</h1>
+        <h1>{displayName()}</h1>
         <div class="sub">
           <span class={`dot ${sync()}`} aria-hidden="true" />
           <span>{syncText[sync()]}</span>
           <span aria-hidden="true">·</span>
           <span>Last change {formatAgo(household.getLastChangeAt())}</span>
+          {syncWarning() && <span role="status">{syncWarning()}</span>}
           <button class="linkbtn" type="button" onClick={() => setSettings(true)}>
             Our search settings
           </button>
@@ -59,7 +62,12 @@ export function HouseholdHeader(props: { active?: 'plots' | 'trip' }) {
           + Add a plot
         </button>
       </nav>
-      <SearchSettingsDialog open={settings()} onClose={() => setSettings(false)} />
+      <SearchSettingsDialog
+        open={settings()}
+        onClose={() => setSettings(false)}
+        displayName={displayName}
+        setDisplayName={setDisplayName}
+      />
     </header>
   )
 }

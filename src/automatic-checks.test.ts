@@ -16,6 +16,9 @@ const sourceListing = {
   utilities: {},
   raw: { importedBy: 'aruodas-bookmarklet', features: [] },
   visitedAt: null,
+  roadAccessRating: null,
+  areaFeelingRating: null,
+  viewRating: null,
   updatedAt: 1,
 } as SourceListingRecord
 
@@ -34,9 +37,6 @@ const plot = {
   longitudeClue: 25.3,
   coordinateCluePrecision: 'exact',
   addressClue: null,
-  roadAccessRating: null,
-  areaFeelingRating: null,
-  viewRating: null,
   resolvedLatitude: 54.7,
   resolvedLongitude: 25.3,
   resolvedAddress: null,

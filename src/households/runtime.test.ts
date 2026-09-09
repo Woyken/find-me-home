@@ -1,9 +1,13 @@
 import 'fake-indexeddb/auto'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createBrowserHouseholdRuntime } from './browser-runtime'
 import { createHouseholdRuntime } from './runtime'
 import { parseAruodasImport } from '../imports/aruodas'
 import { createInMemoryRoomNetwork } from './in-memory-room'
+import {
+  createIndexedDbHouseholdAccessStore,
+  createIndexedDbHouseholdRepository,
+} from './indexeddb'
 import type { ResolvedLocationData } from '../source-listings/model'
 import type { AutomaticCheckServices } from '../automatic-checks'
 
@@ -38,6 +42,83 @@ afterEach(async () => {
 })
 
 describe('Household runtime', () => {
+  it('ignores malformed persisted Household Access records and validates writes', async () => {
+    const name = `access-${crypto.randomUUID()}`
+    databasePrefixes.push(name)
+    const store = createIndexedDbHouseholdAccessStore(name)
+    await store.put({
+      householdId: 'valid-household',
+      invitationSecret: 'secret',
+      initialized: true,
+      lastOpenedAt: 10,
+    })
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(name)
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const transaction = database.transaction('household-access', 'readwrite')
+    transaction.objectStore('household-access').put({ householdId: 'invalid-household' })
+    await new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+    })
+    database.close()
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    await expect(store.list()).resolves.toEqual([
+      {
+        householdId: 'valid-household',
+        invitationSecret: 'secret',
+        initialized: true,
+        lastOpenedAt: 10,
+      },
+    ])
+    expect(warning).toHaveBeenCalledWith(
+      'Ignoring invalid Household Access record',
+      expect.anything(),
+    )
+    await expect(
+      store.put({
+        householdId: 'invalid',
+        invitationSecret: 'secret',
+        initialized: true,
+        lastOpenedAt: NaN,
+      }),
+    ).rejects.toThrow()
+    warning.mockRestore()
+    store.close()
+  })
+
+  it('warns safely when getStored ignores an invalid Household record', async () => {
+    const prefix = `invalid-stored-household-${crypto.randomUUID()}`
+    databasePrefixes.push(prefix)
+    const repository = createIndexedDbHouseholdRepository(prefix)
+    await repository.open('household-a')
+    repository.close()
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(`${prefix}-household-a`)
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const transaction = database.transaction('households', 'readwrite')
+    transaction.objectStore('households').put({ id: 'bad-household', householdId: 'household-a' })
+    await new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+    })
+    database.close()
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    await expect(repository.getStored('household-a')).resolves.toBeUndefined()
+    expect(warning).toHaveBeenCalledWith('Ignoring invalid Household record', {
+      id: 'bad-household',
+      issues: expect.any(Array),
+    })
+    warning.mockRestore()
+    repository.close()
+  })
+
   it('runs independent Automatic Checks and stores completed results on the Candidate Plot', async () => {
     const prefix = `automatic-checks-${crypto.randomUUID()}`
     databasePrefixes.push(prefix)
@@ -179,9 +260,6 @@ describe('Household runtime', () => {
         coordinateCluePrecision: plot.coordinateCluePrecision,
         addressClue: plot.addressClue,
         primaryLocationClue: plot.primaryLocationClue,
-        roadAccessRating: plot.roadAccessRating,
-        areaFeelingRating: plot.areaFeelingRating,
-        viewRating: plot.viewRating,
       })
       finishEso?.({
         distanceM: 50,
@@ -339,6 +417,90 @@ describe('Household runtime', () => {
     }
   })
 
+  it('propagates a joined peer Visit Plan reorder after initial synchronization', async () => {
+    const prefix = `joined-plan-reorder-${crypto.randomUUID()}`
+    databasePrefixes.push(prefix)
+    const network = createInMemoryRoomNetwork()
+    let uuid = 0
+    const replayJoins = new Map<string, (peerId: string) => void>()
+    const joinedPeers = new Map<string, string>()
+    const createRuntime = (device: string) =>
+      createBrowserHouseholdRuntime({
+        accessDatabaseName: `${prefix}-${device}-access`,
+        sharedDatabasePrefix: `${prefix}-${device}`,
+        crypto,
+        now: () => 10_000,
+        uuid: () => `${device}-${++uuid}`,
+        roomFactory: (options) => {
+          const room = network(options)
+          const onPeerJoin = room.onPeerJoin.bind(room)
+          room.onPeerJoin = (listener) => {
+            const trackPeer = (peerId: string) => {
+              joinedPeers.set(device, peerId)
+              listener(peerId)
+            }
+            replayJoins.set(device, trackPeer)
+            return onPeerJoin(trackPeer)
+          }
+          return room
+        },
+      })
+    const origin = createRuntime('origin')
+    const joined = createRuntime('joined')
+    const review = (sourceId: string, listingId: string) => ({
+      imported: parseAruodasImport({
+        url: `https://www.aruodas.lt/sklypai-vilniuje-${sourceId}-${listingId}/`,
+        title: `Shared ${sourceId}`,
+        photos: [],
+        features: [],
+      }),
+      priceEur: null,
+      areaAres: null,
+      purposeText: null,
+      notes: null,
+      parcelNumberClue: null,
+      latitudeClue: null,
+      longitudeClue: null,
+      coordinateCluePrecision: null,
+      addressClue: null,
+    })
+    try {
+      await origin.start()
+      await origin.createHousehold()
+      const first = await origin.saveReviewedImport(review('first-e2e', '3-3'))
+      const second = await origin.saveReviewedImport(review('second-e2e', '5-5'))
+      await origin.setVisitPlan([first.sourceListingId, second.sourceListingId])
+      const state = origin.state()
+      if (state.status !== 'active') throw new Error('Household was not active')
+
+      await joined.joinHousehold(state.access.invitationSecret)
+      await waitFor(() => joined.getVisitPlan().sourceListingIds.length === 2)
+      expect(joined.getVisitPlan().sourceListingIds).toEqual([
+        first.sourceListingId,
+        second.sourceListingId,
+      ])
+
+      const originPeerId = joinedPeers.get('joined')
+      if (!originPeerId) throw new Error('Origin peer did not join')
+      replayJoins.get('joined')?.(originPeerId)
+
+      await joined.setVisitPlan([second.sourceListingId, first.sourceListingId])
+
+      await waitFor(
+        () =>
+          origin.getVisitPlan().sourceListingIds.join(',') ===
+          [second.sourceListingId, first.sourceListingId].join(','),
+      )
+      expect(origin.getVisitPlan().sourceListingIds).toEqual([
+        second.sourceListingId,
+        first.sourceListingId,
+      ])
+    } finally {
+      origin.dispose()
+      joined.dispose()
+    }
+  })
+
   it('converges three independently edited runtimes to the newest complete record', async () => {
     const prefix = `multi-peer-${crypto.randomUUID()}`
     databasePrefixes.push(prefix)
@@ -491,7 +653,10 @@ describe('Household runtime', () => {
 
   it('isolates Household rooms and keeps invalid remote records out of storage', async () => {
     const roomFactory = createInMemoryRoomNetwork()
-    const records: Parameters<ReturnType<typeof roomFactory>['sendRecords']>[0] = []
+    const records: Parameters<ReturnType<typeof roomFactory>['sendRecords']>[0] = {
+      requestId: 'test',
+      records: [],
+    }
     const first = roomFactory({
       householdId: 'household-a',
       roomPassword: 'password-a',
@@ -530,17 +695,20 @@ describe('Household runtime', () => {
         householdId: state.access.householdId,
         roomPassword: state.roomPassword,
       })
-      attacker.sendRecords([
-        {
-          type: 'household',
-          record: {
-            id: 'foreign',
-            householdId: 'foreign-household',
-            name: 'Injected',
-            updatedAt: 99,
+      attacker.sendRecords({
+        requestId: 'invalid',
+        records: [
+          {
+            type: 'household',
+            record: {
+              id: 'foreign',
+              householdId: 'foreign-household',
+              name: 'Injected',
+              updatedAt: 99,
+            },
           },
-        },
-      ])
+        ],
+      })
       await new Promise((resolve) => setTimeout(resolve, 10))
       expect(runtime.listSourceListings()).toEqual(before)
       expect(runtime.state()).toMatchObject({
@@ -760,9 +928,6 @@ describe('Household runtime', () => {
         coordinateCluePrecision: null,
         addressClue: null,
         primaryLocationClue: null,
-        roadAccessRating: 4,
-        areaFeelingRating: 5,
-        viewRating: 3,
       })
       await runtime.setVisitPlan([first.sourceListingId])
 
@@ -775,9 +940,6 @@ describe('Household runtime', () => {
         purposeText: 'Home construction',
         notes: 'Good access',
         parcelNumberClue: '4400-1234-5678',
-        roadAccessRating: 4,
-        areaFeelingRating: 5,
-        viewRating: 3,
       })
       expect(edited?.updatedAt).toBe(1_001)
       expect(edited?.candidatePlots[0]?.updatedAt).toBe(1_001)
@@ -898,9 +1060,6 @@ describe('Household runtime', () => {
         coordinateCluePrecision: null,
         addressClue: 'New address 2',
         primaryLocationClue: null,
-        roadAccessRating: current.roadAccessRating,
-        areaFeelingRating: current.areaFeelingRating,
-        viewRating: current.viewRating,
       })
       completeResolution({
         resolvedLatitude: 54.7,
@@ -1217,6 +1376,7 @@ describe('Household runtime', () => {
         updateCandidatePlot: async () => {
           throw new Error('Not used')
         },
+        updateSourceListingRatings: async () => undefined,
         applyCandidatePlotResolution: async () => false,
         applyCandidatePlotAutomaticChecks: async () => false,
         getVisitPlan: () => ({

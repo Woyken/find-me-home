@@ -71,8 +71,9 @@ weighted score or rank.
 _Avoid_: Score, verdict, requirement
 
 **Manual Rating**:
-The household's optional five-star judgment of one aspect of a Candidate Plot:
-road/access, area feeling, or view.
+The household's optional five-star judgment of one aspect of a Source Listing:
+road/access, area feeling, or view. It summarizes the advertised place as a
+whole, even when the Source Listing offers several Candidate Plots.
 _Avoid_: Automatic Check, Visit rating
 
 **Visit**:

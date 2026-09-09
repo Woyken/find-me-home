@@ -1,4 +1,15 @@
-import { For, Show, createEffect, createMemo, createSignal, onSettled } from 'solid-js'
+import {
+  For,
+  Show,
+  action,
+  affects,
+  createEffect,
+  createMemo,
+  createOptimisticStore,
+  createSignal,
+  isPending,
+  onSettled,
+} from 'solid-js'
 import { CheckIcon } from '../components/icons'
 import { useHousehold } from '../households/context'
 import type { ImportInboxRecord } from '../imports/inbox-model'
@@ -33,11 +44,10 @@ export const reconcileDeckOrder = (order: Array<string>, ids: Array<string>) => 
 export default function ImportInboxPage() {
   const household = useHousehold()
   const imports = useImport()
-  const items = createMemo(() => household.listImportInbox())
+  const [items, setItems] = createOptimisticStore(() => household.listImportInbox(), [])
   const [order, setOrder] = createSignal<Array<string>>([])
   const [captured, setCaptured] = createSignal<Captured>()
   const [error, setError] = createSignal('')
-  const [busy, setBusy] = createSignal(false)
 
   onSettled(() => {
     document.body.classList.add('blotter')
@@ -45,14 +55,14 @@ export default function ImportInboxPage() {
   })
 
   createEffect(
-    () => items().map((item) => item.id),
+    () => items.map((item) => item.id),
     (ids) => {
       setOrder((current) => reconcileDeckOrder(current, ids))
     },
   )
 
   const deck = createMemo(() => {
-    const byId = new Map(items().map((item) => [item.id, item]))
+    const byId = new Map(items.map((item) => [item.id, item]))
     return order().flatMap((id) => {
       const item = byId.get(id)
       return item ? [item] : []
@@ -115,17 +125,18 @@ export default function ImportInboxPage() {
     setOrder((current) => (current.length > 1 ? [...current.slice(1), current[0]] : current))
   const bring = (id: string) =>
     setOrder((current) => [id, ...current.filter((other) => other !== id)])
-  const drop = async (id: string) => {
-    setBusy(true)
+  const drop = action(function* (id: string) {
+    affects(items)
     setError('')
+    setItems((current) => current.filter((item) => item.id !== id))
     try {
-      await household.removeImportInbox(id)
+      yield household.removeImportInbox(id)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
-    } finally {
-      setBusy(false)
+      throw caught
     }
-  }
+  })
+  const busy = () => isPending(() => items.map((item) => item.id))
 
   return (
     <main class="wrap narrow">
@@ -196,7 +207,7 @@ export default function ImportInboxPage() {
                     <>
                       <h2 style={{ 'margin-top': '14px' }}>Your favourites did not come through</h2>
                       <p class="muted" style={{ 'max-width': '44ch', margin: '8px auto 18px' }}>
-                        {pile()!.items.length} clippings from Aruodas are still waiting to be
+                        {pile()?.items.length ?? 0} clippings from Aruodas are still waiting to be
                         brought over. Try again, or reload this page.
                       </p>
                       <button class="btn" type="button" disabled={capturing()} onClick={retry}>
@@ -207,7 +218,8 @@ export default function ImportInboxPage() {
                 >
                   <h2 style={{ 'margin-top': '14px' }}>Bringing over your Aruodas favourites…</h2>
                   <p class="muted" style={{ 'max-width': '44ch', margin: '8px auto 18px' }}>
-                    {pile()!.items.length} clippings are on their way. This only takes a moment.
+                    {pile()?.items.length ?? 0} clippings are on their way. This only takes a
+                    moment.
                   </p>
                 </Show>
               </div>
@@ -229,62 +241,65 @@ export default function ImportInboxPage() {
           </Show>
         }
       >
-        {(top) => (
-          <>
-            <div class="deck-h">
-              <div>
-                <h2>Clippings from Aruodas</h2>
-                <p>
-                  {deck().length === 1 ? 'Last one.' : `${deck().length} to go — one at a time.`}
-                </p>
-              </div>
-              <span class="tag blue">
-                {done() + 1} of {total()}
-              </span>
-            </div>
-            <div class="progress" aria-hidden="true">
-              <For each={Array.from({ length: total() }, (_, i) => i)}>
-                {(i) => <i class={i < done() ? 'done' : i === done() ? 'now' : ''} />}
-              </For>
-            </div>
-            <div class="stack">
-              <Show when={deck().length > 2}>
-                <div class="under two" aria-hidden="true" />
-              </Show>
-              <Show when={deck().length > 1}>
-                <div class="under" aria-hidden="true" />
-              </Show>
-              <Clipping
-                item={top()}
-                onSkip={skip}
-                skipDisabled={deck().length === 1 || busy()}
-                onDrop={() => void drop(top().id)}
-                dropDisabled={busy()}
-              />
-            </div>
-            <Show when={deck().length > 1}>
-              <div class="upnext">
-                <h4>Up next</h4>
-                <div class="thumbs">
-                  <For each={deck().slice(1)}>
-                    {(item) => (
-                      <button
-                        type="button"
-                        title={item.title || item.sourceId}
-                        onClick={() => bring(item.id)}
-                      >
-                        <Show when={item.thumbnail} fallback={<div class="ph" />}>
-                          {(thumbnail) => <img src={thumbnail()} alt="" />}
-                        </Show>
-                        <span>{item.title || item.sourceId}</span>
-                      </button>
-                    )}
-                  </For>
+        {(top) => {
+          const item = top()
+          return (
+            <>
+              <div class="deck-h">
+                <div>
+                  <h2>Clippings from Aruodas</h2>
+                  <p>
+                    {deck().length === 1 ? 'Last one.' : `${deck().length} to go — one at a time.`}
+                  </p>
                 </div>
+                <span class="tag blue">
+                  {done() + 1} of {total()}
+                </span>
               </div>
-            </Show>
-          </>
-        )}
+              <div class="progress" aria-hidden="true">
+                <For each={Array.from({ length: total() }, (_, i) => i)}>
+                  {(i) => <i class={i < done() ? 'done' : i === done() ? 'now' : ''} />}
+                </For>
+              </div>
+              <div class="stack">
+                <Show when={deck().length > 2}>
+                  <div class="under two" aria-hidden="true" />
+                </Show>
+                <Show when={deck().length > 1}>
+                  <div class="under" aria-hidden="true" />
+                </Show>
+                <Clipping
+                  item={item}
+                  onSkip={skip}
+                  skipDisabled={deck().length === 1 || busy()}
+                  onDrop={() => void drop(item.id).catch(() => undefined)}
+                  dropDisabled={busy()}
+                />
+              </div>
+              <Show when={deck().length > 1}>
+                <div class="upnext">
+                  <h4>Up next</h4>
+                  <div class="thumbs">
+                    <For each={deck().slice(1)}>
+                      {(nextItem) => (
+                        <button
+                          type="button"
+                          title={nextItem.title || nextItem.sourceId}
+                          onClick={() => bring(nextItem.id)}
+                        >
+                          <Show when={nextItem.thumbnail} fallback={<div class="ph" />}>
+                            {(thumbnail) => <img src={thumbnail()} alt="" />}
+                          </Show>
+                          <span>{nextItem.title || nextItem.sourceId}</span>
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </div>
+              </Show>
+            </>
+          )
+        }}
       </Show>
     </main>
   )

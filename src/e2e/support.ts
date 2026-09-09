@@ -58,6 +58,12 @@ export type E2eSyncEvent = {
   recordCount?: number
 }
 
+export type E2eSourceListingRatings = Readonly<{
+  roadAccessRating: number | null
+  areaFeelingRating: number | null
+  viewRating: number | null
+}>
+
 export type E2eApi = {
   readonly namespace: string
   ready: () => Promise<void>
@@ -69,6 +75,8 @@ export type E2eApi = {
   captureInbox: (id: string) => Promise<void>
   removeSourceListing: (id: string) => Promise<void>
   markVisited: (id: string) => Promise<void>
+  getSourceListingRatings: (id: string) => E2eSourceListingRatings | undefined
+  getVisitPlanSourceListingIds: () => readonly string[]
   syncEvents: () => readonly E2eSyncEvent[]
   setFailure: (failure: E2eFailure | null) => void
 }

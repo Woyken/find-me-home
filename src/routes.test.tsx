@@ -24,6 +24,9 @@ const listing = (
   utilities: {},
   raw: { importedBy: 'aruodas-bookmarklet', features: [] },
   visitedAt: null,
+  roadAccessRating: null,
+  areaFeelingRating: null,
+  viewRating: null,
   updatedAt,
   candidatePlots: [
     {
@@ -42,9 +45,6 @@ const listing = (
       coordinateCluePrecision: null,
       addressClue: null,
       primaryLocationClue: null,
-      roadAccessRating: null,
-      areaFeelingRating: null,
-      viewRating: null,
       resolvedLatitude: null,
       resolvedLongitude: null,
       resolvedAddress: null,

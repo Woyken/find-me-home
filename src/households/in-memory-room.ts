@@ -1,6 +1,6 @@
 import type { HouseholdRoom } from './synchronization'
 
-type Message = 'manifest' | 'request' | 'records'
+type Message = 'manifest' | 'request' | 'records' | 'records-acknowledgement'
 type Listener = (value: unknown, peerId: string) => void
 
 export const createInMemoryRoomNetwork = () => {
@@ -14,6 +14,7 @@ export const createInMemoryRoomNetwork = () => {
       manifest: new Set(),
       request: new Set(),
       records: new Set(),
+      'records-acknowledgement': new Set(),
     }
     constructor(private readonly key: string) {
       const peers = rooms.get(key) ?? new Set<Room>()
@@ -48,6 +49,9 @@ export const createInMemoryRoomNetwork = () => {
     onRecords(listener: Listener) {
       return this.on('records', listener)
     }
+    onRecordsAcknowledgement(listener: Listener) {
+      return this.on('records-acknowledgement', listener)
+    }
     private send(type: Message, value: unknown, peerId?: string) {
       for (const peer of rooms.get(this.key) ?? []) {
         if (peer !== this && (!peerId || peer.id === peerId))
@@ -64,6 +68,12 @@ export const createInMemoryRoomNetwork = () => {
     }
     sendRecords(value: Parameters<HouseholdRoom['sendRecords']>[0], peerId?: string) {
       this.send('records', value, peerId)
+    }
+    sendRecordsAcknowledgement(
+      value: Parameters<HouseholdRoom['sendRecordsAcknowledgement']>[0],
+      peerId: string,
+    ) {
+      this.send('records-acknowledgement', value, peerId)
     }
     leave() {
       const peers = rooms.get(this.key)

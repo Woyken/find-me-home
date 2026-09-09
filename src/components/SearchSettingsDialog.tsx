@@ -1,4 +1,13 @@
-import { For, Show, createEffect, createSignal } from 'solid-js'
+import {
+  For,
+  Show,
+  action,
+  affects,
+  createEffect,
+  createSignal,
+  isPending,
+  untrack,
+} from 'solid-js'
 import QRCode from 'qrcode'
 import { useHousehold } from '../households/context'
 import { Modal } from './Modal'
@@ -8,9 +17,16 @@ import { showToast } from './Toast'
  * "Our search" settings: rename, invite another device, and switch or remove
  * the searches kept on this device.
  */
-export function SearchSettingsDialog(props: { open: boolean; onClose: () => void }) {
+export function SearchSettingsDialog(props: {
+  open: boolean
+  onClose: () => void
+  displayName: () => string
+  setDisplayName: (name: string) => string
+}) {
   const household = useHousehold()
-  const activeName = () => {
+  const displayName = untrack(() => props.displayName)
+  const setDisplayName = untrack(() => props.setDisplayName)
+  const persistedName = () => {
     const state = household.state()
     return state.status === 'active' ? state.household.name : ''
   }
@@ -18,12 +34,12 @@ export function SearchSettingsDialog(props: { open: boolean; onClose: () => void
     const state = household.state()
     return state.status === 'active' ? state.access.householdId : ''
   }
-  const [name, setName] = createSignal(activeName())
+  const [name, setName] = createSignal(untrack(persistedName))
   // Start from the current name each time the dialog opens.
   createEffect(
     () => props.open,
     (open) => {
-      if (open) setName(activeName())
+      if (open) setName(persistedName())
     },
   )
   const [busy, setBusy] = createSignal(false)
@@ -38,24 +54,36 @@ export function SearchSettingsDialog(props: { open: boolean; onClose: () => void
     },
   )
 
-  const run = async (action: () => Promise<void>, done?: string) => {
+  const run = async (operation: () => Promise<void>, done?: string) => {
     setBusy(true)
     setError('')
     try {
-      await action()
+      await operation()
       if (done) showToast(done)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
+      throw cause
     } finally {
       setBusy(false)
     }
   }
+  const saveName = action(function* (next: string) {
+    affects(displayName)
+    setError('')
+    setDisplayName(next)
+    try {
+      yield household.renameActiveHousehold(next)
+      showToast('Name saved')
+      props.onClose()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+      throw cause
+    }
+  })
+  const renaming = () => isPending(displayName)
   const rename = (event: SubmitEvent) => {
     event.preventDefault()
-    void run(async () => {
-      await household.renameActiveHousehold(name())
-      props.onClose()
-    }, 'Name saved')
+    void saveName(name()).catch(() => undefined)
   }
   const copyLink = async () => {
     try {
@@ -83,10 +111,10 @@ export function SearchSettingsDialog(props: { open: boolean; onClose: () => void
         <input
           class="grow"
           aria-label="Search name"
-          value={name()}
+          value={props.displayName()}
           onInput={(event) => setName(event.currentTarget.value)}
         />
-        <button class="btn" type="submit" disabled={busy()}>
+        <button class="btn" type="submit" disabled={busy() || renaming()}>
           Save
         </button>
       </form>
