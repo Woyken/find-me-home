@@ -25,7 +25,7 @@
     "check": "oxfmt --check ."
   },
   "dependencies": {
-    "@solidjs/router": "2.0.0-next.20",
+    "@solidjs/router": "2.0.0-next.21",
     "@solidjs/web": "2.0.0-rc.6",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/db": "^0.8.7",
