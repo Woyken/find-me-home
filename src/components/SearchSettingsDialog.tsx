@@ -42,7 +42,6 @@ export function SearchSettingsDialog(props: {
       if (open) setName(persistedName())
     },
   )
-  const [busy, setBusy] = createSignal(false)
   const [error, setError] = createSignal('')
   const invitationUrl = () => household.getInvitationUrl()
   const [qrCode, setQrCode] = createSignal('')
@@ -54,19 +53,6 @@ export function SearchSettingsDialog(props: {
     },
   )
 
-  const run = async (operation: () => Promise<void>, done?: string) => {
-    setBusy(true)
-    setError('')
-    try {
-      await operation()
-      if (done) showToast(done)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
-      throw cause
-    } finally {
-      setBusy(false)
-    }
-  }
   const saveName = action(function* (next: string) {
     affects(displayName)
     setError('')
@@ -81,8 +67,10 @@ export function SearchSettingsDialog(props: {
     }
   })
   const renaming = () => isPending(displayName)
+  const changingHousehold = () => isPending(household.state)
   const rename = (event: SubmitEvent) => {
     event.preventDefault()
+    if (changingHousehold() || renaming()) return
     void saveName(name()).catch(() => undefined)
   }
   const copyLink = async () => {
@@ -93,12 +81,36 @@ export function SearchSettingsDialog(props: {
       setError('Could not copy — select the link and copy it by hand.')
     }
   }
-  const remove = () => {
-    if (!window.confirm('Remove this search from this device? It stays on other devices.')) return
-    void run(async () => {
-      await household.removeHousehold(activeId())
+  const switchHousehold = action(function* (householdId: string) {
+    affects(household.state)
+    setError('')
+    try {
+      yield household.switchHousehold(householdId)
       props.onClose()
-    })
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+      throw cause
+    }
+  })
+  const removeHousehold = action(function* (householdId: string) {
+    affects(household.state)
+    setError('')
+    try {
+      yield household.removeHousehold(householdId)
+      props.onClose()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+      throw cause
+    }
+  })
+  const switchTo = (householdId: string) => {
+    if (changingHousehold() || renaming()) return
+    void switchHousehold(householdId).catch(() => undefined)
+  }
+  const remove = () => {
+    if (changingHousehold() || renaming()) return
+    if (!window.confirm('Remove this search from this device? It stays on other devices.')) return
+    void removeHousehold(activeId()).catch(() => undefined)
   }
 
   return (
@@ -114,7 +126,7 @@ export function SearchSettingsDialog(props: {
           value={props.displayName()}
           onInput={(event) => setName(event.currentTarget.value)}
         />
-        <button class="btn" type="submit" disabled={busy() || renaming()}>
+        <button class="btn" type="submit" disabled={changingHousehold() || renaming()}>
           Save
         </button>
       </form>
@@ -151,13 +163,8 @@ export function SearchSettingsDialog(props: {
                 <button
                   class="linkbtn"
                   type="button"
-                  disabled={busy()}
-                  onClick={() =>
-                    void run(async () => {
-                      await household.switchHousehold(local.householdId)
-                      props.onClose()
-                    })
-                  }
+                  disabled={changingHousehold() || renaming()}
+                  onClick={() => switchTo(local.householdId)}
                 >
                   Switch
                 </button>
@@ -169,7 +176,12 @@ export function SearchSettingsDialog(props: {
         )}
       </For>
       <div class="rowline">
-        <button class="btn danger" type="button" disabled={busy()} onClick={remove}>
+        <button
+          class="btn danger"
+          type="button"
+          disabled={changingHousehold() || renaming()}
+          onClick={remove}
+        >
           Remove this search from this device
         </button>
       </div>
