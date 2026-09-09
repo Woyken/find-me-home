@@ -210,6 +210,16 @@ const boot = () => {
     },
     removeSourceListing: (id) => runtime.removeSourceListing(id),
     markVisited: (id) => runtime.markSourceListingVisited(id),
+    getSourceListingRatings(id) {
+      const sourceListing = runtime.getSourceListing(id)
+      if (!sourceListing) return undefined
+      return Object.freeze({
+        roadAccessRating: sourceListing.roadAccessRating,
+        areaFeelingRating: sourceListing.areaFeelingRating,
+        viewRating: sourceListing.viewRating,
+      })
+    },
+    getVisitPlanSourceListingIds: () => Object.freeze([...runtime.getVisitPlan().sourceListingIds]),
     syncEvents: () => [...syncEvents],
     setFailure(nextFailure) {
       failure = nextFailure

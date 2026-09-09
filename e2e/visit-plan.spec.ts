@@ -16,6 +16,12 @@ const seed = async (page: Page, listings: E2eSeed['listings']) =>
 
 const plannedTitles = (page: Page) => page.locator('[aria-label^="Stop "] .t').allTextContents()
 
+const visitPlanIds = (page: Page) =>
+  page.evaluate(() => window.__FMH_E2E__?.getVisitPlanSourceListingIds())
+
+const waitForVisitPlan = async (page: Page, sourceListingIds: string[]) =>
+  expect.poll(() => visitPlanIds(page)).toEqual(sourceListingIds)
+
 test.describe('visit plan', () => {
   test('covers the empty state and the Google Maps route only appears for located stops', async ({
     page,
@@ -64,10 +70,10 @@ test.describe('visit plan', () => {
     page,
   }) => {
     await open(page)
-    await page.evaluate(async () => {
+    const result = await page.evaluate(async () => {
       const api = window.__FMH_E2E__
       if (!api) throw new Error('E2E runtime is unavailable')
-      await api.seed({
+      return api.seed({
         listings: [
           { id: '201', title: 'First' },
           { id: '202', title: 'Second' },
@@ -84,9 +90,15 @@ test.describe('visit plan', () => {
     const moveThirdUp = page.getByRole('button', { name: 'Move Third up' })
     await moveThirdUp.focus()
     await page.keyboard.press('Enter')
+    await waitForVisitPlan(page, [
+      result.sourceListingIds[0],
+      result.sourceListingIds[2],
+      result.sourceListingIds[1],
+    ])
     await expect.poll(() => plannedTitles(page)).toEqual(['First', 'Third', 'Second'])
     await expect(page.getByRole('button', { name: 'Move First up' })).toBeDisabled()
     await page.getByRole('button', { name: 'Remove Third from the list' }).click()
+    await waitForVisitPlan(page, [result.sourceListingIds[0], result.sourceListingIds[1]])
     await expect.poll(() => plannedTitles(page)).toEqual(['First', 'Second'])
     await page.reload()
     await expect.poll(() => plannedTitles(page)).toEqual(['First', 'Second'])
@@ -148,6 +160,7 @@ test.describe('visit plan', () => {
     await open(page)
     const result = await seed(page, [{ id: '401', title: 'Gone soon' }])
     await page.getByRole('button', { name: 'Go see it' }).click()
+    await waitForVisitPlan(page, result.sourceListingIds)
     await page.evaluate((id) => {
       const api = window.__FMH_E2E__
       if (!api) throw new Error('E2E runtime is unavailable')
@@ -215,6 +228,8 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
       )
 
     await second.getByRole('button', { name: 'Move Shared second up' }).click()
+    await waitForVisitPlan(second, [result.sourceListingIds[1], result.sourceListingIds[0]])
+    await waitForVisitPlan(first, [result.sourceListingIds[1], result.sourceListingIds[0]])
     await first.goto(appUrl('visit-plan'), {
       waitUntil: 'domcontentloaded',
     })
@@ -247,7 +262,8 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
       waitUntil: 'domcontentloaded',
     })
     await first.getByRole('button', { name: 'Go see it' }).click()
-    await expect(first.getByRole('button', { name: 'Going to see' })).toBeVisible()
+    await waitForVisitPlan(first, [result.sourceListingIds[0]])
+    await waitForVisitPlan(second, [result.sourceListingIds[0]])
 
     await second.close()
     const rejoined = await secondContext.newPage()
