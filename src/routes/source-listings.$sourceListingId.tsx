@@ -315,22 +315,34 @@ export default function SourceListingPage(props: { params: Record<string, string
                 </button>
               </div>
               <ListingRatings sourceListing={listing()!} />
-              <div class="panel danger" style={{ 'margin-top': '14px' }}>
-                <h3>Remove this plot</h3>
-                <p class="small" style={{ margin: '6px 0 12px' }}>
-                  Removes it and its marked areas for everyone in the search. Saving the same advert
-                  again brings it back with your notes.
-                </p>
-                <button class="btn danger wide" type="button" disabled={busy()} onClick={remove}>
-                  Remove plot
-                </button>
-              </div>
+              <ListingRemoval class="listing-removal-aside" busy={busy} onRemove={remove} />
             </aside>
           </div>
+          <ListingRemoval class="listing-removal-bottom" busy={busy} onRemove={remove} />
         </>
       </Show>
       <FannedStack />
     </main>
+  )
+}
+
+function ListingRemoval(props: { class: string; busy: () => boolean; onRemove: () => void }) {
+  return (
+    <div class={`panel danger listing-removal ${props.class}`}>
+      <h3>Remove this plot</h3>
+      <p class="small" style={{ margin: '6px 0 12px' }}>
+        Removes it and its marked areas for everyone in the search. Saving the same advert again
+        brings it back with your notes.
+      </p>
+      <button
+        class="btn danger wide"
+        type="button"
+        disabled={props.busy()}
+        onClick={props.onRemove}
+      >
+        Remove plot
+      </button>
+    </div>
   )
 }
 
