@@ -121,6 +121,29 @@ test.describe('visit plan', () => {
     )
   })
 
+  test('rolls back a failed reorder to the exact persisted visit-plan order', async ({ page }) => {
+    await open(page)
+    await page.evaluate(async () => {
+      const api = window.__FMH_E2E__
+      if (!api) throw new Error('E2E runtime is unavailable')
+      await api.seed({
+        listings: [
+          { id: '311', title: 'First persisted' },
+          { id: '312', title: 'Second persisted' },
+        ],
+        plannedListingIds: ['311', '312'],
+      })
+    })
+    await page.goto(appUrl('visit-plan'), { waitUntil: 'domcontentloaded' })
+    await expect.poll(() => plannedTitles(page)).toEqual(['First persisted', 'Second persisted'])
+
+    await page.evaluate(() => window.__FMH_E2E__?.setFailure('visit-plan-storage'))
+    await page.getByRole('button', { name: 'Move Second persisted up' }).click()
+
+    await expect(page.getByRole('alert')).toContainText('IndexedDB transaction')
+    await expect.poll(() => plannedTitles(page)).toEqual(['First persisted', 'Second persisted'])
+  })
+
   test('keeps plan references safe when a listing disappears', async ({ page }) => {
     await open(page)
     const result = await seed(page, [{ id: '401', title: 'Gone soon' }])

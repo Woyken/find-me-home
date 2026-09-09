@@ -1,16 +1,28 @@
-import type { HouseholdRoom, Manifest, RecordKey } from '../households/synchronization'
+import type {
+  HouseholdRoom,
+  Manifest,
+  RecordMessage,
+  RecordsAcknowledgement,
+  RequestMessage,
+} from '../households/synchronization'
 import type { E2eSyncEvent } from './support'
 
 export type E2eRoomEnvelope =
   | { type: 'join'; peerId: string }
   | { type: 'leave'; peerId: string }
   | { type: 'manifest'; peerId: string; target: string; value: Manifest }
-  | { type: 'request'; peerId: string; target: string; value: RecordKey[] }
+  | { type: 'request'; peerId: string; target: string; value: RequestMessage }
   | {
       type: 'records'
       peerId: string
       target?: string
       value: Parameters<HouseholdRoom['sendRecords']>[0]
+    }
+  | {
+      type: 'records-acknowledgement'
+      peerId: string
+      target: string
+      value: RecordsAcknowledgement
     }
 
 type E2eRelay = {
@@ -38,10 +50,9 @@ export const createE2eRoomFactory = (
     const joins = new Set<(id: string) => void>()
     const leaves = new Set<(id: string) => void>()
     const manifests = new Set<(value: Manifest, id: string) => void>()
-    const requests = new Set<(value: RecordKey[], id: string) => void>()
-    const records = new Set<
-      (value: Parameters<HouseholdRoom['sendRecords']>[0], id: string) => void
-    >()
+    const requests = new Set<(value: RequestMessage, id: string) => void>()
+    const records = new Set<(value: RecordMessage, id: string) => void>()
+    const acknowledgements = new Set<(value: RecordsAcknowledgement, id: string) => void>()
     const post = (value: E2eRoomEnvelope) => {
       if (relay) relay.post(value)
       else channel?.postMessage(value)
@@ -75,9 +86,13 @@ export const createE2eRoomFactory = (
           onEvent?.({
             direction: 'received',
             type: 'records',
-            recordCount: message.value.length,
+            recordCount: message.value.records.length,
           })
           records.forEach((listener) => listener(message.value, message.peerId))
+          break
+        case 'records-acknowledgement':
+          acknowledgements.forEach((listener) => listener(message.value, message.peerId))
+          break
       }
     }
     const onMessage = (event: Event) =>
@@ -115,6 +130,10 @@ export const createE2eRoomFactory = (
         records.add(listener)
         return () => records.delete(listener)
       },
+      onRecordsAcknowledgement(listener) {
+        acknowledgements.add(listener)
+        return () => acknowledgements.delete(listener)
+      },
       sendManifest(value, target) {
         onEvent?.({ direction: 'sent', type: 'manifest' })
         post({ type: 'manifest', peerId, target, value })
@@ -127,9 +146,12 @@ export const createE2eRoomFactory = (
         onEvent?.({
           direction: 'sent',
           type: 'records',
-          recordCount: value.length,
+          recordCount: value.records.length,
         })
         post({ type: 'records', peerId, ...(target ? { target } : {}), value })
+      },
+      sendRecordsAcknowledgement(value, target) {
+        post({ type: 'records-acknowledgement', peerId, target, value })
       },
       leave() {
         post({ type: 'leave', peerId })

@@ -1,5 +1,10 @@
 import { joinRoom } from 'trystero'
-import type { HouseholdRoom, Manifest, RecordKey } from './synchronization'
+import type {
+  HouseholdRoom,
+  Manifest,
+  RecordsAcknowledgement,
+  RequestMessage,
+} from './synchronization'
 
 export const createTrysteroHouseholdRoom = (options: {
   householdId: string
@@ -10,8 +15,9 @@ export const createTrysteroHouseholdRoom = (options: {
     options.householdId,
   )
   const manifest = room.makeAction<Manifest>('manifest')
-  const request = room.makeAction<RecordKey[]>('request')
+  const request = room.makeAction<RequestMessage>('request')
   const records = room.makeAction('records')
+  const acknowledgement = room.makeAction<RecordsAcknowledgement>('records-acknowledgement')
   return {
     onPeerJoin(listener) {
       room.onPeerJoin = listener
@@ -43,6 +49,12 @@ export const createTrysteroHouseholdRoom = (options: {
         records.onMessage = null
       }
     },
+    onRecordsAcknowledgement(listener) {
+      acknowledgement.onMessage = (value, context) => listener(value, context.peerId)
+      return () => {
+        acknowledgement.onMessage = null
+      }
+    },
     sendManifest(value, peerId) {
       void manifest.send(value, { target: peerId })
     },
@@ -51,6 +63,9 @@ export const createTrysteroHouseholdRoom = (options: {
     },
     sendRecords(value, peerId) {
       void records.send(value as never, peerId ? { target: peerId } : undefined)
+    },
+    sendRecordsAcknowledgement(value, peerId) {
+      void acknowledgement.send(value, { target: peerId })
     },
     leave() {
       room.leave()

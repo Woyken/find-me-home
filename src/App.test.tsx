@@ -87,6 +87,7 @@ const createTestRuntime = () => {
     start: async () => publish({ status: 'no-household' }),
     createHousehold: async () => publish(active('Our home search')),
     joinHousehold: async () => undefined,
+    updateSourceListingRatings: async () => undefined,
     listHouseholds: () =>
       state.status === 'active'
         ? [
@@ -183,6 +184,9 @@ describe('App Household boundary', () => {
       utilities: {},
       raw: { importedBy: 'aruodas-bookmarklet', features: [] },
       visitedAt: null,
+      roadAccessRating: null,
+      areaFeelingRating: null,
+      viewRating: null,
       updatedAt: 100,
       candidatePlots: [
         {
@@ -201,9 +205,6 @@ describe('App Household boundary', () => {
           coordinateCluePrecision: 'exact',
           addressClue: null,
           primaryLocationClue: null,
-          roadAccessRating: null,
-          areaFeelingRating: null,
-          viewRating: null,
           resolvedLatitude: null,
           resolvedLongitude: null,
           resolvedAddress: null,
@@ -235,6 +236,43 @@ describe('App Household boundary', () => {
       expect(runtime.resolveCandidatePlotLocation).toHaveBeenCalledTimes(1)
       expect(runtime.runCandidatePlotAutomaticChecks).toHaveBeenCalledTimes(1)
     })
+
+    let settleRating: (() => void) | undefined
+    runtime.updateSourceListingRatings = vi.fn(
+      () => new Promise<void>((resolve) => (settleRating = resolve)),
+    )
+    const roadRating = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) =>
+        button.getAttribute('aria-label') === '4 of 5' &&
+        button.closest('[aria-label="Road & access"]'),
+    )
+    if (!roadRating) throw new Error('Listing rating control is missing')
+    roadRating.click()
+    await waitFor(() => {
+      expect(roadRating.getAttribute('aria-pressed')).toBe('true')
+      expect(runtime.updateSourceListingRatings).toHaveBeenCalledWith('listing-id', {
+        roadAccessRating: 4,
+        areaFeelingRating: null,
+        viewRating: null,
+      })
+    })
+    const higherRoadRating = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) =>
+        button.getAttribute('aria-label') === '5 of 5' &&
+        button.closest('[aria-label="Road & access"]'),
+    )
+    if (!higherRoadRating) throw new Error('Higher listing rating control is missing')
+    expect(higherRoadRating.disabled).toBe(false)
+    higherRoadRating.click()
+    await waitFor(() =>
+      expect(runtime.updateSourceListingRatings).toHaveBeenLastCalledWith('listing-id', {
+        roadAccessRating: 5,
+        areaFeelingRating: null,
+        viewRating: null,
+      }),
+    )
+    settleRating?.()
+    await new Promise((resolve) => setTimeout(resolve))
 
     const regiaLink = document.querySelector<HTMLAnchorElement>(
       'a[href^="https://regia.lt/map/regia2?"]',
@@ -319,6 +357,104 @@ describe('App Household boundary', () => {
     })
   })
 
+  it('rolls a rejected rating write back to the authoritative snapshot', async () => {
+    const runtime = createTestRuntime()
+    const listing: SourceListingDetail = {
+      id: 'listing-id',
+      householdId: 'household-id',
+      source: 'aruodas',
+      sourceId: '11-1471486',
+      url: 'https://www.aruodas.lt/sklypai/example-11-1471486/',
+      title: 'Imported listing',
+      address: null,
+      description: null,
+      photos: [],
+      utilities: {},
+      raw: {},
+      visitedAt: null,
+      roadAccessRating: null,
+      areaFeelingRating: null,
+      viewRating: null,
+      updatedAt: 100,
+      candidatePlots: [],
+    }
+    runtime.start = runtime.createHousehold
+    runtime.getSourceListing = (id) => (id === listing.id ? listing : undefined)
+    let reject!: (error: Error) => void
+    runtime.updateSourceListingRatings = vi.fn(
+      () => new Promise<void>((_, nextReject) => (reject = nextReject)),
+    )
+    history.replaceState(null, '', '/source-listings/listing-id')
+    mountRouter(runtime)
+    await waitFor(() => expect(document.body.textContent).toContain('Imported listing'))
+    const star = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) =>
+        button.getAttribute('aria-label') === '4 of 5' &&
+        button.closest('[aria-label="Road & access"]'),
+    )
+    if (!star) throw new Error('Listing rating control is missing')
+    star.click()
+    await waitFor(() => expect(star.getAttribute('aria-pressed')).toBe('true'))
+    reject(new Error('offline'))
+    await waitFor(() => {
+      expect(star.getAttribute('aria-pressed')).toBe('false')
+      expect(document.body.textContent).toContain("Couldn't save rating. Try again.")
+    })
+  })
+
+  it('keeps the latest rating intent when older writes settle out of order', async () => {
+    const runtime = createTestRuntime()
+    let listing: SourceListingDetail = {
+      id: 'listing-id',
+      householdId: 'household-id',
+      source: 'aruodas',
+      sourceId: '11-1471486',
+      url: 'https://www.aruodas.lt/sklypai/example-11-1471486/',
+      title: 'Imported listing',
+      address: null,
+      description: null,
+      photos: [],
+      utilities: {},
+      raw: {},
+      visitedAt: null,
+      roadAccessRating: null,
+      areaFeelingRating: null,
+      viewRating: null,
+      updatedAt: 100,
+      candidatePlots: [],
+    }
+    runtime.start = runtime.createHousehold
+    runtime.getSourceListing = (id) => (id === listing.id ? listing : undefined)
+    const writes: { resolve: () => void; reject: (error: Error) => void }[] = []
+    runtime.updateSourceListingRatings = vi.fn(
+      () => new Promise<void>((resolve, reject) => writes.push({ resolve, reject })),
+    )
+    history.replaceState(null, '', '/source-listings/listing-id')
+    mountRouter(runtime)
+    await waitFor(() => expect(document.body.textContent).toContain('Imported listing'))
+    const roadStar = (value: string) => {
+      const star = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) =>
+          button.getAttribute('aria-label') === `${value} of 5` &&
+          button.closest('[aria-label="Road & access"]'),
+      )
+      if (!star) throw new Error('Listing rating control is missing')
+      return star
+    }
+    roadStar('4').click()
+    await waitFor(() => expect(roadStar('4').getAttribute('aria-pressed')).toBe('true'))
+    expect(roadStar('5').disabled).toBe(false)
+    roadStar('5').click()
+    await waitFor(() => expect(roadStar('5').getAttribute('aria-pressed')).toBe('true'))
+    writes[1].resolve()
+    listing = { ...listing, roadAccessRating: 5, updatedAt: 101 }
+    await runtime.renameActiveHousehold('Updated search')
+    await waitFor(() => expect(roadStar('5').getAttribute('aria-pressed')).toBe('true'))
+    writes[0].reject(new Error('older request failed'))
+    await waitFor(() => expect(roadStar('5').getAttribute('aria-pressed')).toBe('true'))
+    expect(roadStar('4').getAttribute('aria-pressed')).toBe('false')
+  })
+
   it('shows the favourites pile being brought over, lets a failed capture be retried, and only then says all sorted', async () => {
     sessionStorage.setItem(
       'find-me-home-import-draft',
@@ -397,6 +533,35 @@ describe('App Household boundary', () => {
     expect(document.body.textContent).toContain('2already saved')
     expect(document.body.textContent).not.toContain('Household is changing')
     expect(sessionStorage.getItem('find-me-home-import-draft')).toBeNull()
+  })
+
+  it('restores a clipping when marking it not interested fails', async () => {
+    const runtime = createTestRuntime()
+    runtime.listImportInbox = () => [
+      {
+        id: 'inbox-id',
+        householdId: 'household-id',
+        source: 'aruodas',
+        sourceId: '11-1',
+        title: 'Keep me',
+        updatedAt: 100,
+      },
+    ]
+    runtime.removeImportInbox = vi.fn(async () => {
+      throw new Error('Could not remove clipping')
+    })
+    history.replaceState(null, '', '/import-inbox')
+    mountRouter(runtime)
+    await runtime.createHousehold()
+
+    await waitFor(() => expect(document.body.textContent).toContain('Keep me'))
+    findButton('Not interested')?.click()
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('Could not remove clipping')
+      expect(document.body.textContent).toContain('Keep me')
+    })
+    expect(runtime.removeImportInbox).toHaveBeenCalledWith('inbox-id')
   })
 
   it('removes an import fragment and resumes its review after creating a Household', async () => {

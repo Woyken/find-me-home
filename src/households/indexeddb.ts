@@ -1,4 +1,10 @@
-import type { HouseholdAccessState, HouseholdRecord } from './model'
+import {
+  householdAccessStateSchema,
+  householdRecordSchema,
+  type HouseholdAccessState,
+  type HouseholdRecord,
+} from './model'
+import * as v from 'valibot'
 
 export type HouseholdAccessStore = {
   list: () => Promise<HouseholdAccessState[]>
@@ -86,14 +92,26 @@ export const createIndexedDbHouseholdAccessStore = (
   return {
     async list() {
       const db = await database
-      return requestResult<HouseholdAccessState[]>(
+      const records = await requestResult<unknown[]>(
         db.transaction('household-access').objectStore('household-access').getAll(),
       )
+      return records.flatMap((record) => {
+        const parsed = v.safeParse(householdAccessStateSchema, record)
+        if (parsed.success) return [parsed.output]
+        console.warn('Ignoring invalid Household Access record', {
+          householdId:
+            typeof record === 'object' && record !== null && 'householdId' in record
+              ? record.householdId
+              : undefined,
+          issues: parsed.issues,
+        })
+        return []
+      })
     },
     async put(value) {
       const db = await database
       const transaction = db.transaction('household-access', 'readwrite')
-      transaction.objectStore('household-access').put(value)
+      transaction.objectStore('household-access').put(v.parse(householdAccessStateSchema, value))
       await transactionComplete(transaction)
     },
     async remove(householdId) {
@@ -123,6 +141,8 @@ export const createIndexedDbHouseholdRepository = (
   const publish = () => listeners.forEach((listener) => listener())
   const publishLocal = (changed: HouseholdRecord[]) =>
     localMutationListeners.forEach((listener) => listener(structuredClone(changed)))
+  const put = (store: IDBObjectStore, record: HouseholdRecord) =>
+    store.put(v.parse(householdRecordSchema, record))
 
   return {
     async open(nextHouseholdId) {
@@ -132,9 +152,20 @@ export const createIndexedDbHouseholdRepository = (
         'households',
       )
       database = openedDatabase
-      records = await requestResult<HouseholdRecord[]>(
-        openedDatabase.transaction('households').objectStore('households').getAll(),
-      )
+      records = (
+        await requestResult<unknown[]>(
+          openedDatabase.transaction('households').objectStore('households').getAll(),
+        )
+      ).flatMap((record) => {
+        const parsed = v.safeParse(householdRecordSchema, record)
+        if (parsed.success) return [parsed.output]
+        console.warn('Ignoring invalid Household record', {
+          id:
+            typeof record === 'object' && record !== null && 'id' in record ? record.id : undefined,
+          issues: parsed.issues,
+        })
+        return []
+      })
       householdId = nextHouseholdId
       publish()
     },
@@ -145,11 +176,24 @@ export const createIndexedDbHouseholdRepository = (
         'households',
       )
       try {
-        const stored = await requestResult<HouseholdRecord[]>(
+        const stored = await requestResult<unknown[]>(
           storedDatabase.transaction('households').objectStore('households').getAll(),
         )
         return structuredClone(
-          stored.find((value) => value.householdId === storedHouseholdId && !value.deletedAt),
+          stored
+            .flatMap((value) => {
+              const parsed = v.safeParse(householdRecordSchema, value)
+              if (parsed.success) return [parsed.output]
+              console.warn('Ignoring invalid Household record', {
+                id:
+                  typeof value === 'object' && value !== null && 'id' in value
+                    ? value.id
+                    : undefined,
+                issues: parsed.issues,
+              })
+              return []
+            })
+            .find((value) => value.householdId === storedHouseholdId && !value.deletedAt),
         )
       } finally {
         storedDatabase.close()
@@ -164,7 +208,7 @@ export const createIndexedDbHouseholdRepository = (
     async create(value) {
       const active = requireOpen()
       const transaction = active.database.transaction('households', 'readwrite')
-      transaction.objectStore('households').put(value)
+      put(transaction.objectStore('households'), value)
       await transactionComplete(transaction)
       records = [...records.filter((record) => record.id !== value.id), value]
       publish()
@@ -176,7 +220,7 @@ export const createIndexedDbHouseholdRepository = (
       const value = { ...existing, name, updatedAt }
       const active = requireOpen()
       const transaction = active.database.transaction('households', 'readwrite')
-      transaction.objectStore('households').put(value)
+      put(transaction.objectStore('households'), value)
       await transactionComplete(transaction)
       records = records.map((record) => (record.id === id ? value : record))
       publish()
@@ -198,19 +242,27 @@ export const createIndexedDbHouseholdRepository = (
       const active = requireOpen()
       if (incoming.some((record) => record.householdId !== active.householdId))
         throw new Error('Invalid Household payload')
+      const byId = new Map<string, HouseholdRecord>()
+      for (const record of incoming) {
+        const existing = byId.get(record.id)
+        if (!existing || record.updatedAt > existing.updatedAt) byId.set(record.id, record)
+      }
+      const distinctIncoming = [...byId.values()]
       const transaction = active.database.transaction('households', 'readwrite')
       const store = transaction.objectStore('households')
       const persisted = await Promise.all(
-        incoming.map((record) => requestResult<HouseholdRecord | undefined>(store.get(record.id))),
+        distinctIncoming.map((record) =>
+          requestResult<HouseholdRecord | undefined>(store.get(record.id)),
+        ),
       )
-      const winners = incoming.filter(
+      const winners = distinctIncoming.filter(
         (record, index) => record.updatedAt > (persisted[index]?.updatedAt ?? -1),
       )
-      for (const winner of winners) store.put(winner)
+      for (const winner of winners) put(store, winner)
       await transactionComplete(transaction)
       if (!winners.length) return []
-      const byId = new Map(winners.map((record) => [record.id, record]))
-      records = [...records.filter((record) => !byId.has(record.id)), ...winners]
+      const winnerById = new Map(winners.map((record) => [record.id, record]))
+      records = [...records.filter((record) => !winnerById.has(record.id)), ...winners]
       publish()
       return structuredClone(winners)
     },

@@ -1,4 +1,12 @@
-import { For, Show, createEffect, createMemo, createSignal } from 'solid-js'
+import {
+  For,
+  Show,
+  action,
+  createEffect,
+  createMemo,
+  createOptimistic,
+  createSignal,
+} from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { CandidatePlotsMap } from '../components/CandidatePlotsMap'
 import type { MapFocusRequest } from '../components/CandidatePlotsMap'
@@ -65,11 +73,11 @@ export default function SourceListingPage(props: { params: Record<string, string
     scrollTo('bigmap')
   }
 
-  const run = async (action: () => Promise<void>) => {
+  const run = async (operation: () => Promise<void>) => {
     setBusy(true)
     setError('')
     try {
-      await action()
+      await operation()
     } catch (caught) {
       setError(errorMessage(caught))
     } finally {
@@ -283,6 +291,7 @@ export default function SourceListingPage(props: { params: Record<string, string
                     <CheckIcon /> Mark as visited
                   </button>
                 </div>
+                <ListingRatings sourceListing={item()} />
                 <div class="panel danger" style={{ 'margin-top': '14px' }}>
                   <h3>Remove this plot</h3>
                   <p class="small" style={{ margin: '6px 0 12px' }}>
@@ -350,9 +359,6 @@ function CandidatePlotEditor(props: {
   const [precision, setPrecision] = createSignal<'exact' | 'approx'>(
     props.plot.coordinateCluePrecision ?? 'approx',
   )
-  const [road, setRoad] = createSignal(props.plot.roadAccessRating)
-  const [feeling, setFeeling] = createSignal(props.plot.areaFeelingRating)
-  const [view, setView] = createSignal(props.plot.viewRating)
   const [status, setStatus] = createSignal<{ text: string; bad: boolean }>()
 
   const heading = () => candidatePlotName(props.plot, props.number - 1, props.total)
@@ -451,9 +457,6 @@ function CandidatePlotEditor(props: {
         coordinateCluePrecision: latitude().trim() || longitude().trim() ? precision() : null,
         addressClue: optionalText(address()),
         primaryLocationClue: locationClueKindOf(clueKind()),
-        roadAccessRating: road(),
-        areaFeelingRating: feeling(),
-        viewRating: view(),
       })
       setStatus({ text: 'Saved', bad: false })
     } catch (caught) {
@@ -671,16 +674,6 @@ function CandidatePlotEditor(props: {
         </div>
       </section>
 
-      <section class="panel soft block">
-        <div class="sub-h">
-          <h4>Our ratings</h4>
-          <span class="small muted">After you've been there</span>
-        </div>
-        <Stars label="Road & access" value={road()} onChange={setRoad} />
-        <Stars label="Feel of the area" value={feeling()} onChange={setFeeling} />
-        <Stars label="View" value={view()} onChange={setView} />
-      </section>
-
       <div class="rowline" style={{ 'margin-top': '16px' }}>
         <button class="btn" type="button" onClick={() => void save()}>
           Save this area
@@ -714,6 +707,66 @@ function Field(props: {
         onInput={(event) => props.onInput(event.currentTarget.value)}
       />
     </label>
+  )
+}
+
+function ListingRatings(props: { sourceListing: SourceListingRecord }) {
+  const household = useHousehold()
+  const [error, setError] = createSignal('')
+  const [ratings, setRatings] = createOptimistic(
+    () => ({
+      roadAccessRating: props.sourceListing.roadAccessRating,
+      areaFeelingRating: props.sourceListing.areaFeelingRating,
+      viewRating: props.sourceListing.viewRating,
+    }),
+    { loadingValue: { roadAccessRating: null, areaFeelingRating: null, viewRating: null } },
+  )
+  const save = action(function* (
+    key: 'roadAccessRating' | 'areaFeelingRating' | 'viewRating',
+    value: number | null,
+  ) {
+    setError('')
+    const next = { ...ratings(), [key]: value }
+    setRatings(next)
+    try {
+      yield household.updateSourceListingRatings(props.sourceListing.id, next)
+    } catch (caught) {
+      setError(errorMessage(caught))
+      throw caught
+    }
+  })
+  const change =
+    (key: 'roadAccessRating' | 'areaFeelingRating' | 'viewRating') => (value: number | null) =>
+      void save(key, value).catch(() => undefined)
+
+  return (
+    <section
+      class="panel soft"
+      style={{ 'margin-top': '14px' }}
+      role="region"
+      aria-label="Our ratings"
+    >
+      <div class="sub-h">
+        <h3>Our ratings</h3>
+        <span class="small muted">Your impressions, not tied to an area</span>
+      </div>
+      <Stars
+        label="Road & access"
+        value={ratings().roadAccessRating}
+        onChange={change('roadAccessRating')}
+      />
+      <Stars
+        label="Feel of the area"
+        value={ratings().areaFeelingRating}
+        onChange={change('areaFeelingRating')}
+      />
+      <Stars label="View" value={ratings().viewRating} onChange={change('viewRating')} />
+      <Show when={error()}>
+        <p class="small bad" role="alert">
+          Couldn't save rating. Try again.
+        </p>
+      </Show>
+    </section>
   )
 }
 
