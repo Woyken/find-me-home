@@ -1,3 +1,7 @@
+## General guidelines
+
+Avoid `as` type casting. Reuse types and be specific. Inferred types are best types.
+
 ## Agent Skills
 
 ### Issue Tracker
