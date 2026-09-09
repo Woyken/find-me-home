@@ -1,4 +1,13 @@
-import { For, Show, action, createMemo, createOptimistic, createSignal } from 'solid-js'
+import {
+  For,
+  Show,
+  action,
+  affects,
+  createMemo,
+  createOptimistic,
+  createSignal,
+  isPending,
+} from 'solid-js'
 import { CheckStrip } from '../components/CheckStrip'
 import { FannedStack } from '../components/FannedStack'
 import { HouseholdHeader } from '../components/HouseholdHeader'
@@ -28,7 +37,6 @@ export const routeUrl = (listings: Array<SourceListingDetail>) => {
 
 export default function VisitPlanPage() {
   const household = useHousehold()
-  const [busy, setBusy] = createOptimistic(false)
   const [error, setError] = createSignal('')
   const [view, setView] = createSignal<'list' | 'map'>('list')
   const [plan, setPlan] = createOptimistic(() => household.getVisitPlan().sourceListingIds, {
@@ -41,7 +49,7 @@ export default function VisitPlanPage() {
     }),
   )
   const replacePlan = action(function* (ids: Array<string>) {
-    setBusy(true)
+    affects(plan)
     setError('')
     setPlan(ids)
     try {
@@ -51,6 +59,7 @@ export default function VisitPlanPage() {
       throw caught
     }
   })
+  const busy = () => isPending(plan)
   const move = (id: string, offset: -1 | 1) => {
     if (busy()) return
     const index = plan().indexOf(id)

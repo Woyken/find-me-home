@@ -357,6 +357,113 @@ describe('App Household boundary', () => {
     })
   })
 
+  it('keeps unsaved area fields when saving a listing rating refreshes its snapshot', async () => {
+    const runtime = createTestRuntime()
+    let listing: SourceListingDetail = {
+      id: 'listing-id',
+      householdId: 'household-id',
+      source: 'aruodas',
+      sourceId: '11-1471486',
+      url: 'https://www.aruodas.lt/sklypai/example-11-1471486/',
+      title: 'Imported listing',
+      address: null,
+      description: null,
+      photos: [],
+      utilities: {},
+      raw: {},
+      visitedAt: null,
+      roadAccessRating: null,
+      areaFeelingRating: null,
+      viewRating: null,
+      updatedAt: 100,
+      candidatePlots: [
+        {
+          id: 'plot-id',
+          householdId: 'household-id',
+          sourceListingId: 'listing-id',
+          importKey: 'primary',
+          name: null,
+          priceEur: 40_000,
+          areaAres: 10,
+          purposeText: null,
+          notes: null,
+          parcelNumberClue: null,
+          latitudeClue: null,
+          longitudeClue: null,
+          coordinateCluePrecision: null,
+          addressClue: null,
+          primaryLocationClue: null,
+          resolvedLatitude: null,
+          resolvedLongitude: null,
+          resolvedAddress: null,
+          resolvedParcelNumber: null,
+          resolvedCadastralNumber: null,
+          resolvedBoundary: null,
+          resolvedPrecision: null,
+          effectiveLocationSource: null,
+          locationResolutionState: 'resolved',
+          parcelDatasetVersion: null,
+          automaticChecks: [],
+          automaticChecksRevision: null,
+          updatedAt: 100,
+        },
+      ],
+    }
+    runtime.start = runtime.createHousehold
+    runtime.getSourceListing = (id) => (id === listing.id ? listing : undefined)
+    const updateSourceListingRatings = vi.fn(async (_id: string, ratings) => {
+      listing = { ...listing, ...ratings }
+      await runtime.renameActiveHousehold('Rating saved')
+    })
+    runtime.updateSourceListingRatings = updateSourceListingRatings
+    const updateCandidatePlot = vi.spyOn(runtime, 'updateCandidatePlot')
+    history.replaceState(null, '', '/source-listings/listing-id')
+
+    mountRouter(runtime)
+    await waitFor(() => expect(document.body.textContent).toContain('Imported listing'))
+
+    const inputs = [...document.querySelectorAll<HTMLInputElement>('input')]
+    const price = inputs.find((input) => input.value === '40000')
+    const area = inputs.find((input) => input.value === '10')
+    if (!price || !area) throw new Error('Area fields are missing')
+    price.value = '40500,5'
+    price.dispatchEvent(new Event('input', { bubbles: true }))
+    area.value = '12,5'
+    area.dispatchEvent(new Event('input', { bubbles: true }))
+
+    const roadRating = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) =>
+        button.getAttribute('aria-label') === '4 of 5' &&
+        button.closest('[aria-label="Road & access"]'),
+    )
+    if (!roadRating) throw new Error('Listing rating control is missing')
+    roadRating.click()
+
+    await waitFor(() => {
+      expect(updateSourceListingRatings).toHaveBeenCalledWith('listing-id', {
+        roadAccessRating: 4,
+        areaFeelingRating: null,
+        viewRating: null,
+      })
+      expect(roadRating.getAttribute('aria-pressed')).toBe('true')
+    })
+    await waitFor(() => {
+      expect(listing.roadAccessRating).toBe(4)
+      expect(price.value).toBe('40500,5')
+      expect(area.value).toBe('12,5')
+    })
+    const saveArea = findButton('Save this area')
+    if (!saveArea) throw new Error('Save this area button is missing')
+    saveArea.click()
+    await waitFor(() =>
+      expect(updateCandidatePlot).toHaveBeenCalledWith(
+        'listing-id',
+        'plot-id',
+        expect.objectContaining({ priceEur: 40_500.5, areaAres: 12.5 }),
+      ),
+    )
+  })
+
   it('rolls a rejected rating write back to the authoritative snapshot', async () => {
     const runtime = createTestRuntime()
     const listing: SourceListingDetail = {
@@ -642,6 +749,43 @@ describe('App Household boundary', () => {
     await waitFor(() =>
       expect(document.querySelector('h1')?.textContent).toBe('Forest edge search'),
     )
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull())
+    expect(document.body.textContent).toContain('Name saved')
+  })
+
+  it('rolls back the header and settings name when a rename is rejected', async () => {
+    const runtime = createTestRuntime()
+    let rejectRename: ((reason?: unknown) => void) | undefined
+    runtime.renameActiveHousehold = () =>
+      new Promise<void>((_, reject) => {
+        rejectRename = reject
+      })
+    mount(runtime)
+    await waitFor(() => expect(findButton('Start a search')).toBeTruthy())
+    findButton('Start a search')?.click()
+    await waitFor(() => expect(findButton('Our search settings')).toBeTruthy())
+    findButton('Our search settings')?.click()
+    await waitFor(() => {
+      expect(
+        document.querySelector<HTMLInputElement>('input[aria-label="Search name"]'),
+      ).toBeTruthy()
+    })
+    const nameInput = document.querySelector<HTMLInputElement>('input[aria-label="Search name"]')
+    if (!nameInput) throw new Error('Search name input is missing')
+    nameInput.value = 'Rejected search'
+    nameInput.dispatchEvent(new InputEvent('input', { bubbles: true }))
+    findButton('Save')?.click()
+
+    await waitFor(() => expect(findButton('Save')?.disabled).toBe(true))
+    rejectRename?.(new Error('Storage is unavailable'))
+
+    await waitFor(() => {
+      expect(document.querySelector('h1')?.textContent).toBe('Our home search')
+      expect(nameInput.value).toBe('Our home search')
+      expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+        'Storage is unavailable',
+      )
+    })
   })
 
   it('shares the invitation locally with full-access warnings', async () => {

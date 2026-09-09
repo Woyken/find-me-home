@@ -213,10 +213,9 @@ test('saves listing ratings immediately without saving an area and shares them a
     .getByRole('group', { name: 'Road & access' })
     .getByRole('button', { name: '4 of 5' })
     .click()
-  await expect(ratings.getByRole('button', { name: '4 of 5' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  )
+  await expect(
+    ratings.getByRole('group', { name: 'Road & access' }).getByRole('button', { name: '4 of 5' }),
+  ).toHaveAttribute('aria-pressed', 'true')
   await page.getByRole('button', { name: 'Mark another area' }).click()
   await expect(page.locator('article.area')).toHaveCount(2)
   await page.reload()

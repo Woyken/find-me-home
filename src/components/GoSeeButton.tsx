@@ -1,4 +1,4 @@
-import { Show, action, createOptimistic, createSignal } from 'solid-js'
+import { Show, action, affects, createOptimistic, createSignal, isPending } from 'solid-js'
 import { useHousehold } from '../households/context'
 import { FlagIcon } from './icons'
 
@@ -7,15 +7,14 @@ import { FlagIcon } from './icons'
  */
 export function GoSeeButton(props: { sourceListingId: string }) {
   const household = useHousehold()
-  const [busy, setBusy] = createSignal(false)
   const [error, setError] = createSignal('')
   const [plan, setPlan] = createOptimistic(() => household.getVisitPlan().sourceListingIds, {
     loadingValue: [],
   })
   const going = () => plan().includes(props.sourceListingId)
   const toggle = action(function* () {
+    affects(plan)
     const ids = plan()
-    setBusy(true)
     setError('')
     const next = going()
       ? ids.filter((id) => id !== props.sourceListingId)
@@ -26,10 +25,9 @@ export function GoSeeButton(props: { sourceListingId: string }) {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
       throw caught
-    } finally {
-      setBusy(false)
     }
   })
+  const busy = () => isPending(plan)
   return (
     <>
       <button

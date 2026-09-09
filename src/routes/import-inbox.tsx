@@ -2,10 +2,12 @@ import {
   For,
   Show,
   action,
+  affects,
   createEffect,
   createMemo,
   createOptimisticStore,
   createSignal,
+  isPending,
   onSettled,
 } from 'solid-js'
 import { CheckIcon } from '../components/icons'
@@ -46,7 +48,6 @@ export default function ImportInboxPage() {
   const [order, setOrder] = createSignal<Array<string>>([])
   const [captured, setCaptured] = createSignal<Captured>()
   const [error, setError] = createSignal('')
-  const [busy, setBusy] = createSignal(false)
 
   onSettled(() => {
     document.body.classList.add('blotter')
@@ -125,7 +126,7 @@ export default function ImportInboxPage() {
   const bring = (id: string) =>
     setOrder((current) => [id, ...current.filter((other) => other !== id)])
   const drop = action(function* (id: string) {
-    setBusy(true)
+    affects(items)
     setError('')
     setItems((current) => current.filter((item) => item.id !== id))
     try {
@@ -133,10 +134,9 @@ export default function ImportInboxPage() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
       throw caught
-    } finally {
-      setBusy(false)
     }
   })
+  const busy = () => isPending(() => items.map((item) => item.id))
 
   return (
     <main class="wrap narrow">

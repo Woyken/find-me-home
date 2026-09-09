@@ -65,7 +65,8 @@ export function HouseholdHeader(props: { active?: 'plots' | 'trip' }) {
       <SearchSettingsDialog
         open={settings()}
         onClose={() => setSettings(false)}
-        onOptimisticRename={setDisplayName}
+        displayName={displayName}
+        setDisplayName={setDisplayName}
       />
     </header>
   )

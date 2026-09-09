@@ -1,4 +1,13 @@
-import { For, Show, action, createEffect, createOptimistic, createSignal } from 'solid-js'
+import {
+  For,
+  Show,
+  action,
+  affects,
+  createEffect,
+  createSignal,
+  isPending,
+  untrack,
+} from 'solid-js'
 import QRCode from 'qrcode'
 import { useHousehold } from '../households/context'
 import { Modal } from './Modal'
@@ -11,9 +20,12 @@ import { showToast } from './Toast'
 export function SearchSettingsDialog(props: {
   open: boolean
   onClose: () => void
-  onOptimisticRename?: (name: string) => void
+  displayName: () => string
+  setDisplayName: (name: string) => string
 }) {
   const household = useHousehold()
+  const displayName = untrack(() => props.displayName)
+  const setDisplayName = untrack(() => props.setDisplayName)
   const persistedName = () => {
     const state = household.state()
     return state.status === 'active' ? state.household.name : ''
@@ -22,8 +34,7 @@ export function SearchSettingsDialog(props: {
     const state = household.state()
     return state.status === 'active' ? state.access.householdId : ''
   }
-  const [name, setName] = createSignal(persistedName())
-  const [optimisticName, setOptimisticName] = createOptimistic(persistedName, { loadingValue: '' })
+  const [name, setName] = createSignal(untrack(persistedName))
   // Start from the current name each time the dialog opens.
   createEffect(
     () => props.open,
@@ -51,18 +62,15 @@ export function SearchSettingsDialog(props: {
       if (done) showToast(done)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
-      setOptimisticName(persistedName())
-      props.onOptimisticRename?.(persistedName())
       throw cause
     } finally {
       setBusy(false)
     }
   }
   const saveName = action(function* (next: string) {
-    setBusy(true)
+    affects(displayName)
     setError('')
-    setOptimisticName(next)
-    props.onOptimisticRename?.(next)
+    setDisplayName(next)
     try {
       yield household.renameActiveHousehold(next)
       showToast('Name saved')
@@ -70,10 +78,9 @@ export function SearchSettingsDialog(props: {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
       throw cause
-    } finally {
-      setBusy(false)
     }
   })
+  const renaming = () => isPending(displayName)
   const rename = (event: SubmitEvent) => {
     event.preventDefault()
     void saveName(name()).catch(() => undefined)
@@ -104,10 +111,10 @@ export function SearchSettingsDialog(props: {
         <input
           class="grow"
           aria-label="Search name"
-          value={optimisticName()}
+          value={props.displayName()}
           onInput={(event) => setName(event.currentTarget.value)}
         />
-        <button class="btn" type="submit" disabled={busy()}>
+        <button class="btn" type="submit" disabled={busy() || renaming()}>
           Save
         </button>
       </form>
