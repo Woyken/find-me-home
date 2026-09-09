@@ -4,6 +4,7 @@ import {
   decodeImportTransportFragment,
   encodeImportFragment,
   parseAruodasImport,
+  restoreImportTransport,
 } from './aruodas'
 import { createAruodasBookmarklet } from './bookmarklet'
 import { bookmarkletSource } from 'virtual:aruodas-bookmarklet'
@@ -223,6 +224,33 @@ describe('Aruodas import fragment', () => {
       description: payload.description,
       url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-zemuju-rusoku-k-upes-g-sklypas-11-1472707/',
     })
+  })
+
+  it('revalidates saved drafts through the canonical import parser', () => {
+    const imported = parseAruodasImport(payload)
+
+    expect(
+      restoreImportTransport({ kind: 'listing', imported, returnTo: 'import-inbox' }),
+    ).toMatchObject({
+      kind: 'listing',
+      returnTo: 'import-inbox',
+      imported: {
+        sourceId: '11-1472707',
+        url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-zemuju-rusoku-k-upes-g-sklypas-11-1472707/',
+      },
+    })
+    expect(() =>
+      restoreImportTransport({
+        kind: 'listing',
+        imported: { ...imported, url: 'https://example.test/not-aruodas-11-1472707/' },
+      }),
+    ).toThrow()
+    expect(() =>
+      restoreImportTransport({
+        kind: 'listing',
+        imported: { ...imported, photos: ['https://example.test/plot.jpg'] },
+      }),
+    ).toThrow()
   })
 
   it('imports Aruodas coordinates with the precision of their source', () => {

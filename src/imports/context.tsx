@@ -1,7 +1,7 @@
 import { createContext, createSignal, onCleanup, useContext } from 'solid-js'
 import type { ParentProps } from 'solid-js'
-import type { AruodasImport, ImportTransport } from './aruodas'
-import { decodeImportTransportFragment } from './aruodas'
+import type { ImportTransport } from './aruodas'
+import { decodeImportTransportFragment, restoreImportTransport } from './aruodas'
 
 const STORAGE_KEY = 'find-me-home-import-draft'
 
@@ -32,16 +32,10 @@ export function ImportProvider(props: ParentProps) {
       const stored = sessionStorage.getItem(STORAGE_KEY)
       if (stored) {
         try {
-          const parsed = JSON.parse(stored) as ImportTransport | Record<string, unknown>
-          draft =
-            'kind' in parsed
-              ? (parsed as ImportTransport)
-              : {
-                  kind: 'listing',
-                  imported: parsed as AruodasImport,
-                }
+          draft = restoreImportTransport(JSON.parse(stored))
         } catch {
           sessionStorage.removeItem(STORAGE_KEY)
+          error = 'This saved import could not be read. Run the Aruodas bookmarklet again.'
         }
       }
     }
