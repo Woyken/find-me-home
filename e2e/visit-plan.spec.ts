@@ -197,6 +197,7 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
         plannedListingIds: ['501', '502'],
       })
     })
+    const [sharedFirstSourceListingId, sharedSecondSourceListingId] = result.sourceListingIds
     const invitation = new URL(
       await first.evaluate(() => {
         const api = window.__FMH_E2E__
@@ -228,8 +229,8 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
       )
 
     await second.getByRole('button', { name: 'Move Shared second up' }).click()
-    await waitForVisitPlan(second, [result.sourceListingIds[1], result.sourceListingIds[0]])
-    await waitForVisitPlan(first, [result.sourceListingIds[1], result.sourceListingIds[0]])
+    await waitForVisitPlan(second, [sharedSecondSourceListingId, sharedFirstSourceListingId])
+    await waitForVisitPlan(first, [sharedSecondSourceListingId, sharedFirstSourceListingId])
     await first.goto(appUrl('visit-plan'), {
       waitUntil: 'domcontentloaded',
     })
@@ -243,7 +244,7 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
       const api = window.__FMH_E2E__
       if (!api) throw new Error('E2E runtime is unavailable')
       return api.markVisited(id)
-    }, result.sourceListingIds[0])
+    }, sharedFirstSourceListingId)
     await second.goto(appUrl('visit-plan'), {
       waitUntil: 'domcontentloaded',
     })
@@ -252,18 +253,18 @@ test('two pages synchronize initial state and subsequent plan, inbox, visit, and
       const api = window.__FMH_E2E__
       if (!api) throw new Error('E2E runtime is unavailable')
       return api.removeSourceListing(id)
-    }, result.sourceListingIds[1])
+    }, sharedSecondSourceListingId)
     await first.goto(appUrl('visit-plan'), {
       waitUntil: 'domcontentloaded',
     })
     await expect.poll(() => plannedTitles(first)).toEqual([])
 
-    await first.goto(appUrl(`source-listings/${result.sourceListingIds[0]}`), {
+    await first.goto(appUrl(`source-listings/${sharedFirstSourceListingId}`), {
       waitUntil: 'domcontentloaded',
     })
     await first.getByRole('button', { name: 'Go see it' }).click()
-    await waitForVisitPlan(first, [result.sourceListingIds[0]])
-    await waitForVisitPlan(second, [result.sourceListingIds[0]])
+    await waitForVisitPlan(first, [sharedFirstSourceListingId])
+    await waitForVisitPlan(second, [sharedFirstSourceListingId])
 
     await second.close()
     const rejoined = await secondContext.newPage()

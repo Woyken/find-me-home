@@ -95,7 +95,7 @@ test('presents complete listing details, gallery, marked areas, edits and listin
   await waitForRating(page, result.sourceListingIds[0], 'viewRating', 5)
   await area.getByRole('button', { name: 'Save this area' }).click()
   await expect(area.getByLabel('Price (€)')).toHaveValue('40500,5')
-  await expect(area.getByRole('status')).toHaveText('Saved')
+  await expect(area.locator('.status-text[role="status"]')).toHaveText('Saved')
   await page.reload()
   await expect(area.getByLabel('Price (€)')).toHaveValue('40500.5')
 
