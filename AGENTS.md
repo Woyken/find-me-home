@@ -1,6 +1,19 @@
 ## General guidelines
 
 Avoid `as` type casting. Reuse types and be specific. Inferred types are best types.
+Prioritize fine-grained reactivity.
+createEffect takes two functions — (compute, apply, options?)
+Use `createOptimistic` whenever possible. With `action(function()*...)`, `refresh`, `affects`
+stores are mutable
+
+```typescript
+const [state, setState] = createStore({ todos: [] });
+setState((draft) => {
+  draft.todos.push(newTodo);
+});
+```
+
+use `isPending`
 
 ## Agent Skills
 
