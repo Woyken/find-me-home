@@ -396,4 +396,27 @@ describe('Household Source Listing repository', () => {
     expect((await repository.saveReviewedImport(review)).created).toBe(true)
     repository.close()
   })
+
+  it('removes one Candidate Plot while retaining its synchronization tombstone', async () => {
+    const prefix = `remove-candidate-plot-${crypto.randomUUID()}`
+    databases.push(`${prefix}-household-a`)
+    let uuid = 0
+    const repository = createIndexedDbSourceListingRepository(prefix, {
+      now: () => 100,
+      uuid: () => `id-${++uuid}`,
+    })
+    await repository.open('household-a')
+    const saved = await repository.saveReviewedImport(review, 100)
+    const secondPlotId = await repository.addCandidatePlot(saved.sourceListingId, 101)
+
+    await repository.removeCandidatePlot(saved.sourceListingId, secondPlotId, 102)
+
+    expect(repository.get(saved.sourceListingId)?.candidatePlots).toMatchObject([
+      { id: saved.candidatePlotId },
+    ])
+    expect(repository.allRecords()).toContainEqual(
+      expect.objectContaining({ id: secondPlotId, updatedAt: 102, deletedAt: 102 }),
+    )
+    repository.close()
+  })
 })

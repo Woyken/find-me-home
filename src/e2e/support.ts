@@ -74,6 +74,7 @@ export type E2eApi = {
   invitationUrl: () => string
   captureInbox: (id: string) => Promise<void>
   removeSourceListing: (id: string) => Promise<void>
+  removeCandidatePlot: (sourceListingId: string, candidatePlotId: string) => Promise<void>
   markVisited: (id: string) => Promise<void>
   getSourceListingRatings: (id: string) => E2eSourceListingRatings | undefined
   getVisitPlanSourceListingIds: () => readonly string[]

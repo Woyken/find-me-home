@@ -43,6 +43,7 @@ export type HouseholdRuntime = {
     candidatePlotId: string,
     update: CandidatePlotUpdate,
   ) => Promise<void>
+  removeCandidatePlot: (sourceListingId: string, candidatePlotId: string) => Promise<void>
   updateSourceListingRatings: (
     sourceListingId: string,
     ratings: Parameters<SourceListingRepository['updateSourceListingRatings']>[1],
@@ -704,6 +705,19 @@ export const createHouseholdRuntime = (dependencies: {
           () => undefined,
         )
       }
+    },
+    removeCandidatePlot: (sourceListingId, candidatePlotId) => {
+      const updatedAt = mutationTime()
+      locationDiagnostics.delete(candidatePlotId)
+      queuedLocationResolutions.delete(candidatePlotId)
+      queuedAutomaticChecks.delete(candidatePlotId)
+      return serializeWrite(() =>
+        dependencies.sourceListings.removeCandidatePlot(
+          sourceListingId,
+          candidatePlotId,
+          updatedAt,
+        ),
+      )
     },
     updateSourceListingRatings: (sourceListingId, ratings) => {
       for (const rating of [
