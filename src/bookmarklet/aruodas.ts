@@ -112,7 +112,7 @@ const showCrash = (error: unknown) => {
     `Find Me Home bookmark failed on ${attempt(() => window.location.href)}`,
     `When: ${new Date().toISOString()}`,
     `Browser: ${attempt(() => navigator.userAgent)}`,
-    `Cards on page: ${attempt(() => String(document.querySelectorAll('.list-row-container, .result-item-big-thumb').length))}`,
+    `Cards on page: ${attempt(() => String(document.querySelectorAll('.list-row-container, .result-item-big-thumb, #objectList > .result-item-v3').length))}`,
     '',
     error instanceof Error
       ? `${error.name}: ${error.message}\n${error.stack ?? ''}`
@@ -177,65 +177,120 @@ const run = () => {
     let skippedNonLand = 0
     let skippedInactive = 0
     let unreadable = 0
+    const expectedTotal = numberFrom(
+      document.querySelector('.page-title-bar--count-items')?.textContent,
+    )
+    const seenCards = new Set<string>()
     const seen = new Set<string>()
-    const items = [
-      ...document.querySelectorAll<HTMLElement>('.list-row-container, .result-item-big-thumb'),
-    ].flatMap((card) => {
-      const id =
-        card.id.match(/^objectRow(\d{1,3}-\d+)$/)?.[1] ??
-        card
-          .querySelector<HTMLAnchorElement>('a[href]')
-          ?.href.match(/(?:-|\/)(\d{1,3}-\d+)\/?(?:[?#]|$)/)?.[1]
-      if (!id) {
-        unreadable += 1
-        return []
-      }
-      if (!id.startsWith('11-')) {
-        skippedNonLand += 1
-        return []
-      }
-      if (
-        card.classList.contains('inactive-saved') ||
-        card.querySelector('.advert-is-passive, .list-sold-lt')
-      ) {
-        skippedInactive += 1
-        return []
-      }
-      if (seen.has(id)) return []
-      seen.add(id)
-      const image = card.querySelector<HTMLImageElement>(
-        '.list-img img, .object-image-link-big_thumbs img',
+    const items: Array<{
+      sourceId: string
+      title?: string
+      description?: string
+      priceEur?: number
+      areaAres?: number
+      thumbnail?: string
+    }> = []
+    const readPage = (page: Document) => {
+      const cards = page.querySelectorAll<HTMLElement>(
+        '.list-row-container, .result-item-big-thumb, #objectList > .result-item-v3',
       )
-      const thumbnail = image?.currentSrc || image?.src || image?.dataset.src || undefined
-      const details = [...card.querySelectorAll('.desc-img-txt')]
-        .map((node) => clean(node.textContent))
-        .filter(Boolean)
-        .join(', ')
-      return [
-        {
+      for (const card of cards) {
+        const link = card.querySelector<HTMLAnchorElement>('a[href]')
+        const id =
+          card.id.match(/^objectRow(\d{1,3}-\d+)$/)?.[1] ??
+          link?.getAttribute('href')?.match(/(?:-|\/)(\d{1,3}-\d+)\/?(?:[?#]|$)/)?.[1]
+        if (!id) {
+          unreadable += 1
+          continue
+        }
+        if (seenCards.has(id)) continue
+        seenCards.add(id)
+        if (!id.startsWith('11-')) {
+          skippedNonLand += 1
+          continue
+        }
+        if (
+          card.classList.contains('inactive-saved') ||
+          card.querySelector('.advert-is-passive, .list-sold-lt')
+        ) {
+          skippedInactive += 1
+          continue
+        }
+        if (seen.has(id)) continue
+        seen.add(id)
+        const image = card.querySelector<HTMLImageElement>(
+          '.list-img img, .object-image-link-big_thumbs img, .object-image-link img',
+        )
+        const thumbnail = image?.currentSrc || image?.src || image?.dataset.src || undefined
+        const details = [...card.querySelectorAll('.desc-img-txt')]
+          .map((node) => clean(node.textContent))
+          .filter(Boolean)
+          .join(', ')
+        items.push({
           sourceId: id,
-          title: firstText(card, 'h3 a', '.item-address-v4'),
-          description: firstText(card, '.description') ?? clean(details),
-          priceEur: numberFrom(firstText(card, '.rememb-item-price', '.price-main')),
-          areaAres: numberFrom(firstText(card, '.description', '.desc-AreaOverall .desc-img-txt')),
+          title: firstText(card, 'h3 a', '.item-address-v4', '.item-address-v3'),
+          description: firstText(card, '.description', '.item-description-v3') ?? clean(details),
+          priceEur: numberFrom(
+            firstText(card, '.rememb-item-price', '.price-main', '.price-price-v3'),
+          ),
+          areaAres: numberFrom(
+            firstText(
+              card,
+              '.description',
+              '.desc-AreaOverall .desc-img-txt',
+              '.item-description-v3',
+            ),
+          ),
           thumbnail: thumbnail && allowedPhoto(thumbnail) ? thumbnail : undefined,
-        },
-      ]
-    })
-    const text = JSON.stringify({
-      version: 2,
-      kind: 'favorites',
-      payload: { items, skippedNonLand, skippedInactive, unreadable },
-    })
-    if (text.length > 100_000) {
-      fail('Your favorites list is too large to import.')
-    } else {
-      const bytes = new TextEncoder().encode(text)
-      let binary = ''
-      for (const byte of bytes) binary += String.fromCharCode(byte)
-      const encoded = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-      window.location.href = appDestination('import-inbox', `import=${encoded}`)
+        })
+      }
     }
+    const finish = () => {
+      const cardsRead = seenCards.size + unreadable
+      if (expectedTotal !== undefined && cardsRead !== expectedTotal) {
+        throw new Error(`Aruodas shows ${expectedTotal} favorites, but only ${cardsRead} were read`)
+      }
+      const text = JSON.stringify({
+        version: 2,
+        kind: 'favorites',
+        payload: { items, skippedNonLand, skippedInactive, unreadable },
+      })
+      if (text.length > 100_000) {
+        fail('Your favorites list is too large to import.')
+      } else {
+        const bytes = new TextEncoder().encode(text)
+        let binary = ''
+        for (const byte of bytes) binary += String.fromCharCode(byte)
+        const encoded = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+        window.location.href = appDestination('import-inbox', `import=${encoded}`)
+      }
+    }
+    const paginationUrl = (link: HTMLAnchorElement, base: URL | string) => {
+      const next = new URL(link.getAttribute('href') || '', base)
+      if (next.origin !== url.origin || !next.pathname.startsWith('/isiminti-skelbimai')) {
+        throw new Error('Aruodas favorites pagination pointed outside the favorites page')
+      }
+      return next.href
+    }
+    readPage(document)
+    const firstNextLink = document.querySelector<HTMLAnchorElement>('.button-next-v2 a[href]')
+    const firstNext = firstNextLink ? paginationUrl(firstNextLink, url) : undefined
+    if (!firstNext) return finish()
+    return (async () => {
+      const fetchedPages = new Set<string>()
+      let next: string | undefined = firstNext
+      while (next) {
+        if (fetchedPages.has(next)) throw new Error('Aruodas favorites pagination repeated a page')
+        fetchedPages.add(next)
+        const response = await fetch(next, { credentials: 'same-origin' })
+        if (!response.ok) throw new Error(`Could not load favorites page (${response.status})`)
+        const page = new DOMParser().parseFromString(await response.text(), 'text/html')
+        readPage(page)
+        const following = page.querySelector<HTMLAnchorElement>('.button-next-v2 a[href]')
+        next = following ? paginationUrl(following, next) : undefined
+      }
+      finish()
+    })()
   } else if (!isLandAdvertPath(url.pathname)) {
     fail('Open an individual Aruodas land advertisement or your favorites page before importing.')
   } else if (
@@ -326,7 +381,12 @@ const run = () => {
 
 const heartbeat = showHeartbeat()
 try {
-  run()
+  const result = run()
+  if (result instanceof Promise)
+    void result.catch((error) => {
+      heartbeat.remove()
+      showCrash(error)
+    })
 } catch (error) {
   heartbeat.remove()
   showCrash(error)

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   decodeImportFragment,
   decodeImportTransportFragment,
@@ -8,6 +8,11 @@ import {
 } from './aruodas'
 import { createAruodasBookmarklet } from './bookmarklet'
 import { bookmarkletSource } from 'virtual:aruodas-bookmarklet'
+import {
+  filteredLandFavoritesPage,
+  mixedFavoritesPageOne,
+  mixedFavoritesPageTwo,
+} from './test-fixtures/aruodas-favorites'
 
 const payload = {
   url: 'https://www.aruodas.lt/sklypai-vilniaus-rajone-zemuju-rusoku-k-upes-g-sklypas-11-1472707/?search_pos=1',
@@ -60,7 +65,7 @@ describe('Aruodas import fragment', () => {
   it('uses the same bookmarklet for adverts and the favorites page', () => {
     expect(bookmarkletSource).toContain('/isiminti-skelbimai')
     expect(bookmarkletSource).toContain('kind: "favorites"')
-    expect(bookmarkletSource).not.toContain('fetch(')
+    expect(bookmarkletSource).toContain('fetch(')
   })
 
   it('captures only active land adverts from the favorites page', () => {
@@ -140,6 +145,210 @@ describe('Aruodas import fragment', () => {
         },
       ],
     })
+  })
+
+  it('captures the current small-thumbnail mobile favorites page', () => {
+    const transport = runBookmarklet(
+      `
+        <ul class="popup-object-list" id="objectList">
+          <li class="result-item-v3 small_thumbs saved-adverts-result-item-v3">
+            <a class="object-image-link" href="/11-1387357/?from_saved=1">
+              <img src="https://aruodas-img.dgn.lt/object_66_120291899/plot.jpg">
+            </a>
+            <span class="item-address-v3"><a>Vilniaus r. sav., Rudaminos mstl., Lenkų g.</a></span>
+            <span class="item-description-v3">14.06 a, namų valda</span>
+            <span class="price-price-v3">49 900 €</span>
+          </li>
+          <li class="result-item-v3 small_thumbs saved-adverts-result-item-v3">
+            <a class="object-image-link" href="/2-1799247/?from_saved=1">House</a>
+          </li>
+        </ul>
+      `,
+      'https://m.aruodas.lt/isiminti-skelbimai/',
+    )
+
+    expect(transport).toMatchObject({
+      kind: 'favorites',
+      skippedNonLand: 1,
+      unreadable: 0,
+      items: [
+        {
+          sourceId: '11-1387357',
+          title: 'Vilniaus r. sav., Rudaminos mstl., Lenkų g.',
+          description: '14.06 a, namų valda',
+          areaAres: 14.06,
+          priceEur: 49_900,
+          photos: ['https://aruodas-img.dgn.lt/object_66_120291899/plot.jpg'],
+        },
+      ],
+    })
+  })
+
+  it('captures every page of a paginated favorites list', async () => {
+    const fetchPage = vi.fn().mockResolvedValue(
+      new Response(`
+        <ul id="objectList">
+          <li class="result-item-v3">
+            <a href="/11-1387357/?from_saved=1">Duplicate from page 1</a>
+          </li>
+          <li class="result-item-v3">
+            <a href="/11-1476811/?from_saved=1">Plot on page 2</a>
+            <span class="item-address-v3">Page two plot</span>
+          </li>
+        </ul>
+      `),
+    )
+    vi.stubGlobal('fetch', fetchPage)
+    try {
+      const transport = await runBookmarkletAsync(
+        `
+          <ul id="objectList">
+            <li class="result-item-v3">
+              <a href="/11-1387357/?from_saved=1">Plot on page 1</a>
+              <span class="item-address-v3">Page one plot</span>
+            </li>
+          </ul>
+          <div class="button-next-v2"><a href="/isiminti-skelbimai/?Page=2">Next</a></div>
+        `,
+        'https://m.aruodas.lt/isiminti-skelbimai/',
+      )
+
+      expect(fetchPage).toHaveBeenCalledWith('https://m.aruodas.lt/isiminti-skelbimai/?Page=2', {
+        credentials: 'same-origin',
+      })
+      expect(transport).toMatchObject({
+        kind: 'favorites',
+        items: [
+          { sourceId: '11-1387357', title: 'Page one plot' },
+          { sourceId: '11-1476811', title: 'Page two plot' },
+        ],
+      })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('does not silently import a partial favorites list', () => {
+    document.body.innerHTML = `
+      <div class="page-title-bar--count-items">(42)</div>
+      <ul id="objectList">
+        <li class="result-item-v3"><a href="/11-1387357/">Only visible plot</a></li>
+      </ul>
+    `
+    const location = { href: 'https://m.aruodas.lt/isiminti-skelbimai/' }
+    new Function('window', 'document', bookmarkletSource.replace(/[\r\n\t]/g, ''))(
+      { location, alert: () => undefined, __fmhAppUrl: 'https://example.test/' },
+      document,
+    )
+
+    expect(location.href).toBe('https://m.aruodas.lt/isiminti-skelbimai/')
+    expect(document.querySelector('textarea')?.value).toContain(
+      'Aruodas shows 42 favorites, but only 1 were read',
+    )
+  })
+
+  it('does not let overlapping pages hide a partial favorites list', async () => {
+    const fetchPage = vi.fn().mockResolvedValue(
+      new Response(`
+        <ul id="objectList">
+          <li class="result-item-v3"><a href="/11-1387357/">Duplicate plot</a></li>
+        </ul>
+      `),
+    )
+    vi.stubGlobal('fetch', fetchPage)
+    try {
+      document.body.innerHTML = `
+        <div class="page-title-bar--count-items">(2)</div>
+        <ul id="objectList">
+          <li class="result-item-v3"><a href="/11-1387357/">First plot</a></li>
+        </ul>
+        <div class="button-next-v2"><a href="/isiminti-skelbimai/?Page=2">Next</a></div>
+      `
+      const location = { href: 'https://m.aruodas.lt/isiminti-skelbimai/' }
+      new Function('window', 'document', bookmarkletSource.replace(/[\r\n\t]/g, ''))(
+        { location, alert: () => undefined, __fmhAppUrl: 'https://example.test/' },
+        document,
+      )
+      await vi.waitFor(() =>
+        expect(document.querySelector('textarea')?.value).toContain(
+          'Aruodas shows 2 favorites, but only 1 were read',
+        ),
+      )
+      expect(location.href).toBe('https://m.aruodas.lt/isiminti-skelbimai/')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('rejects pagination outside the Aruodas favorites page', () => {
+    document.body.innerHTML = `
+      <ul id="objectList">
+        <li class="result-item-v3"><a href="/11-1387357/">Plot</a></li>
+      </ul>
+      <div class="button-next-v2"><a href="https://example.org/next">Next</a></div>
+    `
+    const location = { href: 'https://m.aruodas.lt/isiminti-skelbimai/' }
+    new Function('window', 'document', bookmarkletSource.replace(/[\r\n\t]/g, ''))(
+      { location, alert: () => undefined, __fmhAppUrl: 'https://example.test/' },
+      document,
+    )
+
+    expect(document.querySelector('textarea')?.value).toContain(
+      'pagination pointed outside the favorites page',
+    )
+    expect(location.href).toBe('https://m.aruodas.lt/isiminti-skelbimai/')
+  })
+
+  it('imports the supplied 88-item mixed favorites page across both pages', async () => {
+    const fetchPage = vi.fn().mockResolvedValue(new Response(mixedFavoritesPageTwo))
+    vi.stubGlobal('fetch', fetchPage)
+    try {
+      const transport = await runBookmarkletAsync(
+        mixedFavoritesPageOne,
+        'https://m.aruodas.lt/isiminti-skelbimai/',
+      )
+
+      expect(transport).toMatchObject({
+        kind: 'favorites',
+        skippedNonLand: 40,
+        skippedInactive: 0,
+        unreadable: 0,
+      })
+      expect(transport.kind === 'favorites' && transport.items).toHaveLength(48)
+      expect(
+        transport.kind === 'favorites' && new Set(transport.items.map((item) => item.sourceId)),
+      ).toHaveLength(48)
+      expect(fetchPage).toHaveBeenCalledOnce()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('imports all 42 plots from the supplied filtered land favorites page', () => {
+    const transport = runBookmarklet(
+      filteredLandFavoritesPage,
+      'https://m.aruodas.lt/isiminti-skelbimai/?object_type=11&advert_status_saved=0',
+    )
+
+    expect(transport).toMatchObject({
+      kind: 'favorites',
+      skippedNonLand: 0,
+      skippedInactive: 0,
+      unreadable: 0,
+    })
+    expect(transport.kind === 'favorites' && transport.items).toHaveLength(42)
+    if (transport.kind !== 'favorites') throw new Error('Expected favorites transport')
+    expect(new Set(transport.items.map((item) => item.sourceId))).toHaveLength(42)
+    expect(
+      transport.items.every(
+        (item) =>
+          item.title &&
+          item.description &&
+          item.priceEur !== undefined &&
+          item.areaAres !== undefined &&
+          item.photos.length === 1,
+      ),
+    ).toBe(true)
   })
 
   it('accepts a bare mobile land advert URL and still rejects other categories', () => {
@@ -335,4 +544,16 @@ const runBookmarklet = (
 
   const fragment = new URL(location.href).hash.slice('#import='.length)
   return decodeImportTransportFragment(fragment)
+}
+
+const runBookmarkletAsync = async (body: string, initialUrl: string) => {
+  document.title = 'Aruodas favorites'
+  document.body.innerHTML = body
+  const location = { href: initialUrl }
+  new Function('window', 'document', bookmarkletSource.replace(/[\r\n\t]/g, ''))(
+    { location, alert: () => undefined, __fmhAppUrl: 'https://example.test/' },
+    document,
+  )
+  await vi.waitFor(() => expect(location.href).toContain('#import='))
+  return decodeImportTransportFragment(new URL(location.href).hash.slice('#import='.length))
 }
