@@ -28,8 +28,15 @@ const app = async (page: PlaywrightPage) => {
 
 const expectImportedDetail = async (page: PlaywrightPage, imported: AruodasImport) => {
   await expect(page.getByLabel('Price (€)')).toHaveValue(String(imported.priceEur))
-  await expect(page.getByLabel('Area (ares)')).toHaveValue(String(imported.areaAres))
-  await expect(page.getByLabel('Land purpose')).toHaveValue(imported.purposeText ?? '')
+  // The exact imported pin confirms a Registered Parcel, so the registry's
+  // area and purpose are shown; the advert's own values stay behind the toggle.
+  await expect(page.getByTestId('area-registry')).toContainText('From the registry')
+  await expect(
+    page.getByRole('button', { name: `Ours: ${String(imported.areaAres)} — edit` }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: `Ours: ${imported.purposeText ?? ''} — edit` }),
+  ).toBeVisible()
   await expect(page.getByText(imported.description ?? '', { exact: true })).toBeVisible()
   await expect(page.getByText('electricity mentioned', { exact: true })).toBeVisible()
   await expect(page.locator('.place')).toHaveText(imported.address ?? '')
