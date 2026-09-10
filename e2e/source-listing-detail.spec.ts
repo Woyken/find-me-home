@@ -121,6 +121,44 @@ test('presents complete listing details, gallery, marked areas, edits and listin
   await expect(secondArea.getByRole('textbox', { name: 'Address' })).toHaveValue('Second field 2')
 })
 
+test('keeps marked areas compact and expands one editor at a time', async ({ page }) => {
+  await openSeededListing(page, {
+    id: '115',
+    title: 'Compact areas fixture',
+    address: 'Fixture road 15',
+  })
+
+  const firstArea = page.locator('article.area').first()
+  await expect(firstArea.getByRole('button', { name: 'Collapse The plot' })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  await expect(firstArea.locator('.area-summary-address')).toHaveText('E2E resolved address')
+  await expect(firstArea.locator('.area-summary-figs')).toContainText('40 000 €')
+  await expect(firstArea.locator('.area-summary-figs')).toContainText('12,5 a')
+  await expect(firstArea.locator('.area-summary .strip')).toBeVisible()
+
+  await firstArea.getByLabel('Our notes').fill('Keep this unsaved')
+  await markByHand(page)
+
+  const secondArea = page.locator('article.area').nth(1)
+  await expect(firstArea.getByRole('button', { name: 'Expand Marked area 1' })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  )
+  await expect(firstArea.getByLabel('Our notes')).toBeHidden()
+  await expect(secondArea.getByRole('button', { name: 'Collapse Marked area 2' })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+
+  await secondArea.getByRole('button', { name: 'Collapse Marked area 2' }).click()
+  await expect(secondArea.getByLabel('Price (€)')).toBeHidden()
+  await firstArea.getByRole('button', { name: 'Expand Marked area 1' }).click()
+  await expect(firstArea.getByLabel('Our notes')).toHaveValue('Keep this unsaved')
+  await expect(secondArea.getByLabel('Price (€)')).toBeHidden()
+})
+
 test('marks an exact area from a Regia link and uses confirmed registry facts', async ({
   page,
 }) => {
