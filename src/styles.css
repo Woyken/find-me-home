@@ -650,6 +650,40 @@
     font-weight: 700;
     color: var(--ink-soft);
   }
+  .f.readonly {
+    display: block;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink-soft);
+  }
+  .f.readonly > div {
+    margin-top: 4px;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1.5px solid var(--ink);
+    background: #fff;
+    color: var(--ink);
+  }
+  .f.readonly b {
+    font-weight: 700;
+  }
+  .f.readonly .linkbtn {
+    margin-top: 6px;
+  }
+  .or {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 16px 0;
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+  .or::before,
+  .or::after {
+    content: '';
+    flex: 1;
+    border-top: 1px solid var(--line);
+  }
   label.f input,
   label.f select,
   label.f textarea,

@@ -124,6 +124,7 @@ const createTestRuntime = () => {
     addCandidatePlot: async () => {
       throw new Error('Not used')
     },
+    previewRegisteredParcel: async () => null,
     updateCandidatePlot: async () => undefined,
     resolveCandidatePlotLocation: async () => undefined,
     isCandidatePlotLocationRunning: () => false,

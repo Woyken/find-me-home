@@ -42,7 +42,11 @@ export type SourceListingRepository = {
     candidatePlotId: string
     created: boolean
   }>
-  addCandidatePlot: (sourceListingId: string, updatedAt: number) => Promise<string>
+  addCandidatePlot: (
+    sourceListingId: string,
+    updatedAt: number,
+    initial?: Partial<CandidatePlotUpdate>,
+  ) => Promise<string>
   updateCandidatePlot: (
     sourceListingId: string,
     candidatePlotId: string,
@@ -579,6 +583,9 @@ export const createIndexedDbSourceListingRepository = (
             priceEur: review.priceEur,
             areaAres: review.areaAres,
             purposeText: review.purposeText,
+            registeredParcelMatch: null,
+            registeredParcelAreaAres: null,
+            registeredParcelPurposeText: null,
             notes: review.notes,
             parcelNumberClue: review.parcelNumberClue,
             latitudeClue: review.latitudeClue,
@@ -660,7 +667,7 @@ export const createIndexedDbSourceListingRepository = (
         created: !existing,
       }
     },
-    async addCandidatePlot(sourceListingId, updatedAt) {
+    async addCandidatePlot(sourceListingId, updatedAt, initial) {
       const active = requireOpen()
       const sourceListing = sourceListings.find(
         (record) =>
@@ -678,6 +685,9 @@ export const createIndexedDbSourceListingRepository = (
         priceEur: null,
         areaAres: null,
         purposeText: null,
+        registeredParcelMatch: null,
+        registeredParcelAreaAres: null,
+        registeredParcelPurposeText: null,
         notes: null,
         parcelNumberClue: null,
         latitudeClue: null,
@@ -698,6 +708,15 @@ export const createIndexedDbSourceListingRepository = (
         automaticChecks: null,
         automaticChecksRevision: null,
         updatedAt,
+        ...initial,
+        ...(initial?.latitudeClue !== undefined
+          ? {
+              resolvedLatitude: initial.latitudeClue,
+              resolvedLongitude: initial.longitudeClue ?? null,
+              resolvedPrecision: initial.coordinateCluePrecision ?? null,
+              effectiveLocationSource: initial.latitudeClue === null ? null : 'coordinates',
+            }
+          : {}),
       }
       const transaction = active.database.transaction('candidate-plots', 'readwrite')
       put(transaction.objectStore('candidate-plots'), candidatePlot)
@@ -739,6 +758,9 @@ export const createIndexedDbSourceListingRepository = (
               effectiveLocationSource: update.latitudeClue === null ? null : 'coordinates',
               locationResolutionState: 'missing',
               parcelDatasetVersion: null,
+              registeredParcelMatch: null,
+              registeredParcelAreaAres: null,
+              registeredParcelPurposeText: null,
             }
           : {}),
         updatedAt,

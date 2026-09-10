@@ -31,6 +31,9 @@ const plot = {
   priceEur: 60_000,
   areaAres: 15,
   purposeText: 'Namų valda',
+  registeredParcelMatch: null,
+  registeredParcelAreaAres: null,
+  registeredParcelPurposeText: null,
   notes: null,
   parcelNumberClue: null,
   latitudeClue: 54.7,
@@ -98,6 +101,26 @@ describe('Automatic Checks', () => {
     expect(byKey.crime).toMatchObject({ status: 'pass' })
     expect(byKey.noise).toMatchObject({ status: 'warning' })
     expect(byKey.livability).toMatchObject({ status: 'warning' })
+  })
+
+  it('uses confirmed Registered Parcel area for the area Automatic Check', async () => {
+    const results = await runAutomaticChecks(
+      {
+        plot: {
+          ...plot,
+          areaAres: 5,
+          registeredParcelMatch: 'confirmed',
+          registeredParcelAreaAres: 12.5,
+        },
+        sourceListing,
+      },
+      services,
+    )
+    expect(results.find((result) => result.key === 'area')).toMatchObject({
+      status: 'pass',
+      value: '12,5 a',
+      detail: 'Registry area; household range 8-25 a.',
+    })
   })
 
   it('isolates unavailable external checks', async () => {

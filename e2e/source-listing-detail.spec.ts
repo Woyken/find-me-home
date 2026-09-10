@@ -42,6 +42,14 @@ const waitForRating = async (
     )
     .toBe(value)
 
+const markByHand = async (page: Page) => {
+  await page.getByRole('button', { name: 'Mark another area' }).click()
+  await page
+    .getByRole('dialog', { name: 'Mark another area' })
+    .getByRole('button', { name: 'Mark by hand' })
+    .click()
+}
+
 test('presents complete listing details, gallery, marked areas, edits and listing ratings', async ({
   page,
 }) => {
@@ -77,8 +85,10 @@ test('presents complete listing details, gallery, marked areas, edits and listin
   const area = page.locator('article.area').first()
   await area.getByLabel('Name for this area').fill('South field')
   await area.getByLabel('Price (€)').fill('40500,5')
+  await area.getByRole('button', { name: 'Ours: 12 — edit' }).click()
   await area.getByLabel('Area (ares)').fill('12,5')
-  await area.getByLabel('Land purpose').fill('Namų valda')
+  await area.getByRole('button', { name: 'Ours: Namų valda — edit' }).click()
+  await area.getByRole('textbox', { name: 'Land purpose' }).fill('Namų valda')
   await area.getByLabel('Our notes').fill('Sunny after lunch')
   const ratings = page.getByRole('region', { name: 'Our ratings' })
   await ratings
@@ -99,13 +109,81 @@ test('presents complete listing details, gallery, marked areas, edits and listin
   await page.reload()
   await expect(area.getByLabel('Price (€)')).toHaveValue('40500.5')
 
-  await page.getByRole('button', { name: 'Mark another area' }).click()
+  await markByHand(page)
   await expect(page.locator('article.area')).toHaveCount(2)
   const secondArea = page.locator('article.area').nth(1)
+  await expect(secondArea.getByLabel('Price (€)')).toHaveValue('40500.5')
+  await expect(secondArea.getByLabel('Area (ares)')).toHaveValue('12.5')
+  await expect(secondArea.getByLabel('Land purpose')).toHaveValue('Namų valda')
   await secondArea.getByLabel('Find it by').selectOption('address')
   await secondArea.getByRole('textbox', { name: 'Address' }).fill('Second field 2')
   await secondArea.getByRole('button', { name: 'Save this area' }).click()
   await expect(secondArea.getByRole('textbox', { name: 'Address' })).toHaveValue('Second field 2')
+})
+
+test('marks an exact area from a Regia link and uses confirmed registry facts', async ({
+  page,
+}) => {
+  await openSeededListing(page, { id: '111', title: 'Regia fixture' })
+  await page.getByRole('button', { name: 'Mark another area' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Mark another area' })
+  await dialog
+    .getByLabel('Regia link')
+    .fill(
+      'https://regia.lt/map/regia2?x=586948&y=6053276&scale=2004.818282666542&identify=true&sluo_ids=22',
+    )
+  await expect(dialog.getByTestId('regia-preview')).toContainText(/Parcel 0101-\d{4}-\d{4}/)
+  await dialog.getByRole('button', { name: 'Mark this area' }).click()
+  await expect(page.locator('article.area')).toHaveCount(2)
+  const area = page.locator('article.area').nth(1)
+  await expect(area.locator('dl.kv')).toContainText('Registry match')
+  await expect(area.locator('dl.kv')).toContainText('Confirmed')
+  await expect(area.getByTestId('area-registry')).toContainText('12.5')
+  await expect(area.getByTestId('area-registry')).toContainText('From the registry')
+  await expect(area.getByLabel('Price (€)')).toHaveValue('40000')
+  await expect(area.getByText('Žemės ūkio', { exact: true }).last()).toBeVisible()
+  await expect(area.locator('.checklist > .check').nth(1)).toContainText('12,5 a')
+})
+
+test('validates Regia links and prevents duplicate marked areas', async ({ page }) => {
+  await openSeededListing(page, { id: '112', title: 'Regia validation fixture' })
+  await page.getByRole('button', { name: 'Mark another area' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Mark another area' })
+  const link = dialog.getByLabel('Regia link')
+  for (const [url, message] of [
+    ['https://example.com/?x=1&y=2', 'Paste a link copied from regia.lt'],
+    ['https://regia.lt/map/regia2?scale=5', 'That Regia link has no map position'],
+    ['https://regia.lt/map/regia2?x=1&y=1', 'That position is outside Lithuania'],
+  ]) {
+    await link.fill(url)
+    await expect(dialog.getByRole('alert')).toContainText(message)
+    await expect(dialog.getByRole('button', { name: 'Mark this area' })).toBeDisabled()
+  }
+  const valid = 'https://regia.lt/map/regia2?x=586948&y=6053276'
+  await link.fill(valid)
+  await expect(dialog.getByRole('button', { name: 'Mark this area' })).toBeEnabled()
+  await dialog.getByRole('button', { name: 'Mark this area' }).click()
+  await page.getByRole('button', { name: 'Mark another area' }).click()
+  const duplicateDialog = page.getByRole('dialog', { name: 'Mark another area' })
+  await duplicateDialog.getByLabel('Regia link').fill(valid)
+  await expect(duplicateDialog.getByRole('alert')).toContainText("You've already marked this area")
+  await duplicateDialog.getByRole('button', { name: 'Show it' }).click()
+  await expect(duplicateDialog).toHaveCount(0)
+})
+
+test('keeps confirmed registry area when our own area is saved', async ({ page }) => {
+  await openSeededListing(page, { id: '113', title: 'Registry override fixture' })
+  await page.getByRole('button', { name: 'Mark another area' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Mark another area' })
+  await dialog.getByLabel('Regia link').fill('https://regia.lt/map/regia2?x=586948&y=6053276')
+  await dialog.getByRole('button', { name: 'Mark this area' }).click()
+  const area = page.locator('article.area').nth(1)
+  await expect(area.getByTestId('area-registry')).toBeVisible()
+  await area.getByRole('button', { name: 'Enter our own' }).first().click()
+  await area.getByLabel('Area (ares)').fill('9')
+  await area.getByRole('button', { name: 'Save this area' }).click()
+  await expect(area.getByTestId('area-registry')).toContainText('12.5')
+  await expect(area.getByRole('button', { name: 'Ours: 9 — edit' })).toBeVisible()
 })
 
 test('offers coordinate-only Waze and Google Maps choices in listing and area direction menus', async ({
@@ -156,7 +234,7 @@ test('uses the exact imported primary destination over an approximate competing 
     longitude: 25.3,
     coordinatePrecision: 'exact',
   })
-  await page.getByRole('button', { name: 'Mark another area' }).click()
+  await markByHand(page)
   const secondArea = page.locator('article.area').nth(1)
   await secondArea.getByLabel('Find it by').selectOption('coordinates')
   await secondArea.getByLabel('Latitude').fill('54.8')
@@ -205,6 +283,8 @@ test('validates numeric and location clue inputs at boundaries', async ({ page }
   await expect(area.locator('.status-text')).toContainText('Enter a number')
 
   await area.getByLabel('Price (€)').fill('0')
+  await expect(area.getByTestId('area-registry')).toBeVisible()
+  await area.getByRole('button', { name: 'Ours: 12 — edit' }).click()
   await area.getByLabel('Area (ares)').fill('-0.1')
   await area.getByRole('button', { name: 'Save this area' }).click()
   await expect(area.locator('.status-text')).toContainText('Area must be a positive number')
@@ -356,7 +436,7 @@ test('saves listing ratings immediately without saving an area and shares them a
   await expect(
     ratings.getByRole('group', { name: 'Road & access' }).getByRole('button', { name: '4 of 5' }),
   ).toHaveAttribute('aria-pressed', 'true')
-  await page.getByRole('button', { name: 'Mark another area' }).click()
+  await markByHand(page)
   await expect(page.locator('article.area')).toHaveCount(2)
   await page.reload()
   await expect(

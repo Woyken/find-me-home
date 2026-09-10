@@ -1021,7 +1021,7 @@ describe('Household runtime', () => {
       crypto,
       now: () => 7_000,
       uuid: () => `location-id-${++uuid}`,
-      locationResolver: { resolve: () => resolution },
+      locationResolver: { resolve: () => resolution, previewRegisteredParcel: async () => null },
     })
     try {
       await runtime.start()

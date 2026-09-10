@@ -18,6 +18,7 @@ import { FannedStack } from '../components/FannedStack'
 import { GoSeeButton } from '../components/GoSeeButton'
 import { DirectionsPicker } from '../components/DirectionsPicker'
 import { CheckIcon } from '../components/icons'
+import { MarkAreaDialog } from '../components/MarkAreaDialog'
 import {
   candidatePlotDirectionsDestination,
   sourceListingDirectionsDestination,
@@ -32,6 +33,7 @@ import type {
   SourceListingDetail,
 } from '../source-listings/model'
 import { candidatePlotName, sourceListingMapItems } from '../source-listings/map'
+import { candidatePlotSeedFacts } from '../source-listings/mark-area'
 import { AUTOMATIC_CHECK_KEYS, automaticCheckRevision } from '../automatic-checks'
 import { checkCells, checkStatusTagClass, checkStatusWord } from '../check-summary'
 import { candidatePlotRegiaUrl, describeLks94 } from '../location-resolution'
@@ -57,6 +59,7 @@ export default function SourceListingPage(props: { params: Record<string, string
   let focusNonce = 0
   const [photoIndex, setPhotoIndex] = createSignal(0)
   const [error, setError] = createSignal('')
+  const [marking, setMarking] = createSignal(false)
   const positionedPlots = createMemo(() => {
     const current = listing()
     return current ? sourceListingMapItems(current) : []
@@ -84,13 +87,41 @@ export default function SourceListingPage(props: { params: Record<string, string
     scrollTo('bigmap')
   }
 
-  const addPlot = action(function* () {
+  const markByHand = action(function* () {
     affects(listing)
     setError('')
     try {
       const current = listing()
       if (!current) return
-      const id = yield household.addCandidatePlot(current.id)
+      const id = yield household.addCandidatePlot(current.id, candidatePlotSeedFacts(current))
+      setSelectedPlotId(id)
+      scrollTo(`area-${id}`)
+    } catch (caught) {
+      setError(errorMessage(caught))
+      throw caught
+    }
+  })
+  const markFromRegia = action(function* (input: {
+    latitude: number
+    longitude: number
+    parcelNumber: string | null
+  }) {
+    affects(listing)
+    setError('')
+    try {
+      const current = listing()
+      if (!current) return
+      const id = yield household.addCandidatePlot(current.id, {
+        ...candidatePlotSeedFacts(current),
+        areaAres: null,
+        purposeText: null,
+        latitudeClue: input.latitude,
+        longitudeClue: input.longitude,
+        coordinateCluePrecision: 'exact',
+        parcelNumberClue: input.parcelNumber,
+        primaryLocationClue: input.parcelNumber ? 'parcel_number' : 'coordinates',
+        addressClue: null,
+      })
       setSelectedPlotId(id)
       scrollTo(`area-${id}`)
     } catch (caught) {
@@ -214,11 +245,19 @@ export default function SourceListingPage(props: { params: Record<string, string
                   class="btn stake ghost"
                   type="button"
                   disabled={busy()}
-                  onClick={() => void addPlot().catch(() => undefined)}
+                  onClick={() => setMarking(true)}
                 >
                   + Mark another area
                 </button>
               </div>
+              <MarkAreaDialog
+                open={marking()}
+                onClose={() => setMarking(false)}
+                listing={listing}
+                onMarkByHand={() => markByHand()}
+                onMarkFromRegia={(input) => markFromRegia(input)}
+                onShowExisting={showOnMap}
+              />
               <Show when={error()}>
                 <p class="alert" role="alert">
                   {error()}
@@ -396,12 +435,18 @@ function CandidatePlotEditor(props: {
     initialPlot.coordinateCluePrecision ?? 'approx',
   )
   const [status, setStatus] = createSignal<{ text: string; bad: boolean }>()
+  const match = () => props.plot().registeredParcelMatch ?? null
+  const registryArea = () => props.plot().registeredParcelAreaAres ?? null
+  const registryPurpose = () => props.plot().registeredParcelPurposeText ?? null
 
   const heading = () => candidatePlotName(props.plot(), props.number() - 1, props.total())
   const located = () =>
     validCoordinate(props.plot().resolvedLatitude, props.plot().resolvedLongitude) !== null
   const needsLocationRetry = () =>
     props.plot().locationResolutionState !== 'resolved' ||
+    (props.plot().locationResolutionState === 'resolved' &&
+      props.plot().resolvedParcelNumber !== null &&
+      match() === null) ||
     ((props.plot().latitudeClue !== null || props.plot().longitudeClue !== null) &&
       (props.plot().resolvedParcelNumber === null ||
         props.plot().resolvedCadastralNumber === null ||
@@ -410,9 +455,15 @@ function CandidatePlotEditor(props: {
   const locationNote = () => {
     switch (props.plot().locationResolutionState) {
       case 'resolved':
-        return props.plot().resolvedPrecision === 'exact'
-          ? 'Exact shape from the land registry.'
-          : 'Roughly here — the hint was not precise enough for the exact shape.'
+        if (match() === 'confirmed') return 'Exact shape from the land registry.'
+        if (match() === 'provisional')
+          return 'Probably this parcel — the hint was not exact, so the registry match is unconfirmed.'
+        if (
+          props.plot().resolvedParcelNumber === null &&
+          props.plot().resolvedPrecision === 'exact'
+        )
+          return 'Here, but no registered parcel was found at this point.'
+        return 'Roughly here — the hint was not precise enough for the exact shape.'
       case 'no-result':
         return 'Nothing found for this hint. Check the location hint below and try again.'
       case 'unavailable':
@@ -559,6 +610,14 @@ function CandidatePlotEditor(props: {
             <dd>{props.plot().resolvedParcelNumber ?? 'Not found'}</dd>
             <dt>Cadastral no.</dt>
             <dd>{props.plot().resolvedCadastralNumber ?? 'Not found'}</dd>
+            <dt>Registry match</dt>
+            <dd>
+              {match() === 'confirmed'
+                ? 'Confirmed'
+                : match() === 'provisional'
+                  ? 'Unconfirmed'
+                  : 'No parcel'}
+            </dd>
             <dt>Registry data</dt>
             <dd>{props.plot().parcelDatasetVersion ?? 'Not loaded'}</dd>
           </dl>
@@ -628,8 +687,25 @@ function CandidatePlotEditor(props: {
             placeholder="e.g. Whole plot"
           />
           <Field label="Price (€)" value={price()} onInput={setPrice} inputmode="decimal" />
-          <Field label="Area (ares)" value={area()} onInput={setArea} inputmode="decimal" />
-          <Field label="Land purpose" value={purpose()} onInput={setPurpose} />
+          <RegistryBackedField
+            label="Area (ares)"
+            testId="area-registry"
+            value={area()}
+            registryValue={registryArea()}
+            match={match()}
+            updateRevision={props.plot().updatedAt}
+            onInput={setArea}
+            inputmode="decimal"
+          />
+          <RegistryBackedField
+            label="Land purpose"
+            testId="purpose-registry"
+            value={purpose()}
+            registryValue={registryPurpose()}
+            match={match()}
+            updateRevision={props.plot().updatedAt}
+            onInput={setPurpose}
+          />
         </div>
         <label class="f" style={{ 'margin-top': '14px' }}>
           Our notes
@@ -747,6 +823,65 @@ function Field(props: {
         onInput={(event) => props.onInput(event.currentTarget.value)}
       />
     </label>
+  )
+}
+
+/**
+ * Area and land purpose are Effective Plot Facts: a confirmed Registered
+ * Parcel supplies them read-only, and the household's own entry stays
+ * behind an "edit" toggle as the fallback.
+ */
+function RegistryBackedField(props: {
+  label: string
+  testId: string
+  value: string
+  registryValue: string | number | null
+  match: 'confirmed' | 'provisional' | null
+  /** Saving or a fresh resolution collapses the fallback input again. */
+  updateRevision: number
+  onInput: (value: string) => void
+  inputmode?: 'decimal'
+}) {
+  const [editingOurs, setEditingOurs] = createSignal(false)
+  createEffect(
+    () => props.updateRevision,
+    () => {
+      setEditingOurs(false)
+    },
+  )
+  const hasRegistryValue = () => props.registryValue !== null
+  const confirmed = () => props.match === 'confirmed' && hasRegistryValue()
+  const registryText = () => String(props.registryValue ?? '')
+  return (
+    <Show
+      when={confirmed() && !editingOurs()}
+      fallback={
+        <>
+          <Field
+            label={props.label}
+            value={props.value}
+            onInput={props.onInput}
+            inputmode={props.inputmode}
+          />
+          <Show when={props.match === 'provisional' && hasRegistryValue()}>
+            <p class="small muted">Registry (unconfirmed): {registryText()}</p>
+          </Show>
+          <Show when={confirmed()}>
+            <p class="small muted">Used only if the registry match is lost.</p>
+          </Show>
+        </>
+      }
+    >
+      <div class="f readonly" data-testid={props.testId}>
+        {props.label}
+        <div>
+          <b>{registryText()}</b> <span class="tag pass">From the registry</span>
+        </div>
+        <button class="linkbtn" type="button" onClick={() => setEditingOurs(true)}>
+          {props.value.trim() ? `Ours: ${props.value} — edit` : 'Enter our own'}
+        </button>
+      </div>
+    </Show>
   )
 }
 

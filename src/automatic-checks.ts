@@ -2,6 +2,7 @@ import type { CandidatePlotRecord, SourceListingRecord } from './source-listings
 import type { CrimeDensity } from './external-service-client'
 import type { LivabilityResult } from './livability-service'
 import type { NoiseResult } from './noise-service'
+import { effectivePlotFacts } from './source-listings/plot-facts'
 
 export const AUTOMATIC_CHECK_KEYS = [
   'price',
@@ -89,17 +90,21 @@ const distanceKm = (
   return 6_371 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value))
 }
 
-export const automaticCheckRevision = ({ plot, sourceListing }: Input) =>
-  JSON.stringify([
-    2,
+export const automaticCheckRevision = ({ plot, sourceListing }: Input) => {
+  const facts = effectivePlotFacts(plot)
+  return JSON.stringify([
+    3,
     plot.priceEur,
-    plot.areaAres,
-    plot.purposeText,
+    facts.areaAres,
+    facts.areaSource,
+    facts.purposeText,
+    facts.purposeSource,
     plot.resolvedLatitude,
     plot.resolvedLongitude,
     sourceListing.utilities ?? {},
     sourceListing.description,
   ])
+}
 
 const unknown = (key: AutomaticCheckKey, value: string, detail: string) => ({
   key,
@@ -113,6 +118,7 @@ export const runAutomaticChecks = async (
   services: AutomaticCheckServices,
 ): Promise<AutomaticCheck[]> => {
   const { plot, sourceListing } = input
+  const facts = effectivePlotFacts(plot)
   const location =
     plot.resolvedLatitude === null || plot.resolvedLongitude === null
       ? null
@@ -130,13 +136,16 @@ export const runAutomaticChecks = async (
           detail: 'Candidate Plot price; household limit €60,000.',
         }
   const area: AutomaticCheck =
-    plot.areaAres === null
+    facts.areaAres === null
       ? unknown('area', 'Not available', 'Enter a Candidate Plot area.')
       : {
           key: 'area',
-          status: plot.areaAres >= 8 && plot.areaAres <= 25 ? 'pass' : 'fail',
-          value: `${plot.areaAres.toLocaleString('lt-LT')} a`,
-          detail: 'Candidate Plot area; household range 8-25 a.',
+          status: facts.areaAres >= 8 && facts.areaAres <= 25 ? 'pass' : 'fail',
+          value: `${facts.areaAres.toLocaleString('lt-LT')} a`,
+          detail:
+            facts.areaSource === 'registry'
+              ? 'Registry area; household range 8-25 a.'
+              : 'Candidate Plot area; household range 8-25 a.',
         }
   const radius: AutomaticCheck = location
     ? (() => {
@@ -154,7 +163,7 @@ export const runAutomaticChecks = async (
         }
       })()
     : unknown('radius', 'Not available', 'Resolve the Candidate Plot location.')
-  const purposeText = plot.purposeText?.trim()
+  const purposeText = facts.purposeText?.trim()
   const purpose: AutomaticCheck = purposeText
     ? {
         key: 'purpose',
@@ -169,7 +178,10 @@ export const runAutomaticChecks = async (
               ? 'pass'
               : 'unknown',
         value: purposeText,
-        detail: 'Classification uses the Candidate Plot purpose entered by the household.',
+        detail:
+          facts.purposeSource === 'registry'
+            ? 'Classification uses the land purpose from the registry.'
+            : 'Classification uses the Candidate Plot purpose entered by the household.',
       }
     : unknown('purpose', 'Not available', 'Enter the Candidate Plot purpose.')
   const utilityText = [
