@@ -17,7 +17,7 @@ import { CheckStrip, CheckSummaryText } from '../components/CheckStrip'
 import { FannedStack } from '../components/FannedStack'
 import { GoSeeButton } from '../components/GoSeeButton'
 import { DirectionsPicker } from '../components/DirectionsPicker'
-import { CheckIcon } from '../components/icons'
+import { CheckIcon, PinIcon } from '../components/icons'
 import { MarkAreaDialog } from '../components/MarkAreaDialog'
 import {
   candidatePlotDirectionsDestination,
@@ -34,10 +34,19 @@ import type {
 } from '../source-listings/model'
 import { candidatePlotName, sourceListingMapItems } from '../source-listings/map'
 import { candidatePlotSeedFacts } from '../source-listings/mark-area'
+import { effectivePlotFacts } from '../source-listings/plot-facts'
 import { AUTOMATIC_CHECK_KEYS, automaticCheckRevision } from '../automatic-checks'
 import { checkCells, checkStatusTagClass, checkStatusWord } from '../check-summary'
 import { candidatePlotRegiaUrl, describeLks94 } from '../location-resolution'
-import { formatAgo, formatDateLong, formatDateShort } from '../format'
+import {
+  formatAgo,
+  formatAres,
+  formatDateLong,
+  formatDateShort,
+  formatEur,
+  formatPerAre,
+  orDash,
+} from '../format'
 
 export const preloadSourceListing = () => undefined
 
@@ -55,6 +64,8 @@ export default function SourceListingPage(props: { params: Record<string, string
     household.getSourceListing(props.params.sourceListingId ?? ''),
   )
   const [selectedPlotId, setSelectedPlotId] = createSignal<string>()
+  const [expandedPlotId, setExpandedPlotId] = createSignal<string | null>(null)
+  let expansionInitialized = false
   const [focus, setFocus] = createSignal<MapFocusRequest>()
   let focusNonce = 0
   const [photoIndex, setPhotoIndex] = createSignal(0)
@@ -73,14 +84,25 @@ export default function SourceListingPage(props: { params: Record<string, string
       (key) => listing()?.utilities?.[key] !== undefined,
     )
 
+  createEffect(
+    () => listing()?.candidatePlots[0]?.id,
+    (firstPlotId) => {
+      if (!firstPlotId || expansionInitialized) return
+      expansionInitialized = true
+      setExpandedPlotId(firstPlotId)
+    },
+  )
+
   const scrollTo = (id: string) =>
     requestAnimationFrame(() =>
       document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
     )
-  const selectFromMap = (plotId: string) => {
+  const activatePlot = (plotId: string) => {
     setSelectedPlotId(plotId)
+    setExpandedPlotId(plotId)
     scrollTo(`area-${plotId}`)
   }
+  const selectFromMap = (plotId: string) => activatePlot(plotId)
   const showOnMap = (plotId: string) => {
     setSelectedPlotId(plotId)
     setFocus({ plotId, nonce: ++focusNonce })
@@ -94,8 +116,7 @@ export default function SourceListingPage(props: { params: Record<string, string
       const current = listing()
       if (!current) return
       const id = yield household.addCandidatePlot(current.id, candidatePlotSeedFacts(current))
-      setSelectedPlotId(id)
-      scrollTo(`area-${id}`)
+      activatePlot(id)
     } catch (caught) {
       setError(errorMessage(caught))
       throw caught
@@ -122,8 +143,7 @@ export default function SourceListingPage(props: { params: Record<string, string
         primaryLocationClue: input.parcelNumber ? 'parcel_number' : 'coordinates',
         addressClue: null,
       })
-      setSelectedPlotId(id)
-      scrollTo(`area-${id}`)
+      activatePlot(id)
     } catch (caught) {
       setError(errorMessage(caught))
       throw caught
@@ -272,6 +292,10 @@ export default function SourceListingPage(props: { params: Record<string, string
                     number={() => index() + 1}
                     total={() => listing()?.candidatePlots.length ?? 0}
                     selected={() => selectedPlotId() === plot().id}
+                    expanded={() => expandedPlotId() === plot().id}
+                    onToggle={() =>
+                      setExpandedPlotId((current) => (current === plot().id ? null : plot().id))
+                    }
                     onShowOnMap={() => showOnMap(plot().id)}
                     onSave={(update) =>
                       household.updateCandidatePlot(listing()!.id, plot().id, update)
@@ -414,6 +438,8 @@ function CandidatePlotEditor(props: {
   number: () => number
   total: () => number
   selected: () => boolean
+  expanded: () => boolean
+  onToggle: () => void
   onShowOnMap: () => void
   onSave: (
     update: Parameters<ReturnType<typeof useHousehold>['updateCandidatePlot']>[2],
@@ -442,6 +468,12 @@ function CandidatePlotEditor(props: {
   const registryPurpose = () => props.plot().registeredParcelPurposeText ?? null
 
   const heading = () => candidatePlotName(props.plot(), props.number() - 1, props.total())
+  const facts = () => effectivePlotFacts(props.plot())
+  const summaryAddress = () =>
+    props.plot().resolvedAddress ??
+    props.plot().addressClue ??
+    props.importedAddress() ??
+    'Location not recorded yet'
   const located = () =>
     validCoordinate(props.plot().resolvedLatitude, props.plot().resolvedLongitude) !== null
   const needsLocationRetry = () =>
@@ -566,17 +598,52 @@ function CandidatePlotEditor(props: {
       class={`panel area ${props.selected() ? 'selected' : ''}`}
       id={`area-${props.plot().id}`}
     >
-      <div class="area-h">
-        <h3>
-          <span class="num" aria-hidden="true">
-            {props.number()}
+      <header class="area-summary">
+        <button
+          class="area-summary-main"
+          type="button"
+          aria-expanded={props.expanded() ? 'true' : 'false'}
+          aria-controls={`area-details-${props.plot().id}`}
+          aria-label={`${props.expanded() ? 'Collapse' : 'Expand'} ${heading()}`}
+          onClick={props.onToggle}
+        >
+          <span class="area-summary-title">
+            <span class="num" aria-hidden="true">
+              {props.number()}
+            </span>
+            <span class="area-summary-heading">{heading()}</span>
+            <span class="area-chevron" aria-hidden="true">
+              {props.expanded() ? '−' : '+'}
+            </span>
           </span>
-          {heading()}
-        </h3>
-        <div class="rowline tight">
+          <span class="area-summary-address">{summaryAddress()}</span>
+          <span class="area-summary-figs">
+            <span class="fig">
+              <span class="v">{orDash(formatEur(props.plot().priceEur))}</span>
+              <span class="l">price</span>
+            </span>
+            <span class="fig">
+              <span class="v">{orDash(formatAres(facts().areaAres))}</span>
+              <span class="l">area</span>
+            </span>
+            <span class="fig">
+              <span class="v">{orDash(formatPerAre(props.plot().priceEur, facts().areaAres))}</span>
+              <span class="l">per are</span>
+            </span>
+          </span>
+          <span class="area-summary-purpose">Land purpose: {orDash(facts().purposeText)}</span>
+          <span class="area-summary-checks">
+            <CheckStrip checks={props.plot().automaticChecks} />
+            <CheckSummaryText checks={props.plot().automaticChecks} />
+          </span>
+          <Show when={!located()}>
+            <span class="tag area-location-state">{locationNote()}</span>
+          </Show>
+        </button>
+        <div class="area-summary-actions">
           <Show when={candidatePlotRegiaUrl(props.plot())}>
             <a
-              class="btn ghost sm"
+              class="btn ghost sm area-regia"
               href={candidatePlotRegiaUrl(props.plot()) ?? ''}
               target="_blank"
               rel="noopener noreferrer"
@@ -586,240 +653,253 @@ function CandidatePlotEditor(props: {
           </Show>
           <DirectionsPicker destination={() => candidatePlotDirectionsDestination(props.plot())} />
           <Show when={located()}>
-            <button class="btn ghost sm" type="button" onClick={props.onShowOnMap}>
-              Show on map
-            </button>
-          </Show>
-        </div>
-      </div>
-
-      <section class="panel blue block">
-        <div class="sub-h">
-          <h4>Where it is</h4>
-          <Show when={needsLocationRetry()}>
             <button
-              class="btn blue sm"
+              class="btn ghost sm area-map-button"
               type="button"
-              disabled={household.isCandidatePlotLocationRunning(props.plot().id)}
-              onClick={() => void resolveLocation()?.catch(() => undefined)}
+              aria-label="Show on map"
+              title="Show on map"
+              onClick={props.onShowOnMap}
             >
-              {household.isCandidatePlotLocationRunning(props.plot().id)
-                ? 'Looking up…'
-                : 'Look up again'}
+              <PinIcon />
             </button>
           </Show>
         </div>
-        <p class="small" style={{ margin: '6px 0 0' }} role="status">
-          {locationNote()}
-        </p>
-        <Show when={hasPartialLocation()}>
-          <dl class="kv">
-            <dt>Address</dt>
-            <dd>{props.plot().resolvedAddress ?? 'Unavailable'}</dd>
-            <dt>Coordinates</dt>
-            <dd>
-              {located()
-                ? `${props.plot().resolvedLatitude}, ${props.plot().resolvedLongitude}`
-                : 'Unavailable'}
-            </dd>
-            <dt>Unique parcel no.</dt>
-            <dd>{props.plot().resolvedParcelNumber ?? 'Not found'}</dd>
-            <dt>Cadastral no.</dt>
-            <dd>{props.plot().resolvedCadastralNumber ?? 'Not found'}</dd>
-            <dt>Registry match</dt>
-            <dd>
-              {match() === 'confirmed'
-                ? 'Confirmed'
-                : match() === 'provisional'
-                  ? 'Unconfirmed'
-                  : 'No parcel'}
-            </dd>
-            <dt>Registry data</dt>
-            <dd>{props.plot().parcelDatasetVersion ?? 'Not loaded'}</dd>
-          </dl>
-        </Show>
-        <Show when={clueLks94()}>
-          <p class="small muted" style={{ margin: '10px 0 0' }}>
-            Hint {props.plot().latitudeClue}, {props.plot().longitudeClue} → {clueLks94()}
+      </header>
+
+      <div id={`area-details-${props.plot().id}`} class="area-details" hidden={!props.expanded()}>
+        <section class="panel blue block">
+          <div class="sub-h">
+            <h4>Where it is</h4>
+            <Show when={needsLocationRetry()}>
+              <button
+                class="btn blue sm"
+                type="button"
+                disabled={household.isCandidatePlotLocationRunning(props.plot().id)}
+                onClick={() => void resolveLocation()?.catch(() => undefined)}
+              >
+                {household.isCandidatePlotLocationRunning(props.plot().id)
+                  ? 'Looking up…'
+                  : 'Look up again'}
+              </button>
+            </Show>
+          </div>
+          <p class="small" style={{ margin: '6px 0 0' }} role="status">
+            {locationNote()}
           </p>
-        </Show>
-        <Show when={locationDiagnostic()}>
-          <details class="diag" style={{ 'margin-top': '10px' }}>
-            <summary>What went wrong</summary>
-            <pre>{locationDiagnostic()}</pre>
-          </details>
-        </Show>
-      </section>
-
-      <section class="panel soft block">
-        <div class="sub-h">
-          <h4>Automatic checks</h4>
-          <button
-            class="btn ghost sm"
-            type="button"
-            disabled={household.isCandidatePlotAutomaticChecksRunning(props.plot().id)}
-            onClick={() => void runAutomaticChecks().catch(() => undefined)}
-          >
-            {household.isCandidatePlotAutomaticChecksRunning(props.plot().id)
-              ? 'Checking…'
-              : hasChecks()
-                ? 'Check again'
-                : 'Run checks'}
-          </button>
-        </div>
-        <div style={{ 'margin-top': '10px' }}>
-          <CheckStrip checks={props.plot().automaticChecks} large />
-        </div>
-        <div class="small" style={{ 'margin-top': '6px' }}>
-          <CheckSummaryText checks={props.plot().automaticChecks} block />
-        </div>
-        <div class="checklist">
-          <For each={cells()}>
-            {(cell) => (
-              <div class={`check ${cell.status}`}>
-                <b>{cell.label}</b>
-                <span class={`tag ${checkStatusTagClass(cell.status)}`}>
-                  {checkStatusWord(cell.status)}
-                </span>
-                <span class="v">{cell.value}</span>
-                <Show when={cell.detail}>
-                  <span class="d">{cell.detail}</span>
-                </Show>
-              </div>
-            )}
-          </For>
-        </div>
-        <p class="small muted" style={{ margin: '10px 0 0' }}>
-          Each check is independent advice — there is no overall score.
-        </p>
-      </section>
-
-      <section class="block bare">
-        <div class="grid2">
-          <Field
-            label="Name for this area"
-            value={name()}
-            onInput={setName}
-            placeholder="e.g. Whole plot"
-          />
-          <Field label="Price (€)" value={price()} onInput={setPrice} inputmode="decimal" />
-          <RegistryBackedField
-            label="Area (ares)"
-            testId="area-registry"
-            value={area()}
-            registryValue={registryArea()}
-            match={match()}
-            updateRevision={props.plot().updatedAt}
-            onInput={setArea}
-            inputmode="decimal"
-          />
-          <RegistryBackedField
-            label="Land purpose"
-            testId="purpose-registry"
-            value={purpose()}
-            registryValue={registryPurpose()}
-            match={match()}
-            updateRevision={props.plot().updatedAt}
-            onInput={setPurpose}
-          />
-        </div>
-        <label class="f" style={{ 'margin-top': '14px' }}>
-          Our notes
-          <textarea value={notes()} onInput={(event) => setNotes(event.currentTarget.value)} />
-        </label>
-      </section>
-
-      <section class="panel soft block">
-        <div class="sub-h">
-          <h4>Location hint</h4>
-          <span class="small muted">What we use to find it on the map</span>
-        </div>
-        <label class="f" style={{ 'margin-top': '8px' }}>
-          Find it by
-          <select
-            name="clue-kind"
-            value={clueKind()}
-            onChange={(event) => setClueKind(event.currentTarget.value as ClueKind)}
-          >
-            <option value="parcel">Unique parcel number (most exact)</option>
-            <option value="coordinates">Coordinates</option>
-            <option value="address">Address</option>
-          </select>
-        </label>
-        <div style={{ 'margin-top': '10px' }}>
-          <Show when={clueKind() === 'parcel'}>
-            <Field
-              label="Unique parcel number"
-              value={parcel()}
-              onInput={setParcel}
-              placeholder="4400-1234-5678"
-            />
-            <p class="small muted" style={{ margin: '6px 0 0' }}>
-              Found on the advert or in the Registrų centras extract.
+          <Show when={hasPartialLocation()}>
+            <dl class="kv">
+              <dt>Address</dt>
+              <dd>{props.plot().resolvedAddress ?? 'Unavailable'}</dd>
+              <dt>Coordinates</dt>
+              <dd>
+                {located()
+                  ? `${props.plot().resolvedLatitude}, ${props.plot().resolvedLongitude}`
+                  : 'Unavailable'}
+              </dd>
+              <dt>Unique parcel no.</dt>
+              <dd>{props.plot().resolvedParcelNumber ?? 'Not found'}</dd>
+              <dt>Cadastral no.</dt>
+              <dd>{props.plot().resolvedCadastralNumber ?? 'Not found'}</dd>
+              <dt>Registry match</dt>
+              <dd>
+                {match() === 'confirmed'
+                  ? 'Confirmed'
+                  : match() === 'provisional'
+                    ? 'Unconfirmed'
+                    : 'No parcel'}
+              </dd>
+              <dt>Registry data</dt>
+              <dd>{props.plot().parcelDatasetVersion ?? 'Not loaded'}</dd>
+            </dl>
+          </Show>
+          <Show when={clueLks94()}>
+            <p class="small muted" style={{ margin: '10px 0 0' }}>
+              Hint {props.plot().latitudeClue}, {props.plot().longitudeClue} → {clueLks94()}
             </p>
           </Show>
-          <Show when={clueKind() === 'coordinates'}>
-            <div class="grid2">
-              <Field
-                label="Latitude"
-                value={latitude()}
-                onInput={setLatitude}
-                inputmode="decimal"
-              />
-              <Field
-                label="Longitude"
-                value={longitude()}
-                onInput={setLongitude}
-                inputmode="decimal"
-              />
-              <label class="f">
-                How exact
-                <select
-                  value={precision()}
-                  onChange={(event) =>
-                    setPrecision(event.currentTarget.value as 'exact' | 'approx')
-                  }
-                >
-                  <option value="exact">Exactly on the plot</option>
-                  <option value="approx">Roughly there</option>
-                </select>
-              </label>
-            </div>
+          <Show when={locationDiagnostic()}>
+            <details class="diag" style={{ 'margin-top': '10px' }}>
+              <summary>What went wrong</summary>
+              <pre>{locationDiagnostic()}</pre>
+            </details>
           </Show>
-          <Show when={clueKind() === 'address'}>
-            <Field label="Address" value={address()} onInput={setAddress} />
+        </section>
+
+        <section class="panel soft block">
+          <div class="sub-h">
+            <h4>Automatic checks</h4>
+            <button
+              class="btn ghost sm"
+              type="button"
+              disabled={household.isCandidatePlotAutomaticChecksRunning(props.plot().id)}
+              onClick={() => void runAutomaticChecks().catch(() => undefined)}
+            >
+              {household.isCandidatePlotAutomaticChecksRunning(props.plot().id)
+                ? 'Checking…'
+                : hasChecks()
+                  ? 'Check again'
+                  : 'Run checks'}
+            </button>
+          </div>
+          <div style={{ 'margin-top': '10px' }}>
+            <CheckStrip checks={props.plot().automaticChecks} large />
+          </div>
+          <div class="small" style={{ 'margin-top': '6px' }}>
+            <CheckSummaryText checks={props.plot().automaticChecks} block />
+          </div>
+          <div class="checklist">
+            <For each={cells()}>
+              {(cell) => (
+                <div class={`check ${cell.status}`}>
+                  <b>{cell.label}</b>
+                  <span class={`tag ${checkStatusTagClass(cell.status)}`}>
+                    {checkStatusWord(cell.status)}
+                  </span>
+                  <span class="v">{cell.value}</span>
+                  <Show when={cell.detail}>
+                    <span class="d">{cell.detail}</span>
+                  </Show>
+                </div>
+              )}
+            </For>
+          </div>
+          <p class="small muted" style={{ margin: '10px 0 0' }}>
+            Each check is independent advice — there is no overall score.
+          </p>
+        </section>
+
+        <section class="block bare">
+          <div class="grid2">
+            <Field
+              label="Name for this area"
+              value={name()}
+              onInput={setName}
+              placeholder="e.g. Whole plot"
+            />
+            <Field label="Price (€)" value={price()} onInput={setPrice} inputmode="decimal" />
+            <RegistryBackedField
+              label="Area (ares)"
+              testId="area-registry"
+              value={area()}
+              registryValue={registryArea()}
+              match={match()}
+              updateRevision={props.plot().updatedAt}
+              onInput={setArea}
+              inputmode="decimal"
+            />
+            <RegistryBackedField
+              label="Land purpose"
+              testId="purpose-registry"
+              value={purpose()}
+              registryValue={registryPurpose()}
+              match={match()}
+              updateRevision={props.plot().updatedAt}
+              onInput={setPurpose}
+            />
+          </div>
+          <label class="f" style={{ 'margin-top': '14px' }}>
+            Our notes
+            <textarea value={notes()} onInput={(event) => setNotes(event.currentTarget.value)} />
+          </label>
+        </section>
+
+        <section class="panel soft block">
+          <div class="sub-h">
+            <h4>Location hint</h4>
+            <span class="small muted">What we use to find it on the map</span>
+          </div>
+          <label class="f" style={{ 'margin-top': '8px' }}>
+            Find it by
+            <select
+              name="clue-kind"
+              value={clueKind()}
+              onChange={(event) => setClueKind(event.currentTarget.value as ClueKind)}
+            >
+              <option value="parcel">Unique parcel number (most exact)</option>
+              <option value="coordinates">Coordinates</option>
+              <option value="address">Address</option>
+            </select>
+          </label>
+          <div style={{ 'margin-top': '10px' }}>
+            <Show when={clueKind() === 'parcel'}>
+              <Field
+                label="Unique parcel number"
+                value={parcel()}
+                onInput={setParcel}
+                placeholder="4400-1234-5678"
+              />
+              <p class="small muted" style={{ margin: '6px 0 0' }}>
+                Found on the advert or in the Registrų centras extract.
+              </p>
+            </Show>
+            <Show when={clueKind() === 'coordinates'}>
+              <div class="grid2">
+                <Field
+                  label="Latitude"
+                  value={latitude()}
+                  onInput={setLatitude}
+                  inputmode="decimal"
+                />
+                <Field
+                  label="Longitude"
+                  value={longitude()}
+                  onInput={setLongitude}
+                  inputmode="decimal"
+                />
+                <label class="f">
+                  How exact
+                  <select
+                    value={precision()}
+                    onChange={(event) =>
+                      setPrecision(event.currentTarget.value as 'exact' | 'approx')
+                    }
+                  >
+                    <option value="exact">Exactly on the plot</option>
+                    <option value="approx">Roughly there</option>
+                  </select>
+                </label>
+              </div>
+            </Show>
+            <Show when={clueKind() === 'address'}>
+              <Field label="Address" value={address()} onInput={setAddress} />
+            </Show>
+          </div>
+        </section>
+
+        <div class="rowline" style={{ 'margin-top': '16px' }}>
+          <button
+            class="btn"
+            type="button"
+            disabled={saving()}
+            onClick={() => void save().catch(() => undefined)}
+          >
+            Save this area
+          </button>
+          <button
+            class="btn danger ghost"
+            type="button"
+            disabled={saving()}
+            onClick={confirmRemove}
+          >
+            Delete area
+          </button>
+          <Show
+            when={saving()}
+            fallback={
+              <Show when={status()}>
+                {(current) => (
+                  <span class={`status-text ${current().bad ? 'bad' : ''}`} role="status">
+                    {current().text}
+                  </span>
+                )}
+              </Show>
+            }
+          >
+            <span class="status-text" role="status">
+              Saving…
+            </span>
           </Show>
         </div>
-      </section>
-
-      <div class="rowline" style={{ 'margin-top': '16px' }}>
-        <button
-          class="btn"
-          type="button"
-          disabled={saving()}
-          onClick={() => void save().catch(() => undefined)}
-        >
-          Save this area
-        </button>
-        <button class="btn danger ghost" type="button" disabled={saving()} onClick={confirmRemove}>
-          Delete area
-        </button>
-        <Show
-          when={saving()}
-          fallback={
-            <Show when={status()}>
-              {(current) => (
-                <span class={`status-text ${current().bad ? 'bad' : ''}`} role="status">
-                  {current().text}
-                </span>
-              )}
-            </Show>
-          }
-        >
-          <span class="status-text" role="status">
-            Saving…
-          </span>
-        </Show>
       </div>
     </article>
   )
