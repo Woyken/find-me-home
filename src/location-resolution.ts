@@ -26,6 +26,17 @@ export type LocationResolver = {
    * partial data that is still safe to store plus a human-readable diagnostic.
    */
   resolve: (plot: CandidatePlotRecord) => Promise<ResolvedLocationData>
+  previewRegisteredParcel: (
+    latitude: number,
+    longitude: number,
+  ) => Promise<RegisteredParcelPreview | null>
+}
+
+export type RegisteredParcelPreview = {
+  uniqueNumber: string | null
+  cadastralNumber: string | null
+  areaAres: number | null
+  purposeText: string | null
 }
 
 export class LocationResolutionError extends Error {
@@ -121,14 +132,17 @@ const emptyResult = (state: 'no-result' | 'unavailable'): ResolvedLocationData =
   effectiveLocationSource: null,
   locationResolutionState: state,
   parcelDatasetVersion: null,
+  registeredParcelMatch: null,
+  registeredParcelAreaAres: null,
+  registeredParcelPurposeText: null,
 })
 
-const toWgs84 = (x: number, y: number) => {
+export const toWgs84 = (x: number, y: number) => {
   const [longitude, latitude] = proj4('EPSG:3346', 'EPSG:4326', [x, y])
   return { latitude, longitude }
 }
 
-const toLks94 = (latitude: number, longitude: number) => {
+export const toLks94 = (latitude: number, longitude: number) => {
   const [x, y] = proj4('EPSG:4326', 'EPSG:3346', [longitude, latitude])
   return { x, y }
 }
@@ -178,6 +192,12 @@ const parcelResult = (
   effectiveLocationSource: source,
   locationResolutionState: 'resolved',
   parcelDatasetVersion: datasetVersion,
+  registeredParcelMatch:
+    source === 'parcel_number' || (source === 'coordinates' && precision === 'exact')
+      ? 'confirmed'
+      : 'provisional',
+  registeredParcelAreaAres: parcel.areaM2 === null ? null : parcel.areaM2 / 100,
+  registeredParcelPurposeText: parcel.purposeText,
 })
 
 export const createLocationResolver = (dependencies: {
@@ -185,6 +205,17 @@ export const createLocationResolver = (dependencies: {
   searchAddress: (address: string) => Promise<AddressResult | null>
   reverseAddress: (latitude: number, longitude: number) => Promise<string | null>
 }): LocationResolver => ({
+  async previewRegisteredParcel(latitude, longitude) {
+    const { x, y } = toLks94(latitude, longitude)
+    const parcel = await dependencies.parcels.findAtLks94(x, y)
+    if (!parcel) return null
+    return {
+      uniqueNumber: parcel.uniqueNumber,
+      cadastralNumber: parcel.cadastralNumber,
+      areaAres: parcel.areaM2 === null ? null : parcel.areaM2 / 100,
+      purposeText: parcel.purposeText,
+    }
+  },
   async resolve(plot) {
     const steps: string[] = []
     let partial: ResolvedLocationData = emptyResult('unavailable')

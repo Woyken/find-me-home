@@ -20,6 +20,7 @@ type HouseholdContextValue = {
   removeImportInbox: HouseholdRuntime['removeImportInbox']
   saveReviewedImport: (review: ReviewedImport) => ReturnType<HouseholdRuntime['saveReviewedImport']>
   addCandidatePlot: HouseholdRuntime['addCandidatePlot']
+  previewRegisteredParcel: HouseholdRuntime['previewRegisteredParcel']
   updateCandidatePlot: HouseholdRuntime['updateCandidatePlot']
   updateSourceListingRatings: HouseholdRuntime['updateSourceListingRatings']
   resolveCandidatePlotLocation: HouseholdRuntime['resolveCandidatePlotLocation']
@@ -83,7 +84,10 @@ export function HouseholdProvider(props: ParentProps<{ runtime: HouseholdRuntime
         captureImportInbox: (imports) => props.runtime.captureImportInbox(imports),
         removeImportInbox: (id) => props.runtime.removeImportInbox(id),
         saveReviewedImport: (review) => props.runtime.saveReviewedImport(review),
-        addCandidatePlot: (sourceListingId) => props.runtime.addCandidatePlot(sourceListingId),
+        addCandidatePlot: (sourceListingId, initial) =>
+          props.runtime.addCandidatePlot(sourceListingId, initial),
+        previewRegisteredParcel: (latitude, longitude) =>
+          props.runtime.previewRegisteredParcel(latitude, longitude),
         updateCandidatePlot: (sourceListingId, candidatePlotId, update) =>
           props.runtime.updateCandidatePlot(sourceListingId, candidatePlotId, update),
         updateSourceListingRatings: (sourceListingId, ratings) =>

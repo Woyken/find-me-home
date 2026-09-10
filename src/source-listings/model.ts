@@ -69,6 +69,9 @@ export const candidatePlotRecordSchema = v.strictObject({
   priceEur: v.nullable(v.pipe(v.number(), v.finite(), v.minValue(0))),
   areaAres: v.nullable(v.pipe(v.number(), v.finite(), v.minValue(0))),
   purposeText: nullableText,
+  registeredParcelMatch: v.optional(v.nullable(v.picklist(['confirmed', 'provisional']))),
+  registeredParcelAreaAres: v.optional(v.nullable(v.pipe(v.number(), v.finite(), v.minValue(0)))),
+  registeredParcelPurposeText: v.optional(nullableText),
   notes: nullableText,
   parcelNumberClue: nullableText,
   latitudeClue: v.nullable(v.pipe(v.number(), v.finite(), v.minValue(-90), v.maxValue(90))),
@@ -114,6 +117,9 @@ export type ResolvedLocationData = Pick<
   | 'effectiveLocationSource'
   | 'locationResolutionState'
   | 'parcelDatasetVersion'
+  | 'registeredParcelMatch'
+  | 'registeredParcelAreaAres'
+  | 'registeredParcelPurposeText'
 >
 export type CandidatePlotUpdate = Pick<
   CandidatePlotRecord,

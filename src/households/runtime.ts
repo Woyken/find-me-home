@@ -6,7 +6,7 @@ import type { HouseholdRoom } from './synchronization'
 import type { SourceListingRepository } from '../source-listings/indexeddb'
 import type { CandidatePlotUpdate, ReviewedImport } from '../source-listings/model'
 import { isLocationResolutionError, recordedLocationClues } from '../location-resolution'
-import type { LocationResolver } from '../location-resolution'
+import type { LocationResolver, RegisteredParcelPreview } from '../location-resolution'
 import { automaticCheckRevision, runAutomaticChecks } from '../automatic-checks'
 import type { AutomaticCheckServices } from '../automatic-checks'
 
@@ -30,7 +30,14 @@ export type HouseholdRuntime = {
   saveReviewedImport: (
     review: ReviewedImport,
   ) => ReturnType<SourceListingRepository['saveReviewedImport']>
-  addCandidatePlot: (sourceListingId: string) => Promise<string>
+  addCandidatePlot: (
+    sourceListingId: string,
+    initial?: Partial<CandidatePlotUpdate>,
+  ) => Promise<string>
+  previewRegisteredParcel: (
+    latitude: number,
+    longitude: number,
+  ) => Promise<RegisteredParcelPreview | null>
   updateCandidatePlot: (
     sourceListingId: string,
     candidatePlotId: string,
@@ -633,10 +640,15 @@ export const createHouseholdRuntime = (dependencies: {
       const updatedAt = mutationTime()
       return serializeWrite(() => dependencies.sourceListings.saveReviewedImport(review, updatedAt))
     },
-    addCandidatePlot: (sourceListingId) =>
-      serializeWrite(() =>
-        dependencies.sourceListings.addCandidatePlot(sourceListingId, mutationTime()),
-      ),
+    addCandidatePlot: (sourceListingId, initial) => {
+      if (initial) validateCandidatePlotUpdate({ ...emptyCandidatePlotUpdate, ...initial })
+      return serializeWrite(() =>
+        dependencies.sourceListings.addCandidatePlot(sourceListingId, mutationTime(), initial),
+      )
+    },
+    previewRegisteredParcel: (latitude, longitude) =>
+      dependencies.locationResolver?.previewRegisteredParcel(latitude, longitude) ??
+      Promise.resolve(null),
     updateCandidatePlot: async (sourceListingId, candidatePlotId, update) => {
       validateCandidatePlotUpdate(update)
       const sourceListingBefore = dependencies.sourceListings.get(sourceListingId)
@@ -767,6 +779,20 @@ export const createHouseholdRuntime = (dependencies: {
       dependencies.sourceListings.close()
     },
   }
+}
+
+const emptyCandidatePlotUpdate: CandidatePlotUpdate = {
+  name: null,
+  priceEur: null,
+  areaAres: null,
+  purposeText: null,
+  notes: null,
+  parcelNumberClue: null,
+  latitudeClue: null,
+  longitudeClue: null,
+  coordinateCluePrecision: null,
+  addressClue: null,
+  primaryLocationClue: null,
 }
 
 const validateCandidatePlotUpdate = (update: CandidatePlotUpdate) => {

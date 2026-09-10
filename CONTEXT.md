@@ -43,15 +43,33 @@ _Avoid_: Candidate Plot Disposition, marketplace availability
 
 **Registered Parcel**:
 An officially registered area of land with authoritative identity and
-geometry. A Candidate Plot's relationship to a Registered Parcel may be
-confirmed, provisional, or absent.
+geometry. A Candidate Plot's relationship to a Registered Parcel is confirmed
+(found by unique parcel number or by exact coordinates), provisional (found by
+approximate coordinates or by address), or absent.
 _Avoid_: Plot, listing
+
+**Registered Parcel Facts**:
+The area and land purpose the registry records for a Registered Parcel.
+_Avoid_: Resolved size, cadastre data
+
+**Effective Plot Facts**:
+The area and land purpose used to display and evaluate a Candidate Plot: the
+Registered Parcel Facts when its Registered Parcel is confirmed, otherwise the
+household's own entries. The household's entries are kept either way.
+_Avoid_: Override, real size
 
 **Recorded Location Clue**:
 An address, coordinate pair, or unique parcel number imported or entered for a
 Candidate Plot. Clues are preserved as entered even when another clue determines
 the plot's Effective Location.
 _Avoid_: Override, confirmed location
+
+**Regia Map Link**:
+A share URL from regia.lt carrying a map position in LKS94. It is accepted as
+a way to enter an exact coordinate Recorded Location Clue and, when a
+Registered Parcel lies at that position, its unique parcel number; the link
+itself is not kept.
+_Avoid_: Regia clue, map URL, location link
 
 **Effective Location**:
 The location used to display and evaluate a Candidate Plot. It comes from the
@@ -102,6 +120,8 @@ household changes. The mapping is one-to-one:
 | Import Inbox                                             | Clippings from Aruodas               |
 | Resolved Location Data                                   | Where it is                          |
 | Recorded Location Clue                                   | Location hint                        |
+| Regia Map Link                                           | Regia link                           |
+| Registered Parcel Facts                                  | From the registry                    |
 | Automatic Check statuses pass / warning / fail / unknown | fine / look / problem / not checked  |
 | Manual Rating                                            | Our ratings                          |
 | Mark Source Listing visited                              | We went to see it → Mark as visited  |

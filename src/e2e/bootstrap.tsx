@@ -9,17 +9,25 @@ import { createE2eRoomFactory } from './room'
 import { e2eReview } from './support'
 import type { E2eApi, E2eFailure, E2eSeed, E2eSyncEvent } from './support'
 
+const e2eParcelNumber = (latitude: number, longitude: number) =>
+  Math.abs(latitude - 54.6872) < 0.0005 && Math.abs(longitude - 25.2797) < 0.0005
+    ? '0101-0001-0001'
+    : `0101-${String(Math.round(Math.abs(latitude) * 100) % 10000).padStart(4, '0')}-${String(Math.round(Math.abs(longitude) * 100) % 10000).padStart(4, '0')}`
+
 const resolvedLocation = (latitude: number, longitude: number): ResolvedLocationData => ({
   resolvedLatitude: latitude,
   resolvedLongitude: longitude,
   resolvedAddress: 'E2E resolved address',
-  resolvedParcelNumber: '0101-0001-0001',
+  resolvedParcelNumber: e2eParcelNumber(latitude, longitude),
   resolvedCadastralNumber: '0101/0001:0001',
   resolvedBoundary: null,
   resolvedPrecision: 'exact',
   effectiveLocationSource: 'coordinates',
   locationResolutionState: 'resolved',
   parcelDatasetVersion: 'e2e-fixture-v1',
+  registeredParcelMatch: 'confirmed',
+  registeredParcelAreaAres: 12.5,
+  registeredParcelPurposeText: 'Žemės ūkio',
 })
 
 const boot = () => {
@@ -49,7 +57,20 @@ const boot = () => {
           resolvedLongitude: null,
           locationResolutionState: 'no-result',
         }
-      return resolvedLocation(plot.latitudeClue, plot.longitudeClue)
+      return {
+        ...resolvedLocation(plot.latitudeClue, plot.longitudeClue),
+        registeredParcelMatch:
+          plot.coordinateCluePrecision === 'approx' ? 'provisional' : 'confirmed',
+      }
+    },
+    async previewRegisteredParcel(latitude, longitude) {
+      if (failure === 'location') return null
+      return {
+        uniqueNumber: e2eParcelNumber(latitude, longitude),
+        cadastralNumber: '0101/0001:0001',
+        areaAres: 12.5,
+        purposeText: 'Žemės ūkio',
+      }
     },
   }
   const automaticCheckServices: AutomaticCheckServices = {

@@ -223,6 +223,36 @@ describe('Household Source Listing repository', () => {
     verify.close()
   })
 
+  it('creates a Candidate Plot from initial household facts and a Recorded Location Clue', async () => {
+    const prefix = `initial-candidate-plot-${crypto.randomUUID()}`
+    databases.push(`${prefix}-household-a`)
+    const repository = createIndexedDbSourceListingRepository(prefix, {
+      now: () => 1_000,
+      uuid: () => crypto.randomUUID(),
+    })
+    await repository.open('household-a')
+    const saved = await repository.saveReviewedImport(review, 100)
+    const candidatePlotId = await repository.addCandidatePlot(saved.sourceListingId, 101, {
+      areaAres: 12.5,
+      latitudeClue: 54.7,
+      longitudeClue: 25.3,
+      coordinateCluePrecision: 'exact',
+    })
+    expect(
+      repository
+        .get(saved.sourceListingId)
+        ?.candidatePlots.find((plot) => plot.id === candidatePlotId),
+    ).toMatchObject({
+      areaAres: 12.5,
+      latitudeClue: 54.7,
+      resolvedLatitude: 54.7,
+      resolvedLongitude: 25.3,
+      resolvedPrecision: 'exact',
+      effectiveLocationSource: 'coordinates',
+      locationResolutionState: 'missing',
+    })
+  })
+
   it('captures, refreshes, restores, and removes inbox records with stable identity', async () => {
     const prefix = `import-inbox-${crypto.randomUUID()}`
     databases.push(`${prefix}-household-a`)

@@ -9,6 +9,11 @@ import type { CandidatePlotRecord } from './source-listings/model'
 import type { RegisteredParcel } from './parcels/repository'
 import parcelFixture from './test-fixtures/registered-parcel.json'
 
+const registeredParcelFixture = (): RegisteredParcel => ({
+  ...parcelFixture,
+  rings: parcelFixture.rings.map((ring) => ring.map(([x, y]) => [x, y])),
+})
+
 const plot = (overrides: Partial<CandidatePlotRecord>): CandidatePlotRecord => ({
   id: 'plot',
   householdId: 'household',
@@ -18,6 +23,9 @@ const plot = (overrides: Partial<CandidatePlotRecord>): CandidatePlotRecord => (
   priceEur: null,
   areaAres: null,
   purposeText: null,
+  registeredParcelMatch: null,
+  registeredParcelAreaAres: null,
+  registeredParcelPurposeText: null,
   notes: null,
   parcelNumberClue: null,
   latitudeClue: null,
@@ -113,7 +121,7 @@ describe('Candidate Plot REGIA link', () => {
 
 describe('Candidate Plot location resolution', () => {
   it('uses unique parcel number before coordinates and address', async () => {
-    const findByNumber = vi.fn(async () => [parcelFixture as RegisteredParcel])
+    const findByNumber = vi.fn(async () => [registeredParcelFixture()])
     const findAtLks94 = vi.fn(async () => null)
     const searchAddress = vi.fn(async () => null)
     const resolver = createLocationResolver({
@@ -139,6 +147,9 @@ describe('Candidate Plot location resolution', () => {
       resolvedAddress: 'Canonical address',
       resolvedPrecision: 'exact',
       parcelDatasetVersion: 'fixture-2026',
+      registeredParcelMatch: 'confirmed',
+      registeredParcelAreaAres: parcelFixture.areaM2 / 100,
+      registeredParcelPurposeText: parcelFixture.purposeText,
     })
     expect(result.resolvedBoundary?.coordinates[0]).toHaveLength(5)
     expect(findAtLks94).not.toHaveBeenCalled()
@@ -302,5 +313,49 @@ describe('Candidate Plot location resolution', () => {
         resolvedLatitude: null,
       },
     )
+  })
+
+  it.each([
+    [
+      'exact coordinates',
+      { latitudeClue: 54.7, longitudeClue: 25.3, coordinateCluePrecision: 'exact' },
+      'confirmed',
+    ],
+    [
+      'approximate coordinates',
+      { latitudeClue: 54.7, longitudeClue: 25.3, coordinateCluePrecision: 'approx' },
+      'provisional',
+    ],
+    ['address', { addressClue: 'Upės g. 7' }, 'provisional'],
+  ] as const)('marks a Registered Parcel from %s as %s', async (_name, clues, match) => {
+    const resolver = createLocationResolver({
+      parcels: {
+        findByNumber: async () => [],
+        findAtLks94: async () => registeredParcelFixture(),
+        datasetVersion: 'fixture-2026',
+      },
+      searchAddress: async () => ({ latitude: 54.7, longitude: 25.3, address: 'Upės g. 7' }),
+      reverseAddress: async () => null,
+    })
+    await expect(resolver.resolve(plot(clues))).resolves.toMatchObject({
+      registeredParcelMatch: match,
+      registeredParcelAreaAres: parcelFixture.areaM2 / 100,
+    })
+  })
+
+  it('previews Registered Parcel Facts at coordinates', async () => {
+    const findAtLks94 = vi.fn(async () => registeredParcelFixture())
+    const resolver = createLocationResolver({
+      parcels: { findByNumber: async () => [], findAtLks94, datasetVersion: 'fixture-2026' },
+      searchAddress: async () => null,
+      reverseAddress: async () => null,
+    })
+    await expect(resolver.previewRegisteredParcel(54.7, 25.3)).resolves.toEqual({
+      uniqueNumber: parcelFixture.uniqueNumber,
+      cadastralNumber: parcelFixture.cadastralNumber,
+      areaAres: parcelFixture.areaM2 / 100,
+      purposeText: parcelFixture.purposeText,
+    })
+    expect(findAtLks94).toHaveBeenCalledOnce()
   })
 })
