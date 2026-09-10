@@ -53,6 +53,11 @@ export type SourceListingRepository = {
     update: CandidatePlotUpdate,
     updatedAt: number,
   ) => Promise<void>
+  removeCandidatePlot: (
+    sourceListingId: string,
+    candidatePlotId: string,
+    updatedAt: number,
+  ) => Promise<void>
   updateSourceListingRatings: (
     sourceListingId: string,
     ratings: Pick<SourceListingRecord, 'roadAccessRating' | 'areaFeelingRating' | 'viewRating'>,
@@ -783,6 +788,30 @@ export const createIndexedDbSourceListingRepository = (
       )
       publish()
       publishLocal([candidatePlot])
+    },
+    async removeCandidatePlot(sourceListingId, candidatePlotId, updatedAt) {
+      const active = requireOpen()
+      const existing = candidatePlots.find(
+        (plot) =>
+          plot.id === candidatePlotId &&
+          plot.sourceListingId === sourceListingId &&
+          plot.householdId === active.householdId &&
+          !plot.deletedAt,
+      )
+      if (!existing) throw new Error('Candidate Plot not found')
+      const removedCandidatePlot: CandidatePlotRecord = {
+        ...existing,
+        updatedAt,
+        deletedAt: updatedAt,
+      }
+      const transaction = active.database.transaction('candidate-plots', 'readwrite')
+      put(transaction.objectStore('candidate-plots'), removedCandidatePlot)
+      await transactionComplete(transaction)
+      candidatePlots = candidatePlots.map((plot) =>
+        plot.id === candidatePlotId ? removedCandidatePlot : plot,
+      )
+      publish()
+      publishLocal([removedCandidatePlot])
     },
     async updateSourceListingRatings(sourceListingId, ratings, updatedAt) {
       const active = requireOpen()

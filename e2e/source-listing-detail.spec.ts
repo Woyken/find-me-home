@@ -398,6 +398,21 @@ test('removes a listing and restores the saved area when the advert is saved aga
   ).toHaveAttribute('aria-pressed', 'true')
 })
 
+test('deletes an incorrect marked area without removing the listing', async ({ page }) => {
+  await openSeededListing(page, { id: '114', title: 'Area removal fixture' })
+  await markByHand(page)
+  await expect(page.locator('article.area')).toHaveCount(2)
+
+  const secondArea = page.locator('article.area').nth(1)
+  page.once('dialog', (dialog) => dialog.accept())
+  await secondArea.getByRole('button', { name: 'Delete area' }).click()
+
+  await expect(page.locator('article.area')).toHaveCount(1)
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Area removal fixture')
+  await page.reload()
+  await expect(page.locator('article.area')).toHaveCount(1)
+})
+
 test('keeps removal in the aside on desktop and after marked areas on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 })
   await openSeededListing(page, { id: '110', title: 'Removal placement fixture' })

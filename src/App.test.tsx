@@ -126,6 +126,7 @@ const createTestRuntime = () => {
     },
     previewRegisteredParcel: async () => null,
     updateCandidatePlot: async () => undefined,
+    removeCandidatePlot: async () => undefined,
     resolveCandidatePlotLocation: async () => undefined,
     isCandidatePlotLocationRunning: () => false,
     getCandidatePlotLocationDiagnostic: () => undefined,

@@ -276,6 +276,7 @@ export default function SourceListingPage(props: { params: Record<string, string
                     onSave={(update) =>
                       household.updateCandidatePlot(listing()!.id, plot().id, update)
                     }
+                    onRemove={() => household.removeCandidatePlot(listing()!.id, plot().id)}
                   />
                 )}
               </For>
@@ -417,6 +418,7 @@ function CandidatePlotEditor(props: {
   onSave: (
     update: Parameters<ReturnType<typeof useHousehold>['updateCandidatePlot']>[2],
   ) => Promise<void>
+  onRemove: () => Promise<void>
 }) {
   const household = useHousehold()
   const initialPlot = untrack(props.plot)
@@ -543,7 +545,21 @@ function CandidatePlotEditor(props: {
       throw caught
     }
   })
+  const remove = action(function* () {
+    affects(props.plot)
+    setStatus(undefined)
+    try {
+      yield props.onRemove()
+    } catch (caught) {
+      setStatus({ text: errorMessage(caught), bad: true })
+      throw caught
+    }
+  })
   const saving = () => isPending(props.plot)
+  const confirmRemove = () => {
+    if (!window.confirm(`Remove "${heading()}"? This cannot be undone.`)) return
+    void remove().catch(() => undefined)
+  }
 
   return (
     <article
@@ -784,6 +800,9 @@ function CandidatePlotEditor(props: {
           onClick={() => void save().catch(() => undefined)}
         >
           Save this area
+        </button>
+        <button class="btn danger ghost" type="button" disabled={saving()} onClick={confirmRemove}>
+          Delete area
         </button>
         <Show
           when={saving()}

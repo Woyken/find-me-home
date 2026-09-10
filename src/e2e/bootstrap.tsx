@@ -230,6 +230,8 @@ const boot = () => {
       ])
     },
     removeSourceListing: (id) => runtime.removeSourceListing(id),
+    removeCandidatePlot: (sourceListingId, candidatePlotId) =>
+      runtime.removeCandidatePlot(sourceListingId, candidatePlotId),
     markVisited: (id) => runtime.markSourceListingVisited(id),
     getSourceListingRatings(id) {
       const sourceListing = runtime.getSourceListing(id)
