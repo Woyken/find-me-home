@@ -176,8 +176,8 @@ importers:
         specifier: ^4.1.18
         version: 4.3.3(vite@8.3.0(@types/node@26.5.1)(esbuild@0.28.1)(jiti@2.7.0))
       '@tanstack/db':
-        specifier: ^0.8.7
-        version: 0.8.7(typescript@7.0.2)
+        specifier: ^0.9.0
+        version: 0.9.0(typescript@7.0.2)
       '@types/proj4':
         specifier: ^2.5.6
         version: 2.19.0
@@ -1378,13 +1378,13 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
-  '@tanstack/db-ivm@0.1.19':
-    resolution: {integrity: sha512-3VGvgNXAPSVqny/pL8Y6n/txnaZzV49WmgSQ9N5eyCQNgMtuOEOJHKDatqqCy3gDxVu6pkhSHDKxcNFOtxMouw==}
+  '@tanstack/db-ivm@0.1.20':
+    resolution: {integrity: sha512-Rpol77pI6JgVO4CtuKXZ/SQAzK4+BuiTSebRsIBo5qiiswtHKrvmiLNfbMXSHpXUF2xJkohFrJq9ndsMP1jAuA==}
     peerDependencies:
       typescript: '>=4.7'
 
-  '@tanstack/db@0.8.7':
-    resolution: {integrity: sha512-NIocfK737qPvkE1Ot2iM5PXN6CSBZY5cw1ovAwo0RvQDc/iinyr3x7v+kavoiWxClbkul98J/wRzr0KLanMxOA==}
+  '@tanstack/db@0.9.0':
+    resolution: {integrity: sha512-wV8ln5zqTSM0Cn9eu+ePHExvzCa3A3cS+kxgRGryeBjDbMuLHrcTU1uGE8/6Etp+60LSfJFbhlojOZgj/kH/eQ==}
     peerDependencies:
       typescript: '>=4.7'
 
@@ -3231,16 +3231,16 @@ snapshots:
       tailwindcss: 4.3.3
       vite: 8.3.0(@types/node@26.5.1)(esbuild@0.28.1)(jiti@2.7.0)
 
-  '@tanstack/db-ivm@0.1.19(typescript@7.0.2)':
+  '@tanstack/db-ivm@0.1.20(typescript@7.0.2)':
     dependencies:
       fractional-indexing: 3.4.0
       sorted-btree: 1.8.1
       typescript: 7.0.2
 
-  '@tanstack/db@0.8.7(typescript@7.0.2)':
+  '@tanstack/db@0.9.0(typescript@7.0.2)':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      '@tanstack/db-ivm': 0.1.19(typescript@7.0.2)
+      '@tanstack/db-ivm': 0.1.20(typescript@7.0.2)
       '@tanstack/pacer-lite': 0.2.2
       typescript: 7.0.2
 
