@@ -1,6 +1,7 @@
 import proj4 from 'proj4'
 import type { AutomaticCheckServices } from './automatic-checks'
 import { createExternalServiceClient } from './external-service-client'
+import type { CommuteOption, TrafiRouteSegment, TransitService } from '../shared/transit'
 import { createLivabilityService } from './livability-service'
 import { createNoiseService } from './noise-service'
 
@@ -30,6 +31,29 @@ const geographicDistanceKm = (
       Math.cos(radians(secondLatitude)) *
       Math.sin(longitudeDelta / 2) ** 2
   return 6_371 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value))
+}
+
+const isWalkingSegment = (segment: TrafiRouteSegment) =>
+  segment.mode === 'WALK' || segment.mode === 'WALKING'
+
+const isTransitSegment = (segment: TrafiRouteSegment) =>
+  segment.mode === 'TRANSIT' ||
+  segment.transportGroup !== undefined ||
+  segment.transportType !== undefined
+
+const segmentService = (segment: TrafiRouteSegment) => {
+  if (segment.transportGroup === 'suburban' || segment.transportType === 'districtbus')
+    return 'regional'
+  if (segment.transportGroup === 'city') return 'city'
+  return null
+}
+
+const routeService = (segments: TrafiRouteSegment[]) => {
+  const first = segmentService(segments[0])
+  if (first === 'regional') return first
+  if (first === 'city' && segments.every((segment) => segmentService(segment) === 'city'))
+    return first
+  return null
 }
 
 const requestJson = async <T>(
@@ -249,17 +273,48 @@ export const createBrowserAutomaticCheckServices = (options?: {
         { latitude: 54.6856478, longitude: 25.2869905 },
         arriveBy,
       )
-      const best = routes.sort((left, right) => left.durationSeconds - right.durationSeconds).at(0)
+      const classified = routes.flatMap((route) => {
+        const transit = route.segments.filter(isTransitSegment)
+        const service = routeService(transit)
+        if (service === null) return []
+        const firstTransitIndex = route.segments.findIndex(isTransitSegment)
+        const firstTransit = route.segments[firstTransitIndex]
+        const initialWalk = route.segments.slice(0, firstTransitIndex).filter(isWalkingSegment)
+        const walkDurations = initialWalk.map((segment) => segment.durationSeconds)
+        const walkDurationSeconds = walkDurations.every(
+          (duration): duration is number => duration !== undefined,
+        )
+          ? walkDurations.reduce((total, duration) => total + duration, 0)
+          : null
+        return [
+          {
+            service,
+            durationSeconds: route.durationSeconds,
+            walkDurationSeconds,
+            stopName: firstTransit?.startName ?? initialWalk.at(-1)?.endName ?? null,
+            summary:
+              route.segments
+                .map((segment) =>
+                  segment.name
+                    ? `${segment.transportName ? `${segment.transportName} ` : ''}${segment.name}`
+                    : isWalkingSegment(segment)
+                      ? 'walk'
+                      : segment.mode.toLowerCase(),
+                )
+                .join(' → ') || null,
+          } satisfies CommuteOption,
+        ]
+      })
+      const best = (service: TransitService) =>
+        classified
+          .filter((route) => route.service === service)
+          .sort((left, right) => left.durationSeconds - right.durationSeconds)
+          .at(0)
       return {
-        durationSeconds: best?.durationSeconds ?? null,
+        options: [best('city'), best('regional')].filter(
+          (option): option is NonNullable<typeof option> => option !== undefined,
+        ),
         routesFound: routes.length,
-        summary:
-          best?.segments
-            .map(
-              (segment) =>
-                segment.name ?? (segment.mode === 'WALK' ? 'walk' : segment.mode.toLowerCase()),
-            )
-            .join(' → ') ?? null,
         arriveBy,
       }
     },

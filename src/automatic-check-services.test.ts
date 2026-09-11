@@ -25,6 +25,103 @@ describe('browser Automatic Check service contracts', () => {
     })
   })
 
+  it('returns the quickest city and regional options with their actual boarding walks', async () => {
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      if (!String(input).endsWith('/trafi/route-search')) return Response.json({ features: [] })
+      return Response.json([
+        {
+          durationSeconds: 2_400,
+          startTime: '2026-09-07T07:20:00+03:00',
+          endTime: '2026-09-07T08:00:00+03:00',
+          segments: [
+            {
+              mode: 'WALKING',
+              durationSeconds: 300,
+              startName: 'Plot',
+              endName: 'City stop',
+            },
+            {
+              mode: 'TRANSIT',
+              name: '4G',
+              startName: 'City stop',
+              transportGroup: 'city',
+              transportType: 'bus',
+            },
+          ],
+        },
+        {
+          durationSeconds: 2_100,
+          startTime: '2026-09-07T07:25:00+03:00',
+          endTime: '2026-09-07T08:00:00+03:00',
+          segments: [
+            {
+              mode: 'WALKING',
+              durationSeconds: 720,
+              endName: 'Regional stop',
+            },
+            {
+              mode: 'TRANSIT',
+              name: '101',
+              startName: 'Regional stop',
+              transportGroup: 'suburban',
+              transportType: 'districtbus',
+            },
+          ],
+        },
+        {
+          durationSeconds: 1_800,
+          startTime: '2026-09-07T07:30:00+03:00',
+          endTime: '2026-09-07T08:00:00+03:00',
+          segments: [
+            {
+              mode: 'WALKING',
+              durationSeconds: 60,
+              endName: 'City feeder stop',
+            },
+            {
+              mode: 'TRANSIT',
+              name: '49',
+              startName: 'City feeder stop',
+              transportGroup: 'city',
+              transportType: 'bus',
+            },
+            {
+              mode: 'TRANSIT',
+              name: '101',
+              startName: 'Regional transfer stop',
+              transportGroup: 'suburban',
+              transportType: 'districtbus',
+            },
+          ],
+        },
+      ])
+    })
+    const services = createBrowserAutomaticCheckServices({
+      workerUrl: 'https://worker.example',
+      fetcher,
+      now: () => new Date('2026-09-04T10:00:00Z'),
+    })
+
+    const result = await services.cityCentreCommute!(54.7, 25.3)
+
+    expect(result.options).toEqual([
+      {
+        service: 'city',
+        durationSeconds: 2_400,
+        walkDurationSeconds: 300,
+        stopName: 'City stop',
+        summary: 'walk → 4G',
+      },
+      {
+        service: 'regional',
+        durationSeconds: 2_100,
+        walkDurationSeconds: 720,
+        stopName: 'Regional stop',
+        summary: 'walk → 101',
+      },
+    ])
+  })
+
   it('queries heritage points within 100 m and territories by intersection', async () => {
     const previousFetch = globalThis.fetch
     const fetcher = vi.fn<typeof fetch>(async (input) => {

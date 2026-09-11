@@ -2,6 +2,7 @@ import type { CandidatePlotRecord, SourceListingRecord } from './source-listings
 import type { CrimeDensity } from './external-service-client'
 import type { LivabilityResult } from './livability-service'
 import type { NoiseResult } from './noise-service'
+import type { CommuteOption, CommuteResult } from '../shared/transit'
 import { effectivePlotFacts } from './source-listings/plot-facts'
 
 export const AUTOMATIC_CHECK_KEYS = [
@@ -52,15 +53,7 @@ export type AutomaticCheckServices = {
     durationSeconds: number | null
     distanceMeters: number | null
   }>
-  cityCentreCommute?: (
-    latitude: number,
-    longitude: number,
-  ) => Promise<{
-    durationSeconds: number | null
-    routesFound: number
-    summary: string | null
-    arriveBy: string
-  }>
+  cityCentreCommute?: (latitude: number, longitude: number) => Promise<CommuteResult>
   crimeDensity?: (latitude: number, longitude: number) => Promise<CrimeDensity>
   noise?: (latitude: number, longitude: number) => Promise<NoiseResult>
   livability?: (latitude: number, longitude: number) => Promise<LivabilityResult>
@@ -72,6 +65,11 @@ type Input = {
 }
 
 const VILNIUS_CENTER = { latitude: 54.6872, longitude: 25.2797 }
+
+const commuteOptionLabel = (option: CommuteOption, only = false) => {
+  if (option.service === 'city') return only ? 'City transport only' : 'City transport'
+  return only ? 'Regional bus only' : 'Uses regional bus'
+}
 
 const distanceKm = (
   firstLatitude: number,
@@ -306,21 +304,37 @@ export const runAutomaticChecks = async (
     ? services.cityCentreCommute
       ? services
           .cityCentreCommute(location.latitude, location.longitude)
-          .then<AutomaticCheck>((result) =>
-            result.durationSeconds === null
-              ? {
-                  key: 'commute',
-                  status: 'fail',
-                  value: 'No routes found',
-                  detail: `No public-transport route found to the city centre arriving by ${result.arriveBy}.`,
-                }
-              : {
-                  key: 'commute',
-                  status: result.durationSeconds <= 70 * 60 ? 'pass' : 'fail',
-                  value: `${Math.round(result.durationSeconds / 60)} min`,
-                  detail: `Best of ${result.routesFound} route(s) to the city centre${result.summary ? `: ${result.summary}` : ''}; arrive by ${result.arriveBy}; household limit 70 min.`,
-                },
-          )
+          .then<AutomaticCheck>((result) => {
+            if (!result.options.length)
+              return {
+                key: 'commute',
+                status: 'fail',
+                value: result.routesFound ? 'Bus type not identified' : 'No routes found',
+                detail: result.routesFound
+                  ? `Trafi returned ${result.routesFound} route(s), but did not identify them as city or regional transport.`
+                  : `No public-transport route found to the city centre arriving by ${result.arriveBy}.`,
+              }
+            const optionText = (option: (typeof result.options)[number]) => {
+              const walk =
+                option.walkDurationSeconds === null
+                  ? 'walk time unavailable'
+                  : `${Math.round(option.walkDurationSeconds / 60)} min walk`
+              return `${commuteOptionLabel(option)}: ${walk}${option.stopName ? ` to ${option.stopName}` : ''}; ${Math.round(option.durationSeconds / 60)} min total${option.summary ? ` (${option.summary})` : ''}`
+            }
+            return {
+              key: 'commute',
+              status: result.options.some((option) => option.durationSeconds <= 70 * 60)
+                ? 'pass'
+                : 'fail',
+              value: result.options
+                .map(
+                  (option) =>
+                    `${commuteOptionLabel(option, result.options.length === 1)} · ${Math.round(option.durationSeconds / 60)} min`,
+                )
+                .join(' | '),
+              detail: `${result.options.map(optionText).join(' | ')}; arrive by ${result.arriveBy}; household limit 70 min.`,
+            }
+          })
           .catch((error: unknown) => unavailable('commute', 'Trafi route service', error))
       : Promise.resolve(notConfigured('commute', 'Trafi route service'))
     : Promise.resolve(unknown('commute', 'Not available', 'Resolve the Candidate Plot location.'))

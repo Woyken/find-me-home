@@ -67,9 +67,23 @@ const services: AutomaticCheckServices = {
     distanceMeters: 900,
   }),
   cityCentreCommute: async () => ({
-    durationSeconds: 70 * 60,
+    options: [
+      {
+        service: 'city',
+        durationSeconds: 70 * 60,
+        walkDurationSeconds: 8 * 60,
+        stopName: 'City stop',
+        summary: 'walk → 1G',
+      },
+      {
+        service: 'regional',
+        durationSeconds: 65 * 60,
+        walkDurationSeconds: 12 * 60,
+        stopName: 'Regional stop',
+        summary: 'walk → 101',
+      },
+    ],
     routesFound: 2,
-    summary: 'walk → 1G',
     arriveBy: '2026-09-07T08:00:00+03:00',
   }),
   crimeDensity: async () => ({
@@ -97,10 +111,42 @@ describe('Automatic Checks', () => {
 
     expect(byKey.walk_to_stop).toMatchObject({ status: 'pass' })
     expect(byKey.commute).toMatchObject({ status: 'pass' })
+    expect(byKey.commute.value).toBe('City transport · 70 min | Uses regional bus · 65 min')
+    expect(byKey.commute.detail).toContain('City transport: 8 min walk to City stop; 70 min total')
+    expect(byKey.commute.detail).toContain(
+      'Uses regional bus: 12 min walk to Regional stop; 65 min total',
+    )
     expect(byKey.budget).toMatchObject({ status: 'pass', value: '€63,094' })
     expect(byKey.crime).toMatchObject({ status: 'pass' })
     expect(byKey.noise).toMatchObject({ status: 'warning' })
     expect(byKey.livability).toMatchObject({ status: 'warning' })
+  })
+
+  it('clearly identifies when regional transport is the only commute option', async () => {
+    const results = await runAutomaticChecks(
+      { plot, sourceListing },
+      {
+        ...services,
+        cityCentreCommute: async () => ({
+          options: [
+            {
+              service: 'regional',
+              durationSeconds: 55 * 60,
+              walkDurationSeconds: 11 * 60,
+              stopName: 'Rajono stotelė',
+              summary: 'walk → 101',
+            },
+          ],
+          routesFound: 1,
+          arriveBy: '2026-09-07T08:00:00+03:00',
+        }),
+      },
+    )
+
+    expect(results.find((result) => result.key === 'commute')).toMatchObject({
+      value: 'Regional bus only · 55 min',
+      detail: expect.stringContaining('11 min walk to Rajono stotelė'),
+    })
   })
 
   it('uses confirmed Registered Parcel area for the area Automatic Check', async () => {

@@ -1,5 +1,6 @@
 import { coordinates, corsHeaders } from './request'
 import type { WorkerOptions } from './request'
+import type { TrafiRouteSegment } from '../shared/transit'
 
 const BASE_URL = 'https://whitelabel-app-api-wl.vilkas.trafi.com'
 const headers = () => ({
@@ -184,14 +185,33 @@ const routeSearch = async (request: Request, options: WorkerOptions) => {
       ? record.segments.map((segment: unknown) => {
           if (!segment || typeof segment !== 'object') throw new Error('Trafi unavailable')
           const item = segment as Record<string, any>
-          const normalized: {
-            mode: string
-            name?: string
-            durationSeconds?: number
-          } = { mode: typeof item.mode === 'string' ? item.mode : '?' }
-          const name = item.transit?.schedule?.name ?? item.transit?.scheduleName
+          const normalized: TrafiRouteSegment = {
+            mode: typeof item.mode === 'string' ? item.mode : '?',
+          }
+          const schedule = item.transit?.schedule
+          const transport = schedule?.transport
+          const name = schedule?.name ?? item.transit?.scheduleName
           if (typeof name === 'string') normalized.name = name
-          if (typeof item.duration === 'number') normalized.durationSeconds = item.duration
+          const segmentDuration =
+            typeof item.duration === 'number'
+              ? item.duration
+              : typeof item.startTime === 'string' && typeof item.endTime === 'string'
+                ? Math.round((Date.parse(item.endTime) - Date.parse(item.startTime)) / 1000)
+                : undefined
+          if (
+            typeof segmentDuration === 'number' &&
+            Number.isFinite(segmentDuration) &&
+            segmentDuration >= 0
+          )
+            normalized.durationSeconds = segmentDuration
+          if (typeof item.start?.name === 'string') normalized.startName = item.start.name
+          if (typeof item.end?.name === 'string') normalized.endName = item.end.name
+          if (typeof transport?.transportGroup === 'string')
+            normalized.transportGroup = transport.transportGroup
+          if (typeof transport?.transportType === 'string')
+            normalized.transportType = transport.transportType
+          if (typeof transport?.name === 'string') normalized.transportName = transport.name
+          if (typeof schedule?.color === 'string') normalized.color = schedule.color
           return normalized
         })
       : []
