@@ -93,9 +93,16 @@ const boot = () => {
     async cityCentreCommute() {
       failWhen('cityCentreCommute')
       return {
-        durationSeconds: 3_600,
+        options: [
+          {
+            service: 'city',
+            durationSeconds: 3_600,
+            walkDurationSeconds: 600,
+            stopName: 'E2E stop',
+            summary: 'E2E bus',
+          },
+        ],
         routesFound: 1,
-        summary: 'E2E bus',
         arriveBy: '2025-01-06T08:00:00+02:00',
       }
     },

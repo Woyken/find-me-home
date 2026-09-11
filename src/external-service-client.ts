@@ -1,3 +1,6 @@
+import type { TrafiRoute } from '../shared/transit'
+export type { TrafiRoute, TrafiRouteSegment } from '../shared/transit'
+
 export interface Coordinate {
   latitude: number
   longitude: number
@@ -6,17 +9,6 @@ export interface Coordinate {
 export interface TrafiStop extends Coordinate {
   id: string
   name: string
-}
-
-export interface TrafiRoute {
-  durationSeconds: number
-  startTime: string
-  endTime: string
-  segments: Array<{
-    mode: string
-    name?: string
-    durationSeconds?: number
-  }>
 }
 
 export interface CrimeDensity {
@@ -174,7 +166,16 @@ export const createExternalServiceClient = (workerUrl: string, fetcher: typeof f
                 record(segment) &&
                 typeof segment.mode === 'string' &&
                 (segment.name === undefined || typeof segment.name === 'string') &&
-                (segment.durationSeconds === undefined || number(segment.durationSeconds)),
+                (segment.durationSeconds === undefined || number(segment.durationSeconds)) &&
+                (segment.startName === undefined || typeof segment.startName === 'string') &&
+                (segment.endName === undefined || typeof segment.endName === 'string') &&
+                (segment.transportGroup === undefined ||
+                  typeof segment.transportGroup === 'string') &&
+                (segment.transportType === undefined ||
+                  typeof segment.transportType === 'string') &&
+                (segment.transportName === undefined ||
+                  typeof segment.transportName === 'string') &&
+                (segment.color === undefined || typeof segment.color === 'string'),
             ),
         )
       )

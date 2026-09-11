@@ -1372,6 +1372,7 @@
     font-size: 13px;
     color: var(--ink-soft);
     overflow-wrap: anywhere;
+    white-space: pre-line;
   }
   .check .tag {
     grid-column: 2;

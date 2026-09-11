@@ -77,7 +77,33 @@ describe('retained external-service Worker operations', () => {
             {
               startTime: '2026-09-07T07:30:00+03:00',
               endTime: '2026-09-07T08:00:00+03:00',
-              segments: [{ mode: 'BUS', transit: { schedule: { name: '1G' } } }],
+              segments: [
+                {
+                  mode: 'WALKING',
+                  startTime: '2026-09-07T07:30:00+03:00',
+                  endTime: '2026-09-07T07:35:00+03:00',
+                  start: { name: 'Plot' },
+                  end: { name: 'City stop' },
+                },
+                {
+                  mode: 'TRANSIT',
+                  startTime: '2026-09-07T07:35:00+03:00',
+                  endTime: '2026-09-07T08:00:00+03:00',
+                  start: { name: 'City stop' },
+                  end: { name: 'Centre' },
+                  transit: {
+                    schedule: {
+                      name: '1G',
+                      color: '008000',
+                      transport: {
+                        name: 'Express bus',
+                        transportType: 'bus',
+                        transportGroup: 'city',
+                      },
+                    },
+                  },
+                },
+              ],
             },
           ],
         }),
@@ -110,7 +136,25 @@ describe('retained external-service Worker operations', () => {
         durationSeconds: 1800,
         startTime: '2026-09-07T07:30:00+03:00',
         endTime: '2026-09-07T08:00:00+03:00',
-        segments: [{ mode: 'BUS', name: '1G' }],
+        segments: [
+          {
+            mode: 'WALKING',
+            durationSeconds: 300,
+            startName: 'Plot',
+            endName: 'City stop',
+          },
+          {
+            mode: 'TRANSIT',
+            name: '1G',
+            durationSeconds: 1500,
+            startName: 'City stop',
+            endName: 'Centre',
+            transportGroup: 'city',
+            transportType: 'bus',
+            transportName: 'Express bus',
+            color: '008000',
+          },
+        ],
       },
     ])
     expect(String(fetcher.mock.calls[1][0])).toBe(
