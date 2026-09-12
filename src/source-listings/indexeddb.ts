@@ -1239,8 +1239,26 @@ export const createIndexedDbSourceListingRepository = (
           nextPlots = replace(nextPlots, [replacement])
         }
       }
+      // A concurrent Source Listing deletion may win over a Candidate Plot created on
+      // another replica. Retaining that plot would leave an active dangling reference.
+      // Tombstone it deterministically, just as local Source Listing removal does.
+      for (const plot of nextPlots.filter(
+        (candidate) =>
+          !candidate.deletedAt &&
+          !nextListings.some(
+            (listing) => listing.id === candidate.sourceListingId && !listing.deletedAt,
+          ),
+      )) {
+        const parent = nextListings.find((listing) => listing.id === plot.sourceListingId)
+        const timestamp = Math.max(plot.updatedAt + 1, parent?.updatedAt ?? 0)
+        const tombstone = { ...plot, updatedAt: timestamp, deletedAt: timestamp }
+        correct(plot, tombstone)
+        nextPlots = replace(nextPlots, [tombstone])
+      }
       if (nextPlan) {
-        const sourceListingIds = nextPlan.sourceListingIds.map((id) => losers.get(id)?.id ?? id)
+        const sourceListingIds = nextPlan.sourceListingIds
+          .map((id) => losers.get(id)?.id ?? id)
+          .filter((id) => nextListings.some((listing) => listing.id === id && !listing.deletedAt))
         const distinctIds = [...new Set(sourceListingIds)]
         if (JSON.stringify(nextPlan.sourceListingIds) !== JSON.stringify(distinctIds)) {
           const timestamp = Math.max(

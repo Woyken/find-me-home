@@ -3,7 +3,12 @@ import type { HouseholdRoom } from './synchronization'
 type Message = 'manifest' | 'request' | 'records' | 'records-acknowledgement'
 type Listener = (value: unknown, peerId: string) => void
 
-export const createInMemoryRoomNetwork = () => {
+export type InMemoryRoomNetworkOptions = {
+  /** Test-only delivery hook; production transports are unaffected. */
+  shouldDeliver?: (message: Message, fromPeerId: string, toPeerId: string) => boolean
+}
+
+export const createInMemoryRoomNetwork = (networkOptions: InMemoryRoomNetworkOptions = {}) => {
   let nextId = 0
   const rooms = new Map<string, Set<Room>>()
   class Room implements HouseholdRoom {
@@ -54,7 +59,11 @@ export const createInMemoryRoomNetwork = () => {
     }
     private send(type: Message, value: unknown, peerId?: string) {
       for (const peer of rooms.get(this.key) ?? []) {
-        if (peer !== this && (!peerId || peer.id === peerId))
+        if (
+          peer !== this &&
+          (!peerId || peer.id === peerId) &&
+          networkOptions.shouldDeliver?.(type, this.id, peer.id) !== false
+        )
           queueMicrotask(() =>
             peer.messages[type].forEach((listener) => listener(structuredClone(value), this.id)),
           )
