@@ -10,12 +10,6 @@ test('two tabs share one room peer and hand synchronization to the follower', as
   const relay = new E2eSyncRelay()
   const localContext = await browser.newContext()
   const remoteContext = await browser.newContext()
-  // Playwright contexts isolate storage but not the browser-wide Web Locks
-  // namespace. A physical remote device has its own lock manager, so remove
-  // the local test browser's lock from this simulated remote device.
-  await remoteContext.addInitScript(() => {
-    Object.defineProperty(navigator, 'locks', { value: undefined, configurable: true })
-  })
   await relay.attach(localContext)
   await relay.attach(remoteContext)
   const leader = await localContext.newPage()
