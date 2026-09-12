@@ -179,7 +179,7 @@ for (const scenario of [aruodasScenarios.desktopAdvert, aruodasScenarios.mobileA
     )
     const imported = decodeImportTransportFragment(destination?.fragment ?? '')
     if (imported.kind !== 'listing') throw new Error('Expected a listing import')
-    await expect(page).toHaveURL(/\/source-listings\/e2e-1$/)
+    await expect(page).toHaveURL(/\/source-listings\/aruodas-11-424242$/)
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Kauno r. sav., Fixture g.')
     await expectImportedDetail(page, imported.imported)
     await page.reload()
