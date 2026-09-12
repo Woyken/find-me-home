@@ -43,7 +43,7 @@ export function HouseholdProvider(props: ParentProps<{ runtime: HouseholdRuntime
   const [state, setState] = createSignal(props.runtime.state(), {
     ownedWrite: true,
   })
-  const unsubscribe = props.runtime.subscribe(() => setState(() => ({ ...props.runtime.state() })))
+  const unsubscribe = props.runtime.subscribe(() => setState(() => props.runtime.state()))
   const invitation = invitationSecretFrom(window.location.href)
   void (invitation
     ? props.runtime

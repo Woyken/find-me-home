@@ -578,6 +578,145 @@ describe('Household runtime', () => {
     }
   })
 
+  it('settles after two devices independently review the same captured Aruodas favorite', async () => {
+    const prefix = `reviewed-inbox-convergence-${crypto.randomUUID()}`
+    databasePrefixes.push(prefix)
+    let uuid = 0
+    const createRuntime = (
+      device: string,
+      roomFactory?: ReturnType<typeof createInMemoryRoomNetwork>,
+    ) =>
+      createBrowserHouseholdRuntime({
+        accessDatabaseName: `${prefix}-${device}-access`,
+        sharedDatabasePrefix: `${prefix}-${device}`,
+        crypto,
+        now: () => 10_000,
+        uuid: () => `${device}-${++uuid}`,
+        roomFactory,
+      })
+    const initialNetwork = createInMemoryRoomNetwork()
+    const first = createRuntime('first', initialNetwork)
+    const second = createRuntime('second', initialNetwork)
+    const imported = parseAruodasImport({
+      url: 'https://www.aruodas.lt/sklypai-vilniuje-reviewed-inbox-11-1472707/',
+      title: 'Shared favorite',
+      photos: [],
+      features: [],
+    })
+    const review = {
+      imported,
+      priceEur: null,
+      areaAres: null,
+      purposeText: null,
+      notes: null,
+      parcelNumberClue: null,
+      latitudeClue: null,
+      longitudeClue: null,
+      coordinateCluePrecision: null,
+      addressClue: null,
+    }
+    const sentRecords: {
+      device: string
+      records: { type: string; id: string; updatedAt: number; deletedAt?: number }[]
+    }[] = []
+    const convergenceNetwork = createInMemoryRoomNetwork()
+    const roomFactory = (device: string) => (options: Parameters<typeof convergenceNetwork>[0]) => {
+      const room = convergenceNetwork(options)
+      const sendRecords = room.sendRecords.bind(room)
+      room.sendRecords = (message, peerId) => {
+        sentRecords.push({
+          device,
+          records: message.records.map(({ type, record }) => ({
+            type,
+            id: record.id,
+            updatedAt: record.updatedAt,
+            deletedAt: record.deletedAt,
+          })),
+        })
+        return sendRecords(message, peerId)
+      }
+      return room
+    }
+    let offline: ReturnType<typeof createRuntime>[] = []
+    let reopened: ReturnType<typeof createRuntime>[] = []
+    try {
+      await first.start()
+      await first.createHousehold()
+      const state = first.state()
+      if (state.status !== 'active') throw new Error('Household was not active')
+      await second.joinHousehold(state.access.invitationSecret)
+      await waitFor(() => second.state().status === 'active')
+      first.dispose()
+      second.dispose()
+
+      offline = [createRuntime('first'), createRuntime('second')]
+      await Promise.all(offline.map((runtime) => runtime.start()))
+      await Promise.all(
+        offline.map(async (runtime) => {
+          await runtime.captureImportInbox([imported])
+          await runtime.saveReviewedImport(review)
+        }),
+      )
+      expect(offline.map((runtime) => runtime.listImportInbox())).toEqual([[], []])
+      expect(offline.map((runtime) => runtime.listSourceListings())).toHaveLength(2)
+      expect(
+        offline.flatMap((runtime) =>
+          runtime
+            .getSourceListingRecords()
+            .filter(
+              (record) =>
+                !('url' in record) && 'sourceId' in record && record.sourceId === imported.sourceId,
+            ),
+        ),
+      ).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ deletedAt: 10_002, updatedAt: 10_002 }),
+          expect.objectContaining({ deletedAt: 10_002, updatedAt: 10_002 }),
+        ]),
+      )
+      offline.forEach((runtime) => runtime.dispose())
+
+      reopened = [
+        createRuntime('first', roomFactory('first')),
+        createRuntime('second', roomFactory('second')),
+      ]
+      await Promise.all(reopened.map((runtime) => runtime.start()))
+      await waitFor(() =>
+        reopened.every((runtime) => {
+          const current = runtime.state()
+          return current.status === 'active' && current.syncStatus === 'connected'
+        }),
+      )
+      await new Promise((resolve) => setTimeout(resolve, 25))
+
+      expect(reopened.map((runtime) => runtime.state())).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ status: 'active', syncStatus: 'connected' }),
+          expect.objectContaining({ status: 'active', syncStatus: 'connected' }),
+        ]),
+      )
+      expect(sentRecords.length).toBeLessThanOrEqual(8)
+      expect(sentRecords.every((message) => message.records.length > 0)).toBe(true)
+      const synchronizedRecords = reopened[0]
+        .getSourceListingRecords()
+        .slice()
+        .sort((left, right) => left.id.localeCompare(right.id))
+      expect(
+        reopened.map((runtime) =>
+          runtime
+            .getSourceListingRecords()
+            .slice()
+            .sort((left, right) => left.id.localeCompare(right.id)),
+        ),
+      ).toEqual([synchronizedRecords, synchronizedRecords])
+    } finally {
+      first.dispose()
+      second.dispose()
+      offline.forEach((runtime) => runtime.dispose())
+      reopened.forEach((runtime) => runtime.dispose())
+    }
+  })
+
   it('propagates deletion tombstones to a device with an older live record', async () => {
     const prefix = `deletion-sync-${crypto.randomUUID()}`
     databasePrefixes.push(prefix)

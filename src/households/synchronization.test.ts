@@ -95,7 +95,9 @@ const createRoom = () => {
     },
     sendManifest: (value, peerId) => sent.manifests.push({ value, peerId }),
     sendRequest: (value, peerId) => sent.requests.push({ value, peerId }),
-    sendRecords: (value, peerId) => sent.records.push({ value, peerId }),
+    async sendRecords(value, peerId) {
+      sent.records.push({ value, peerId })
+    },
     sendRecordsAcknowledgement: (value, peerId) => sent.acknowledgements.push({ value, peerId }),
     leave: () => undefined,
   }
@@ -103,6 +105,126 @@ const createRoom = () => {
 }
 
 describe('Household synchronization', () => {
+  it('negatively acknowledges records when remote application fails', async () => {
+    const { room, listeners, sent } = createRoom()
+    synchronizeHousehold({
+      householdId: 'household-id',
+      room,
+      repository: {
+        allRecords: () => [],
+        applyRemote: async () => Promise.reject(new Error('write failed')),
+        subscribeLocalMutations: () => () => undefined,
+      },
+      onStatus: () => undefined,
+      onInitialSync: async () => undefined,
+      onError: () => undefined,
+    })
+    listeners.join('peer')
+    listeners.manifest(
+      {
+        protocolVersion: 2,
+        household: {},
+        'source-listing': {},
+        'candidate-plot': {},
+        'visit-plan': {},
+        'import-inbox': {},
+      },
+      'peer',
+    )
+    listeners.records({ requestId: 'failed-apply', records: [household(20)] }, 'peer')
+    await new Promise((resolve) => setTimeout(resolve))
+    expect(sent.acknowledgements.at(-1)).toEqual({
+      peerId: 'peer',
+      value: { requestId: 'failed-apply', accepted: false },
+    })
+  })
+
+  it('retries an unsatisfied record request before warning', () => {
+    vi.useFakeTimers()
+    const warnings: unknown[] = []
+    const { room, listeners, sent } = createRoom()
+    synchronizeHousehold({
+      householdId: 'household-id',
+      room,
+      repository: {
+        allRecords: () => [],
+        applyRemote: async () => [],
+        subscribeLocalMutations: () => () => undefined,
+      },
+      onStatus: () => undefined,
+      onInitialSync: async () => undefined,
+      onWarning: (warning) => warnings.push(warning),
+      onError: () => undefined,
+      pendingRetryTimeoutMs: 10,
+      pendingRetryAttempts: 1,
+    })
+    listeners.join('peer')
+    listeners.manifest(
+      {
+        protocolVersion: 2,
+        household: { 'household-record': 20 },
+        'source-listing': {},
+        'candidate-plot': {},
+        'visit-plan': {},
+        'import-inbox': {},
+      },
+      'peer',
+    )
+    vi.advanceTimersByTime(10)
+    expect(sent.manifests).toHaveLength(2)
+    expect(warnings.at(-1)).toBeUndefined()
+    vi.advanceTimersByTime(10)
+    expect(warnings.at(-1)).toBe('synchronization')
+    vi.useRealTimers()
+  })
+
+  it('delays connected-to-syncing status until the batch remains outstanding', async () => {
+    vi.useFakeTimers()
+    const statuses: string[] = []
+    let publishLocal!: (records: SharedRecord[]) => void
+    const { room, listeners, sent } = createRoom()
+    synchronizeHousehold({
+      householdId: 'household-id',
+      room,
+      repository: {
+        allRecords: () => [],
+        applyRemote: async () => [],
+        subscribeLocalMutations: (listener) => {
+          publishLocal = listener
+          return () => undefined
+        },
+      },
+      onStatus: (status) => statuses.push(status),
+      onInitialSync: async () => undefined,
+      onError: () => undefined,
+      syncingHysteresisMs: 750,
+    })
+    listeners.join('peer')
+    listeners.manifest(
+      {
+        protocolVersion: 2,
+        household: {},
+        'source-listing': {},
+        'candidate-plot': {},
+        'visit-plan': {},
+        'import-inbox': {},
+      },
+      'peer',
+    )
+    publishLocal([household(20)])
+    expect(statuses.at(-1)).toBe('connected')
+    vi.advanceTimersByTime(749)
+    expect(statuses.at(-1)).toBe('connected')
+    vi.advanceTimersByTime(1)
+    expect(statuses.at(-1)).toBe('syncing')
+    listeners.acknowledgement(
+      { requestId: sent.records.at(-1)!.value.requestId, accepted: true },
+      'peer',
+    )
+    expect(statuses.at(-1)).toBe('connected')
+    await Promise.resolve()
+    vi.useRealTimers()
+  })
   it('reports syncing when the only peer silently declines with a legacy manifest', () => {
     const statuses: string[] = []
     const { room, listeners } = createRoom()
@@ -642,7 +764,7 @@ describe('Household synchronization', () => {
     expect(statuses.at(-1)).toBe('connected')
   })
 
-  it('retains acknowledgement state when a compatible manifest is replayed after a duplicate join', () => {
+  it('retains acknowledgement state when a compatible manifest is replayed after a duplicate join', async () => {
     vi.useFakeTimers()
     const statuses: string[] = []
     const warnings: unknown[] = []
@@ -686,7 +808,8 @@ describe('Household synchronization', () => {
     publishLocal([household(30)])
     listeners.join('peer')
     listeners.manifest(manifest, 'peer')
-    vi.advanceTimersByTime(10_000)
+    await Promise.resolve()
+    vi.advanceTimersByTime(30_000)
 
     expect(statuses.at(-1)).toBe('syncing')
     expect(warnings.at(-1)).toBe('synchronization')
@@ -1166,7 +1289,7 @@ describe('Household synchronization', () => {
     ])
   })
 
-  it('clears acknowledgement timers and warnings after a positive acknowledgement', () => {
+  it('clears a transient synchronization warning after a later accepted acknowledgement', () => {
     vi.useFakeTimers()
     const warnings: unknown[] = []
     let publishLocal!: (records: SharedRecord[]) => void
@@ -1208,9 +1331,9 @@ describe('Household synchronization', () => {
       { requestId: sent.records.at(-1)!.value.requestId, accepted: true },
       'peer',
     )
-    expect(warnings.at(-1)).toBe('synchronization')
-    vi.advanceTimersByTime(10_000)
-    expect(warnings.at(-1)).toBe('synchronization')
+    expect(warnings.at(-1)).toBeUndefined()
+    vi.advanceTimersByTime(30_000)
+    expect(warnings.at(-1)).toBeUndefined()
     void stop()
     vi.useRealTimers()
   })
@@ -1249,12 +1372,13 @@ describe('Household synchronization', () => {
       'peer',
     )
     publishLocal([household(20)])
-    vi.advanceTimersByTime(10_000)
+    await Promise.resolve()
+    vi.advanceTimersByTime(30_000)
     expect(warnings.at(-1)).toBe('synchronization')
     publishLocal([household(30)])
     const warningCount = warnings.length
     await stop()
-    vi.advanceTimersByTime(10_000)
+    vi.advanceTimersByTime(30_000)
     expect(warnings).toHaveLength(warningCount)
     vi.useRealTimers()
   })

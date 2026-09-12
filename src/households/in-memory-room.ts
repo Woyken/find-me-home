@@ -66,7 +66,7 @@ export const createInMemoryRoomNetwork = () => {
     sendRequest(value: Parameters<HouseholdRoom['sendRequest']>[0], peerId: string) {
       this.send('request', value, peerId)
     }
-    sendRecords(value: Parameters<HouseholdRoom['sendRecords']>[0], peerId?: string) {
+    async sendRecords(value: Parameters<HouseholdRoom['sendRecords']>[0], peerId?: string) {
       this.send('records', value, peerId)
     }
     sendRecordsAcknowledgement(

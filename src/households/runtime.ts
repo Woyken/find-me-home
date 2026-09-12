@@ -228,12 +228,16 @@ export const createHouseholdRuntime = (dependencies: {
       repository: sharedRepository,
       onStatus(syncStatus) {
         if (!isCurrent()) return
-        if (state.status === 'active') setState({ ...state, syncStatus })
-        else if (state.status === 'waiting')
+        if (state.status === 'active') {
+          if (state.syncStatus !== syncStatus) setState({ ...state, syncStatus })
+        } else if (state.status === 'waiting') {
+          const nextSyncStatus = syncStatus === 'syncing' ? 'syncing' : 'waiting'
+          if (state.syncStatus === nextSyncStatus) return
           setState({
             ...state,
-            syncStatus: syncStatus === 'syncing' ? 'syncing' : 'waiting',
+            syncStatus: nextSyncStatus,
           })
+        }
       },
       async onInitialSync(syncStatus) {
         if (!isCurrent() || state.status !== 'waiting') return
@@ -272,6 +276,7 @@ export const createHouseholdRuntime = (dependencies: {
           error: error instanceof Error ? error : new Error(String(error)),
         })
       },
+      syncingHysteresisMs: 750,
     })
   }
   const activate = async (access: HouseholdAccessState, advanceLastOpened: boolean) => {
