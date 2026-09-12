@@ -41,12 +41,6 @@ export const plotsMapData = (
   return { stops, unlocatedListingCount }
 }
 
-/** The marked areas that have a place on the map, in the order given. */
-export const plotsMapStops = (
-  sourceListings: Array<SourceListingDetail>,
-  goingIds: Array<string>,
-) => plotsMapData(sourceListings, goingIds).stops
-
 /**
  * Every listed plot on one map: blue shapes, orange for the ones we're going
  * to see. Tapping a plot (or its label) opens the listing.

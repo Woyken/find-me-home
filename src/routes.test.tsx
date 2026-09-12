@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest'
-import { plotsMapData, plotsMapStops } from './components/PlotsMap'
+import { plotsMapData } from './components/PlotsMap'
 import { reconcileDeckOrder } from './routes/import-inbox'
 import { sortListings } from './routes/index'
 import { routeUrl } from './routes/visit-plan'
@@ -46,9 +46,9 @@ const candidatePlot = (
 
 const listing = (
   id: string,
-  plot: Partial<SourceListingDetail['candidatePlots'][number]>,
+  plot: Partial<CandidatePlotRecord>,
   updatedAt = 0,
-  additionalPlots: Array<Partial<SourceListingDetail['candidatePlots'][number]>> = [],
+  additionalPlots: Array<Partial<CandidatePlotRecord>> = [],
 ): SourceListingDetail => ({
   id,
   householdId: 'h',
@@ -137,7 +137,7 @@ describe('plots map', () => {
         resolvedLongitude: 25.1,
         resolvedPrecision: 'exact',
       })
-    const stops = plotsMapStops([located('a'), listing('nowhere', {}), located('b')], ['b'])
+    const stops = plotsMapData([located('a'), listing('nowhere', {}), located('b')], ['b']).stops
     expect(stops.map((stop) => stop.sourceListing.id)).toEqual(['a', 'b'])
     expect(stops.map((stop) => stop.going)).toEqual([false, true])
     expect(stops[0].location.label).toBe('a')
