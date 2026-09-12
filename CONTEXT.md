@@ -12,6 +12,14 @@ all of it; there are no roles, permissions, or member identities. A person may
 participate in several Households.
 _Avoid_: Group, account, workspace
 
+**Leader Tab**:
+The one browser tab for a Household that holds the browser coordination lock
+and joins its P2P room on behalf of all tabs in that browser profile.
+
+**Follower Tab**:
+A same-profile Household tab that shares IndexedDB and relays its mutations to
+the Leader Tab without joining the P2P room itself.
+
 **Source Listing**:
 A household record of an advertisement published by a property marketplace.
 One Source Listing may offer one or more Candidate Plots.

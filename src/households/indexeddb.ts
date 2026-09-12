@@ -15,6 +15,7 @@ export type HouseholdAccessStore = {
 
 export type HouseholdRepository = {
   open: (householdId: string) => Promise<void>
+  refresh: () => Promise<void>
   getStored: (householdId: string) => Promise<HouseholdRecord | undefined>
   get: () => HouseholdRecord | undefined
   create: (value: HouseholdRecord) => Promise<void>
@@ -149,6 +150,16 @@ export const createIndexedDbHouseholdRepository = (
     localMutationListeners.forEach((listener) => listener(structuredClone(changed)))
   const put = (store: IDBObjectStore, record: HouseholdRecord) =>
     store.put(v.parse(householdRecordSchema, record))
+  const readRecords = async (db: IDBDatabase) =>
+    (
+      await requestResult<unknown[]>(
+        db.transaction('households').objectStore('households').getAll(),
+      )
+    ).flatMap((record) => {
+      const parsed = v.safeParse(householdRecordSchema, record)
+      if (parsed.success) return [parsed.output]
+      return []
+    })
 
   return {
     async open(nextHouseholdId) {
@@ -158,21 +169,13 @@ export const createIndexedDbHouseholdRepository = (
         'households',
       )
       database = openedDatabase
-      records = (
-        await requestResult<unknown[]>(
-          openedDatabase.transaction('households').objectStore('households').getAll(),
-        )
-      ).flatMap((record) => {
-        const parsed = v.safeParse(householdRecordSchema, record)
-        if (parsed.success) return [parsed.output]
-        console.warn('Ignoring invalid Household record', {
-          id:
-            typeof record === 'object' && record !== null && 'id' in record ? record.id : undefined,
-          issues: parsed.issues,
-        })
-        return []
-      })
+      records = await readRecords(openedDatabase)
       householdId = nextHouseholdId
+      publish()
+    },
+    async refresh() {
+      const active = requireOpen()
+      records = await readRecords(active.database)
       publish()
     },
     async getStored(storedHouseholdId) {

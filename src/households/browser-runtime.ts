@@ -6,6 +6,7 @@ import {
 import { createHouseholdRuntime } from './runtime'
 import { createTrysteroHouseholdRoom } from './trystero-room'
 import type { HouseholdRoom } from './synchronization'
+import type { LockManager, TabChannelFactory } from './tab-coordinator'
 import { createIndexedDbSourceListingRepository } from '../source-listings/indexeddb'
 import type { LocationResolver } from '../location-resolution'
 import { createBrowserLocationResolver } from '../location-services'
@@ -22,12 +23,14 @@ export const createBrowserHouseholdRuntime = (options?: {
   beforeVisitCommit?: (transaction: IDBTransaction) => void
   beforeVisitPlanCommit?: (transaction: IDBTransaction) => void
   roomFactory?: (options: { householdId: string; roomPassword: string }) => HouseholdRoom
+  locks?: LockManager
+  createTabChannel?: TabChannelFactory
   locationResolver?: LocationResolver
   automaticCheckServices?: AutomaticCheckServices
 }) => {
   const cryptoApi = options?.crypto ?? crypto
   const sharedDatabasePrefix = options?.sharedDatabasePrefix ?? 'find-me-home-shared'
-  return createHouseholdRuntime({
+  const runtime = createHouseholdRuntime({
     accessStore: createIndexedDbHouseholdAccessStore(options?.accessDatabaseName),
     households: createIndexedDbHouseholdRepository(sharedDatabasePrefix),
     sourceListings: createIndexedDbSourceListingRepository(sharedDatabasePrefix, {
@@ -49,6 +52,26 @@ export const createBrowserHouseholdRuntime = (options?: {
     roomFactory:
       options?.roomFactory ??
       (typeof RTCPeerConnection === 'undefined' ? undefined : createTrysteroHouseholdRoom),
+    locks: options?.locks ?? navigator.locks,
+    createTabChannel:
+      options?.createTabChannel ??
+      (navigator.locks
+        ? (name) => {
+            const broadcast = new BroadcastChannel(name)
+            let onmessage: ((event: { data: unknown }) => void) | null = null
+            broadcast.addEventListener('message', (event) => onmessage?.({ data: event.data }))
+            return {
+              postMessage: (message) => broadcast.postMessage(message),
+              close: () => broadcast.close(),
+              get onmessage() {
+                return onmessage
+              },
+              set onmessage(listener) {
+                onmessage = listener
+              },
+            }
+          }
+        : undefined),
     invitationBaseUrl: () => new URL(import.meta.env.BASE_URL, window.location.origin).toString(),
     locationResolver:
       options?.locationResolver ??
@@ -57,4 +80,8 @@ export const createBrowserHouseholdRuntime = (options?: {
       options?.automaticCheckServices ??
       (typeof window === 'undefined' ? undefined : createBrowserAutomaticCheckServices()),
   })
+  const leavePromptly = () => runtime.dispose()
+  window.addEventListener('pagehide', leavePromptly, { once: true })
+  window.addEventListener('beforeunload', leavePromptly, { once: true })
+  return runtime
 }

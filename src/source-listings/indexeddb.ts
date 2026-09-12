@@ -26,6 +26,7 @@ import * as v from 'valibot'
 
 export type SourceListingRepository = {
   open: (householdId: string) => Promise<void>
+  refresh: () => Promise<void>
   list: () => SourceListingDetail[]
   get: (id: string) => SourceListingDetail | undefined
   listImportInbox: () => ImportInboxRecord[]
@@ -406,6 +407,39 @@ export const createIndexedDbSourceListingRepository = (
         visitPlan?.updatedAt ?? 0,
         ...importInbox.map((record) => record.updatedAt),
       )
+      publish()
+    },
+    async refresh() {
+      const active = requireOpen()
+      const [storedListings, storedPlots, storedPlans, storedInbox] = await Promise.all([
+        requestResult<unknown[]>(
+          active.database.transaction('source-listings').objectStore('source-listings').getAll(),
+        ),
+        requestResult<unknown[]>(
+          active.database.transaction('candidate-plots').objectStore('candidate-plots').getAll(),
+        ),
+        requestResult<unknown[]>(
+          active.database.transaction('visit-plans').objectStore('visit-plans').getAll(),
+        ),
+        requestResult<unknown[]>(
+          active.database.transaction('import-inbox').objectStore('import-inbox').getAll(),
+        ),
+      ])
+      sourceListings = storedListings.flatMap((record) => {
+        const parsed = v.safeParse(sourceListingRecordSchema, record)
+        return parsed.success ? [parsed.output] : []
+      })
+      candidatePlots = normalizeCandidatePlots(storedPlots)
+      importInbox = storedInbox.flatMap((record) => {
+        const parsed = v.safeParse(importInboxRecordSchema, record)
+        return parsed.success ? [parsed.output] : []
+      })
+      visitPlan = storedPlans
+        .flatMap((record) => {
+          const parsed = v.safeParse(visitPlanRecordSchema, record)
+          return parsed.success ? [parsed.output] : []
+        })
+        .find((record) => record.householdId === active.householdId && !record.deletedAt)
       publish()
     },
     list() {

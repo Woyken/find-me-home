@@ -1481,6 +1481,7 @@ describe('Household runtime', () => {
         open: async (householdId) => {
           openedHouseholdId = householdId
         },
+        refresh: async () => undefined,
         getStored: async (householdId) =>
           householdId === 'first-household' ? firstHousehold : secondHousehold,
         get: () => (openedHouseholdId === 'first-household' ? firstHousehold : secondHousehold),
@@ -1496,6 +1497,7 @@ describe('Household runtime', () => {
       },
       sourceListings: {
         open: async () => undefined,
+        refresh: async () => undefined,
         list: () => [],
         get: () => undefined,
         listImportInbox: () => [],

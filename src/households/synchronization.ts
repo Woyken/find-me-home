@@ -107,7 +107,10 @@ const validLegacyManifest = (value: unknown): value is Manifest =>
 
 const recordMessageSchema = v.strictObject({ requestId: v.string(), records: v.array(v.unknown()) })
 
-const parseRecords = (value: unknown, householdId: string): SharedRecord[] | undefined => {
+export const parseSharedRecords = (
+  value: unknown,
+  householdId: string,
+): SharedRecord[] | undefined => {
   if (!Array.isArray(value)) return undefined
   const records: SharedRecord[] = []
   for (const entry of value) {
@@ -472,7 +475,7 @@ export const synchronizeHousehold = (options: {
     options.room.onRecords((value, peerId) => {
       const message = v.safeParse(recordMessageSchema, value)
       if (!peers.get(peerId)?.compatible || !message.success) return
-      const records = parseRecords(message.output.records, options.householdId)
+      const records = parseSharedRecords(message.output.records, options.householdId)
       const incomingRequestId = message.output.requestId
       if (!records) {
         console.warn('Rejected incompatible synchronization records', {
