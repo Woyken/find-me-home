@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@solidjs/router": "2.0.0-next.21",
-    "@solidjs/web": "2.0.0-rc.6",
+    "@solidjs/web": "2.0.0-rc.8",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/db": "^0.8.7",
     "@types/proj4": "^2.5.6",

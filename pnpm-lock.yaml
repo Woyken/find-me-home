@@ -6,9 +6,6 @@ importers:
   .:
     configDependencies: {}
     packageManagerDependencies:
-      '@pnpm/exe':
-        specifier: 12.4.1
-        version: 12.4.1
       pnpm:
         specifier: 12.4.1
         version: 12.4.1
@@ -92,11 +89,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@pnpm/exe@12.4.1':
-    resolution: {integrity: sha512-J3tgb70MBqAujwk+7CjD2a2kL7M6qfTkb2tsb97q8qfIQMlsbEqN+UCvf7GELw2SQPQ8KtFhXypgzMBp86zYKg==}
-    engines: {node: '>=18.*'}
-    hasBin: true
-
   pnpm@12.4.1:
     resolution: {integrity: sha512-LoHjmdc/6DkNqyXgaqeIq3pZCCSNL1o3D4K0gRR6ano2e/gEj5pv22Rg8hpm8FQt7bi5TKLIcjWWdBkgsWVtTA==}
     engines: {node: '>=18.*'}
@@ -146,23 +138,6 @@ snapshots:
   '@pnpm/exe.win32-x64@12.4.1':
     optional: true
 
-  '@pnpm/exe@12.4.1':
-    optionalDependencies:
-      '@pnpm/exe.android-arm64': 12.4.1
-      '@pnpm/exe.android-x64': 12.4.1
-      '@pnpm/exe.darwin-arm64': 12.4.1
-      '@pnpm/exe.darwin-x64': 12.4.1
-      '@pnpm/exe.freebsd-x64': 12.4.1
-      '@pnpm/exe.linux-arm64': 12.4.1
-      '@pnpm/exe.linux-arm64-musl': 12.4.1
-      '@pnpm/exe.linux-ppc64': 12.4.1
-      '@pnpm/exe.linux-riscv64': 12.4.1
-      '@pnpm/exe.linux-s390x': 12.4.1
-      '@pnpm/exe.linux-x64': 12.4.1
-      '@pnpm/exe.linux-x64-musl': 12.4.1
-      '@pnpm/exe.win32-arm64': 12.4.1
-      '@pnpm/exe.win32-x64': 12.4.1
-
   pnpm@12.4.1:
     optionalDependencies:
       '@pnpm/exe.android-arm64': 12.4.1
@@ -193,10 +168,10 @@ importers:
     dependencies:
       '@solidjs/router':
         specifier: 2.0.0-next.21
-        version: 2.0.0-next.21(@solidjs/web@2.0.0-rc.6(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)
+        version: 2.0.0-next.21(@solidjs/web@2.0.0-rc.8(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)
       '@solidjs/web':
-        specifier: 2.0.0-rc.6
-        version: 2.0.0-rc.6(solid-js@2.0.0-rc.6)
+        specifier: 2.0.0-rc.8
+        version: 2.0.0-rc.8(solid-js@2.0.0-rc.6)
       '@tailwindcss/vite':
         specifier: ^4.1.18
         version: 4.3.3(vite@8.3.0(@types/node@26.5.1)(esbuild@0.28.1)(jiti@2.7.0))
@@ -233,10 +208,10 @@ importers:
         version: 1.63.0
       '@solidjs/testing-library':
         specifier: ^0.8.10
-        version: 0.8.10(@solidjs/router@2.0.0-next.21(@solidjs/web@2.0.0-rc.6(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)
+        version: 0.8.10(@solidjs/router@2.0.0-next.21(@solidjs/web@2.0.0-rc.8(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)
       '@solidjs/vite-plugin':
         specifier: 3.0.0-next.39
-        version: 3.0.0-next.39(@solidjs/web@2.0.0-rc.6(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)(supports-color@10.2.2)(vite@8.3.0(@types/node@26.5.1)(esbuild@0.28.1)(jiti@2.7.0))
+        version: 3.0.0-next.39(@solidjs/web@2.0.0-rc.8(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)(supports-color@10.2.2)(vite@8.3.0(@types/node@26.5.1)(esbuild@0.28.1)(jiti@2.7.0))
       '@types/geojson':
         specifier: ^7946.0.16
         version: 7946.0.16
@@ -1298,10 +1273,11 @@ packages:
       '@testing-library/jest-dom':
         optional: true
 
-  '@solidjs/web@2.0.0-rc.6':
-    resolution: {integrity: sha512-JgQ2NCjygQpZizZrVjcwPqH3dhIZQZoMRGoGSC6+Tr622cvbuXthDC3pKdNMsjCKCVp19UbT0kkPX15FOdT0pw==}
+  '@solidjs/web@2.0.0-rc.8':
+    resolution: {integrity: sha512-GeJEHtSjsbvRLpREfbQa5ksn6EuJKjxY/kXxuOP5Sn5FlXz6fuL3wHJr88PYlCOPV1KxxxWSc5h5jzKMKQQXDg==}
+    engines: {node: '>=22.12.0'}
     peerDependencies:
-      solid-js: ^2.0.0-rc.6
+      solid-js: ^2.0.0-rc.8
 
   '@speed-highlight/core@1.2.24':
     resolution: {integrity: sha512-qeW2e1l78afw8VhRPfPQ1Gjj+KU5XFQ/OFV5ti6eTa9bruO7mJyZtA4vw0ofqmA3tKCkROE9xLk3VZoeRc98nw==}
@@ -2177,8 +2153,18 @@ packages:
     peerDependencies:
       seroval: ^1.0
 
+  seroval-plugins@1.6.7:
+    resolution: {integrity: sha512-4Nk35ttD3DTDJW4hgw5StsVAPeU6qnDFnULAouw6tQ7oLTV/ICXrWpsXo2EE52eSP2joUMazbVf52mFEcADqRw==}
+    engines: {node: '>=10'}
+    peerDependencies:
+      seroval: ^1.0
+
   seroval@1.5.4:
     resolution: {integrity: sha512-46uFvgrXTVxZcUorgSSRZ4y+ieqLLQRMlG4bnCZKW3qI6BZm7Rg4ntMW4p1mILEEBZWrFlcpp0AyIIlM6jD9iw==}
+    engines: {node: '>=10'}
+
+  seroval@1.6.7:
+    resolution: {integrity: sha512-AeDcLh0yO2SFm9W71essgnSzLV9DI8ZH0x0knXn2DMnUZj728mpLbxjlbB6IqKCmqh8JA3cEqRyGoNkt584JcQ==}
     engines: {node: '>=10'}
 
   set-blocking@2.0.0:
@@ -3148,27 +3134,27 @@ snapshots:
       '@solidjs/compiler-wasm32-wasi': 2.0.0-rc.6
       '@solidjs/compiler-win32-x64-msvc': 2.0.0-rc.6
 
-  '@solidjs/router@2.0.0-next.21(@solidjs/web@2.0.0-rc.6(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)':
+  '@solidjs/router@2.0.0-next.21(@solidjs/web@2.0.0-rc.8(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)':
     dependencies:
-      '@solidjs/web': 2.0.0-rc.6(solid-js@2.0.0-rc.6)
+      '@solidjs/web': 2.0.0-rc.8(solid-js@2.0.0-rc.6)
       solid-js: 2.0.0-rc.6
 
   '@solidjs/signals@2.0.0-rc.6': {}
 
-  '@solidjs/testing-library@0.8.10(@solidjs/router@2.0.0-next.21(@solidjs/web@2.0.0-rc.6(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)':
+  '@solidjs/testing-library@0.8.10(@solidjs/router@2.0.0-next.21(@solidjs/web@2.0.0-rc.8(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)':
     dependencies:
       '@testing-library/dom': 10.4.1
       solid-js: 2.0.0-rc.6
     optionalDependencies:
-      '@solidjs/router': 2.0.0-next.21(@solidjs/web@2.0.0-rc.6(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)
+      '@solidjs/router': 2.0.0-next.21(@solidjs/web@2.0.0-rc.8(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)
 
-  '@solidjs/vite-plugin@3.0.0-next.39(@solidjs/web@2.0.0-rc.6(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)(supports-color@10.2.2)(vite@8.3.0(@types/node@26.5.1)(esbuild@0.28.1)(jiti@2.7.0))':
+  '@solidjs/vite-plugin@3.0.0-next.39(@solidjs/web@2.0.0-rc.8(solid-js@2.0.0-rc.6))(solid-js@2.0.0-rc.6)(supports-color@10.2.2)(vite@8.3.0(@types/node@26.5.1)(esbuild@0.28.1)(jiti@2.7.0))':
     dependencies:
       '@ampproject/remapping': 2.3.0
       '@babel/core': 7.29.7(supports-color@10.2.2)
       '@solidjs/babel-plugin': 2.0.0-rc.6(@babel/core@7.29.7(supports-color@10.2.2))
       '@solidjs/compiler': 2.0.0-rc.6
-      '@solidjs/web': 2.0.0-rc.6(solid-js@2.0.0-rc.6)
+      '@solidjs/web': 2.0.0-rc.8(solid-js@2.0.0-rc.6)
       '@types/babel__core': 7.20.5
       merge-anything: 5.1.7
       solid-js: 2.0.0-rc.6
@@ -3178,10 +3164,10 @@ snapshots:
       - '@tsrx/core'
       - supports-color
 
-  '@solidjs/web@2.0.0-rc.6(solid-js@2.0.0-rc.6)':
+  '@solidjs/web@2.0.0-rc.8(solid-js@2.0.0-rc.6)':
     dependencies:
-      seroval: 1.5.4
-      seroval-plugins: 1.5.4(seroval@1.5.4)
+      seroval: 1.6.7
+      seroval-plugins: 1.6.7(seroval@1.6.7)
       solid-js: 2.0.0-rc.6
 
   '@speed-highlight/core@1.2.24': {}
@@ -3933,7 +3919,13 @@ snapshots:
     dependencies:
       seroval: 1.5.4
 
+  seroval-plugins@1.6.7(seroval@1.6.7):
+    dependencies:
+      seroval: 1.6.7
+
   seroval@1.5.4: {}
+
+  seroval@1.6.7: {}
 
   set-blocking@2.0.0: {}
 
