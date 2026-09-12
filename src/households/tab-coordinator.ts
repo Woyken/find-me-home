@@ -75,10 +75,14 @@ export const createTabCoordinator = (options: {
       if (stopped) return
       stopped = true
       release.resolve()
-      if (!leader) return
+      if (!leader) {
+        channel.close()
+        return
+      }
       // The leader callback owns shutdown, so waiting here also guarantees the
       // room has left before its lock is released.
       await lockRequest
+      channel.close()
     },
   }
 }

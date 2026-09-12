@@ -174,7 +174,8 @@ export const createIndexedDbHouseholdRepository = (
       publish()
     },
     async refresh() {
-      const active = requireOpen()
+      if (!database || !householdId) return
+      const active = { database, householdId }
       records = await readRecords(active.database)
       publish()
     },

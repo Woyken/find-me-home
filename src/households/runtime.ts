@@ -383,7 +383,12 @@ export const createHouseholdRuntime = (dependencies: {
     })
     coordinator.channel.onmessage = (event) => {
       const parsed = v.safeParse(messageSchema, event.data)
-      if (!parsed.success || parsed.output.householdId !== access.householdId) return
+      if (
+        !parsed.success ||
+        parsed.output.householdId !== access.householdId ||
+        parsed.output.generation !== generation
+      )
+        return
       if (!isCurrent()) return
       const message = parsed.output
       if (message.type === 'leader-status' && message.syncStatus)

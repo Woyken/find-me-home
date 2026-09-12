@@ -410,7 +410,8 @@ export const createIndexedDbSourceListingRepository = (
       publish()
     },
     async refresh() {
-      const active = requireOpen()
+      if (!database || !householdId) return
+      const active = { database, householdId }
       const [storedListings, storedPlots, storedPlans, storedInbox] = await Promise.all([
         requestResult<unknown[]>(
           active.database.transaction('source-listings').objectStore('source-listings').getAll(),

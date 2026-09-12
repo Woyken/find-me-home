@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseAruodasImport } from '../imports/aruodas'
 import { createIndexedDbSourceListingRepository } from './indexeddb'
 
@@ -45,6 +45,46 @@ const review = {
 }
 
 describe('Household Source Listing repository', () => {
+  it('refreshes another instance, notifies views, and never publishes a local mutation', async () => {
+    const prefix = `source-refresh-${crypto.randomUUID()}`
+    databases.push(`${prefix}-home`)
+    const writer = createIndexedDbSourceListingRepository(prefix, {
+      now: () => 1,
+      uuid: () => crypto.randomUUID(),
+    })
+    const reader = createIndexedDbSourceListingRepository(prefix, {
+      now: () => 1,
+      uuid: () => crypto.randomUUID(),
+    })
+    await Promise.all([writer.open('home'), reader.open('home')])
+    const changes = vi.fn()
+    const localMutations = vi.fn()
+    reader.subscribe(changes)
+    reader.subscribeLocalMutations(localMutations)
+
+    const saved = await writer.saveReviewedImport(review, 1)
+    expect(reader.get(saved.sourceListingId)).toBeUndefined()
+    await reader.refresh()
+
+    expect(reader.get(saved.sourceListingId)).toMatchObject({ title: 'Žemųjų Rusokų sklypas' })
+    expect(changes).toHaveBeenCalledTimes(1)
+    expect(localMutations).not.toHaveBeenCalled()
+    writer.close()
+    reader.close()
+  })
+
+  it('does nothing when closed or without an active Household', async () => {
+    const repository = createIndexedDbSourceListingRepository(`closed-${crypto.randomUUID()}`, {
+      now: () => 1,
+      uuid: () => crypto.randomUUID(),
+    })
+    await expect(repository.refresh()).resolves.toBeUndefined()
+    await repository.open('home')
+    repository.closeActive()
+    await expect(repository.refresh()).resolves.toBeUndefined()
+    repository.close()
+  })
+
   it('aborts migration atomically, then migrates deleted snapshots without resurrecting them', async () => {
     const prefix = `migration-abort-${crypto.randomUUID()}`
     databases.push(`${prefix}-household-a`)
