@@ -47,6 +47,10 @@ export const sourceListingMapLocation = (sourceListing: SourceListingDetail) => 
   return undefined
 }
 
+/** The source listing name used when its marked areas appear among other listings. */
+export const sourceListingMapLabel = (sourceListing: SourceListingDetail) =>
+  sourceListing.address ?? sourceListing.title ?? `Aruodas advert ${sourceListing.sourceId}`
+
 /** Display name of a Candidate Plot ("marked area") by position. */
 export const candidatePlotName = (
   candidatePlot: CandidatePlotRecord,

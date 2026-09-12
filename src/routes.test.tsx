@@ -1,16 +1,54 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest'
-import { plotsMapStops } from './components/PlotsMap'
+import { plotsMapData } from './components/PlotsMap'
 import { reconcileDeckOrder } from './routes/import-inbox'
 import { sortListings } from './routes/index'
 import { routeUrl } from './routes/visit-plan'
-import type { SourceListingDetail } from './source-listings/model'
+import { sourceListingMapLocation } from './source-listings/map'
+import type { CandidatePlotRecord, SourceListingDetail } from './source-listings/model'
+
+const candidatePlot = (
+  id: string,
+  sourceListingId: string,
+  values: Partial<CandidatePlotRecord> = {},
+): CandidatePlotRecord => ({
+  id,
+  householdId: 'h',
+  sourceListingId,
+  importKey: null,
+  name: null,
+  priceEur: null,
+  areaAres: null,
+  purposeText: null,
+  notes: null,
+  parcelNumberClue: null,
+  latitudeClue: null,
+  longitudeClue: null,
+  coordinateCluePrecision: null,
+  addressClue: null,
+  primaryLocationClue: null,
+  resolvedLatitude: null,
+  resolvedLongitude: null,
+  resolvedAddress: null,
+  resolvedParcelNumber: null,
+  resolvedCadastralNumber: null,
+  resolvedBoundary: null,
+  resolvedPrecision: null,
+  effectiveLocationSource: null,
+  locationResolutionState: 'missing',
+  parcelDatasetVersion: null,
+  automaticChecks: null,
+  automaticChecksRevision: null,
+  updatedAt: 0,
+  ...values,
+})
 
 const listing = (
   id: string,
-  plot: Partial<SourceListingDetail['candidatePlots'][number]>,
+  plot: Partial<CandidatePlotRecord>,
   updatedAt = 0,
+  additionalPlots: Array<Partial<CandidatePlotRecord>> = [],
 ): SourceListingDetail => ({
   id,
   householdId: 'h',
@@ -29,37 +67,17 @@ const listing = (
   viewRating: null,
   updatedAt,
   candidatePlots: [
-    {
-      id: `${id}-plot`,
-      householdId: 'h',
-      sourceListingId: id,
+    candidatePlot(`${id}-plot`, id, {
       importKey: 'primary',
-      name: null,
-      priceEur: null,
-      areaAres: null,
-      purposeText: null,
-      notes: null,
-      parcelNumberClue: null,
-      latitudeClue: null,
-      longitudeClue: null,
-      coordinateCluePrecision: null,
-      addressClue: null,
-      primaryLocationClue: null,
-      resolvedLatitude: null,
-      resolvedLongitude: null,
-      resolvedAddress: null,
-      resolvedParcelNumber: null,
-      resolvedCadastralNumber: null,
-      resolvedBoundary: null,
-      resolvedPrecision: null,
-      effectiveLocationSource: null,
-      locationResolutionState: 'missing',
-      parcelDatasetVersion: null,
-      automaticChecks: null,
-      automaticChecksRevision: null,
       updatedAt,
       ...plot,
-    },
+    }),
+    ...additionalPlots.map((additionalPlot, index) =>
+      candidatePlot(`${id}-plot-${index + 2}`, id, {
+        updatedAt,
+        ...additionalPlot,
+      }),
+    ),
   ],
 })
 
@@ -119,10 +137,62 @@ describe('plots map', () => {
         resolvedLongitude: 25.1,
         resolvedPrecision: 'exact',
       })
-    const stops = plotsMapStops([located('a'), listing('nowhere', {}), located('b')], ['b'])
+    const stops = plotsMapData([located('a'), listing('nowhere', {}), located('b')], ['b']).stops
     expect(stops.map((stop) => stop.sourceListing.id)).toEqual(['a', 'b'])
     expect(stops.map((stop) => stop.going)).toEqual([false, true])
     expect(stops[0].location.label).toBe('a')
+  })
+
+  it('draws every located marked area with the listing address and preserves listing state', () => {
+    const first = listing(
+      'a',
+      {
+        resolvedLatitude: 54.1,
+        resolvedLongitude: 25.1,
+        resolvedPrecision: 'exact',
+        resolvedBoundary: {
+          type: 'Polygon',
+          coordinates: [[[25.1, 54.1]]],
+        },
+      },
+      0,
+      [
+        {
+          resolvedLatitude: 54.2,
+          resolvedLongitude: 25.2,
+          resolvedPrecision: 'exact',
+          resolvedBoundary: {
+            type: 'Polygon',
+            coordinates: [[[25.2, 54.2]]],
+          },
+        },
+      ],
+    )
+    first.address = 'Oak Street 12'
+    const second = listing('b', {
+      resolvedLatitude: 54.3,
+      resolvedLongitude: 25.3,
+      resolvedPrecision: 'approx',
+    })
+    const unlocated = listing('nowhere', {}, 0, [{}])
+
+    const data = plotsMapData([first, unlocated, second], ['a'])
+
+    expect(sourceListingMapLocation(first)?.id).toBe('a-plot')
+    expect(data.stops.map((stop) => stop.sourceListing.id)).toEqual(['a', 'a', 'b'])
+    expect(data.stops.map((stop) => stop.location.id)).toEqual(['a-plot', 'a-plot-2', 'b-plot'])
+    expect(data.stops.map((stop) => stop.location.label)).toEqual([
+      'Oak Street 12',
+      'Oak Street 12',
+      'b',
+    ])
+    expect(data.stops.map((stop) => stop.going)).toEqual([true, true, false])
+    expect(data.stops.map((stop) => stop.location.boundary)).toEqual([
+      first.candidatePlots[0].resolvedBoundary,
+      first.candidatePlots[1].resolvedBoundary,
+      null,
+    ])
+    expect(data.unlocatedListingCount).toBe(1)
   })
 })
 
