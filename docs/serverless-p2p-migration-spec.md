@@ -166,11 +166,13 @@ Use four Household-scoped TanStack DB collections, all persisted in IndexedDB:
 | Households      | One metadata record per Household  | Shared name and timestamps                                                                                                                                                  |
 | Source Listings | One record per Source Listing      | Marketplace identity and imported advert context, photo URLs, utilities, source map point, latest Visit, and timestamps                                                     |
 | Candidate Plots | One record per Candidate Plot      | Source Listing reference, name, facts, Recorded Location Clue, resolved location and Registered Parcel data, Automatic Check results, notes, Manual Ratings, and timestamps |
-| Visit Plans     | One singleton record per Household | Complete ordered array of distinct Source Listing UUIDs                                                                                                                     |
+| Visit Plans     | One singleton record per Household | Complete ordered array of distinct Source Listing IDs                                                                                                                       |
 
 Every record contains:
 
-- `id`: a locally generated UUID used as synchronized record identity.
+- `id`: a synchronized record identity. New Source Listing IDs are the stable
+  `${source}-${sourceId}` marketplace identity; older UUID Source Listings
+  remain valid synchronized identities.
 - `householdId`: the stable ID derived from the invitation secret.
 - `updatedAt`: Unix milliseconds.
 - `deletedAt`: optional Unix milliseconds.
@@ -234,6 +236,19 @@ Use `Date.now()` for mutations and ensure timestamps created consecutively by
 the same tab increase monotonically. This reduces local collisions but does not
 attempt clock synchronization between devices.
 
+Source Listing marketplace identity is additionally unique by rule, not by an
+IndexedDB unique index: the `source-identity` index may contain legacy
+duplicates so that remote records can always be persisted. If more than one
+active Source Listing has the same `(householdId, source, sourceId)`, the active
+record with lexicographically smallest `id` is canonical. Every other active
+duplicate is deterministically tombstoned at `max(loser.updatedAt + 1,
+canonical.updatedAt)`. Candidate Plots and Visit Plan references to a loser are
+re-parented to the canonical listing at a similarly bumped timestamp; an
+equivalent plot already on the canonical listing takes precedence and the
+duplicate plot is tombstoned. These are persisted correction records, and a
+received tombstone is never corrected again, so replaying corrections reaches a
+fixed point rather than creating an echo loop.
+
 Apply a remote winner through an explicit remote-write path that persists and
 updates TanStack DB without broadcasting it again. Never route remote writes
 through the local mutation broadcaster.
@@ -276,6 +291,11 @@ Display exactly one synchronization state for the active Household:
   requested records outstanding.
 - `Connected`: reconciliation with every currently connected peer is complete.
 - `Alone`: no peer is connected after the Household has been initialized.
+
+To prevent a visible flash for routine record batches, delay only a
+`Connected` → `Syncing` display transition for 750 ms. Return to `Connected`
+immediately, and do not delay the initial `Waiting` synchronization flow.
+The synchronization engine still tracks every outstanding request immediately.
 
 Display `Last change X ago` independently in every state. Derive it from the
 greatest `updatedAt` or `deletedAt` among all locally known shared records,

@@ -110,7 +110,7 @@ const transactionComplete = (transaction: IDBTransaction) =>
 
 const openDatabase = (name: string) =>
   new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(name, 4)
+    const request = indexedDB.open(name, 5)
     request.onupgradeneeded = () => {
       const database = request.result
       if (!database.objectStoreNames.contains('households')) {
@@ -121,8 +121,12 @@ const openDatabase = (name: string) =>
           keyPath: 'id',
         })
         store.createIndex('source-identity', ['householdId', 'source', 'sourceId'], {
-          unique: true,
+          unique: false,
         })
+      } else {
+        const store = request.transaction!.objectStore('source-listings')
+        if (store.indexNames.contains('source-identity')) store.deleteIndex('source-identity')
+        store.createIndex('source-identity', ['householdId', 'source', 'sourceId'])
       }
       if (!database.objectStoreNames.contains('candidate-plots')) {
         const store = database.createObjectStore('candidate-plots', {
@@ -395,17 +399,6 @@ export const createIndexedDbSourceListingRepository = (
         put(transaction.objectStore('visit-plans'), visitPlan)
         await transactionComplete(transaction)
       }
-      // Relational cleanup is intentionally in-memory only; recovery must not mutate peers' data.
-      candidatePlots = candidatePlots.filter((plot) =>
-        sourceListings.some((listing) => listing.id === plot.sourceListingId),
-      )
-      if (visitPlan)
-        visitPlan = {
-          ...visitPlan,
-          sourceListingIds: visitPlan.sourceListingIds.filter((id) =>
-            sourceListings.some((listing) => listing.id === id),
-          ),
-        }
       lastMutationAt = Math.max(
         lastMutationAt,
         ...sourceListings.map((record) => record.updatedAt),
@@ -535,7 +528,7 @@ export const createIndexedDbSourceListingRepository = (
       lastMutationAt = suppliedUpdatedAt ?? Math.max(dependencies.now(), lastMutationAt + 1)
       const timestamp = lastMutationAt
       const sourceListing: SourceListingRecord = {
-        id: existing?.id ?? dependencies.uuid(),
+        id: existing?.id ?? `${review.imported.source}-${review.imported.sourceId}`,
         householdId: active.householdId,
         source: review.imported.source,
         sourceId: review.imported.sourceId,
@@ -1057,12 +1050,24 @@ export const createIndexedDbSourceListingRepository = (
     },
     allRecords() {
       requireOpen()
-      return structuredClone([
-        ...sourceListings,
-        ...candidatePlots,
-        ...(visitPlan ? [visitPlan] : []),
-        ...importInbox,
-      ])
+      return structuredClone(
+        [
+          ...sourceListings,
+          ...candidatePlots,
+          ...(visitPlan ? [visitPlan] : []),
+          ...importInbox,
+        ].sort((left, right) => {
+          const type = (record: SourceListingSharedRecord | ImportInboxRecord) =>
+            'sourceListingIds' in record
+              ? 'visit-plan'
+              : 'sourceListingId' in record
+                ? 'candidate-plot'
+                : 'url' in record
+                  ? 'source-listing'
+                  : 'import-inbox'
+          return `${type(left)}:${left.id}`.localeCompare(`${type(right)}:${right.id}`)
+        }),
+      )
     },
     async applyRemote(incoming) {
       const active = requireOpen()
@@ -1073,12 +1078,21 @@ export const createIndexedDbSourceListingRepository = (
         )
       )
         throw new Error('Invalid Household payload')
+      const isListing = (
+        record: SourceListingSharedRecord | ImportInboxRecord,
+      ): record is SourceListingRecord => 'url' in record
+      const isPlot = (
+        record: SourceListingSharedRecord | ImportInboxRecord,
+      ): record is CandidatePlotRecord => 'sourceListingId' in record
+      const isPlan = (
+        record: SourceListingSharedRecord | ImportInboxRecord,
+      ): record is VisitPlanRecord => 'sourceListingIds' in record
       const recordType = (record: SourceListingSharedRecord | ImportInboxRecord) =>
-        'sourceListingIds' in record
+        isPlan(record)
           ? 'visit-plan'
-          : 'sourceListingId' in record
+          : isPlot(record)
             ? 'candidate-plot'
-            : 'url' in record
+            : isListing(record)
               ? 'source-listing'
               : 'import-inbox'
       const byId = new Map<string, SourceListingSharedRecord | ImportInboxRecord>()
@@ -1088,128 +1102,185 @@ export const createIndexedDbSourceListingRepository = (
         if (!existing || record.updatedAt > existing.updatedAt) byId.set(identity, record)
       }
       const distinctIncoming = [...byId.values()]
-      const incomingInbox = distinctIncoming.filter(
-        (record): record is ImportInboxRecord =>
-          !('url' in record) && !('sourceListingId' in record) && !('sourceListingIds' in record),
-      )
-      const inboxWinners: ImportInboxRecord[] = []
-      let comparedInbox = importInbox
-      for (const record of incomingInbox) {
-        const existing = comparedInbox.find(
-          (candidate) =>
-            candidate.householdId === record.householdId && candidate.sourceId === record.sourceId,
-        )
-        const wins =
-          !existing ||
-          record.updatedAt > existing.updatedAt ||
-          (record.updatedAt === existing.updatedAt && record.id < existing.id)
-        if (!wins) continue
-        const activeSourceListings = [...sourceListings, ...distinctIncoming]
-          .filter(
-            (candidate): candidate is SourceListingRecord =>
-              'url' in candidate &&
-              candidate.householdId === record.householdId &&
-              candidate.source === record.source &&
-              candidate.sourceId === record.sourceId &&
-              !candidate.deletedAt,
-          )
-          .sort((left, right) => right.updatedAt - left.updatedAt)
-        const winner = activeSourceListings.length
-          ? {
-              ...record,
-              updatedAt: Math.max(record.updatedAt + 1, activeSourceListings[0].updatedAt),
-              deletedAt: Math.max(record.updatedAt + 1, activeSourceListings[0].updatedAt),
-            }
-          : record
-        inboxWinners.push(winner)
-        comparedInbox = [
-          ...comparedInbox.filter(
-            (candidate) =>
-              candidate.householdId !== record.householdId ||
-              candidate.sourceId !== record.sourceId,
-          ),
-          winner,
-        ]
-      }
-      const nonInboxIncoming = distinctIncoming.filter(
-        (record) => 'url' in record || 'sourceListingId' in record || 'sourceListingIds' in record,
-      ) as SourceListingSharedRecord[]
       const transaction = active.database.transaction(
         ['source-listings', 'candidate-plots', 'visit-plans', 'import-inbox'],
         'readwrite',
       )
       const storeFor = (record: SourceListingSharedRecord | ImportInboxRecord) =>
         transaction.objectStore(
-          'sourceListingIds' in record
+          isPlan(record)
             ? 'visit-plans'
-            : 'sourceListingId' in record
+            : isPlot(record)
               ? 'candidate-plots'
-              : 'url' in record
+              : isListing(record)
                 ? 'source-listings'
                 : 'import-inbox',
         )
       const persisted = await Promise.all(
-        nonInboxIncoming.map((record) =>
+        distinctIncoming.map((record) =>
           requestResult<SourceListingSharedRecord | ImportInboxRecord | undefined>(
             storeFor(record).get(record.id),
           ),
         ),
       )
-      const sourceWinners = nonInboxIncoming.filter(
+      const accepted = distinctIncoming.filter(
         (record, index) => record.updatedAt > (persisted[index]?.updatedAt ?? -1),
-      )
-      for (const listing of sourceWinners.filter(
-        (record): record is SourceListingRecord => 'url' in record && !record.deletedAt,
-      )) {
-        const existingInbox = comparedInbox.find(
-          (record) =>
-            record.householdId === listing.householdId &&
-            record.source === listing.source &&
-            record.sourceId === listing.sourceId &&
-            !record.deletedAt,
-        )
-        if (!existingInbox) continue
-        const timestamp = Math.max(existingInbox.updatedAt + 1, listing.updatedAt)
-        const tombstone = {
-          ...existingInbox,
-          updatedAt: timestamp,
-          deletedAt: timestamp,
-        }
-        inboxWinners.push(tombstone)
-        comparedInbox = comparedInbox.map((record) =>
-          record.id === tombstone.id ? tombstone : record,
-        )
-      }
-      const winners = [...sourceWinners, ...inboxWinners]
-      const inboxStore = transaction.objectStore('import-inbox')
-      for (const record of inboxWinners) {
-        const existing = importInbox.find(
-          (candidate) =>
-            candidate.householdId === record.householdId && candidate.sourceId === record.sourceId,
-        )
-        if (existing && existing.id !== record.id) inboxStore.delete(existing.id)
-      }
-      for (const record of winners) put(storeFor(record), record)
-      await transactionComplete(transaction)
-      if (!winners.length) return []
-      const listingWinners = winners.filter(
-        (record): record is SourceListingRecord => 'url' in record,
-      )
-      const plotWinners = winners.filter(
-        (record): record is CandidatePlotRecord => 'sourceListingId' in record,
-      )
-      const planWinner = winners.find(
-        (record): record is VisitPlanRecord => 'sourceListingIds' in record,
       )
       const replace = <T extends { id: string }>(values: T[], changed: T[]) => {
         const currentById = new Map(values.map((value) => [value.id, value]))
         for (const value of changed) currentById.set(value.id, value)
         return [...currentById.values()]
       }
-      sourceListings = replace(sourceListings, listingWinners)
-      candidatePlots = replace(candidatePlots, plotWinners)
-      if (planWinner) visitPlan = planWinner
-      importInbox = comparedInbox
+      let nextListings = replace(sourceListings, accepted.filter(isListing))
+      let nextPlots = replace(candidatePlots, accepted.filter(isPlot))
+      let nextInbox = replace(
+        importInbox,
+        accepted.filter(
+          (record): record is ImportInboxRecord =>
+            !isListing(record) && !isPlot(record) && !isPlan(record),
+        ),
+      )
+      let nextPlan = accepted.filter(isPlan).at(-1) ?? visitPlan
+      const corrections: (SourceListingSharedRecord | ImportInboxRecord)[] = []
+      const correct = (
+        record: SourceListingSharedRecord | ImportInboxRecord,
+        replacement: SourceListingSharedRecord | ImportInboxRecord,
+      ) => {
+        if (JSON.stringify(record) === JSON.stringify(replacement)) return
+        corrections.push(replacement)
+      }
+
+      const losers = new Map<string, SourceListingRecord>()
+      const listingsByIdentity = new Map<string, SourceListingRecord[]>()
+      for (const listing of nextListings) {
+        const key = `${listing.householdId}:${listing.source}:${listing.sourceId}`
+        const group = listingsByIdentity.get(key) ?? []
+        group.push(listing)
+        listingsByIdentity.set(key, group)
+      }
+      for (const listings of listingsByIdentity.values()) {
+        const activeListings = listings.filter((listing) => !listing.deletedAt)
+        if (!activeListings.length) continue
+        const canonical = [...activeListings].sort((left, right) =>
+          left.id.localeCompare(right.id),
+        )[0]
+        for (const listing of listings) {
+          if (listing.id === canonical.id) continue
+          losers.set(listing.id, canonical)
+          if (listing.deletedAt) continue
+          const timestamp = Math.max(listing.updatedAt + 1, canonical.updatedAt)
+          const tombstone = { ...listing, updatedAt: timestamp, deletedAt: timestamp }
+          correct(listing, tombstone)
+          nextListings = replace(nextListings, [tombstone])
+        }
+      }
+
+      for (const inbox of nextInbox) {
+        if (inbox.deletedAt) continue
+        const hasActiveListing = nextListings.some(
+          (listing) =>
+            !listing.deletedAt &&
+            listing.householdId === inbox.householdId &&
+            listing.source === inbox.source &&
+            listing.sourceId === inbox.sourceId,
+        )
+        if (!hasActiveListing) continue
+        const timestamp = Math.max(
+          inbox.updatedAt + 1,
+          ...nextListings
+            .filter(
+              (listing) =>
+                !listing.deletedAt &&
+                listing.householdId === inbox.householdId &&
+                listing.source === inbox.source &&
+                listing.sourceId === inbox.sourceId,
+            )
+            .map((listing) => listing.updatedAt),
+        )
+        const tombstone = { ...inbox, updatedAt: timestamp, deletedAt: timestamp }
+        correct(inbox, tombstone)
+        nextInbox = replace(nextInbox, [tombstone])
+      }
+
+      const equivalentPlot = (left: CandidatePlotRecord, right: CandidatePlotRecord) => {
+        const {
+          id: _leftId,
+          sourceListingId: _leftSourceListingId,
+          updatedAt: _leftUpdatedAt,
+          deletedAt: _leftDeletedAt,
+          ...leftContent
+        } = left
+        const {
+          id: _rightId,
+          sourceListingId: _rightSourceListingId,
+          updatedAt: _rightUpdatedAt,
+          deletedAt: _rightDeletedAt,
+          ...rightContent
+        } = right
+        return JSON.stringify(leftContent) === JSON.stringify(rightContent)
+      }
+      for (const [loserId, canonical] of losers) {
+        for (const plot of nextPlots.filter(
+          (candidate) => candidate.sourceListingId === loserId && !candidate.deletedAt,
+        )) {
+          const equivalent = nextPlots
+            .filter(
+              (candidate) =>
+                candidate.sourceListingId === canonical.id &&
+                !candidate.deletedAt &&
+                equivalentPlot(candidate, plot),
+            )
+            .sort((left, right) => left.id.localeCompare(right.id))[0]
+          const timestamp = Math.max(plot.updatedAt + 1, canonical.updatedAt)
+          const replacement = equivalent
+            ? { ...plot, updatedAt: timestamp, deletedAt: timestamp }
+            : { ...plot, sourceListingId: canonical.id, updatedAt: timestamp }
+          correct(plot, replacement)
+          nextPlots = replace(nextPlots, [replacement])
+        }
+      }
+      // A concurrent Source Listing deletion may win over a Candidate Plot created on
+      // another replica. Retaining that plot would leave an active dangling reference.
+      // Tombstone it deterministically, just as local Source Listing removal does.
+      for (const plot of nextPlots.filter(
+        (candidate) =>
+          !candidate.deletedAt &&
+          !nextListings.some(
+            (listing) => listing.id === candidate.sourceListingId && !listing.deletedAt,
+          ),
+      )) {
+        const parent = nextListings.find((listing) => listing.id === plot.sourceListingId)
+        const timestamp = Math.max(plot.updatedAt + 1, parent?.updatedAt ?? 0)
+        const tombstone = { ...plot, updatedAt: timestamp, deletedAt: timestamp }
+        correct(plot, tombstone)
+        nextPlots = replace(nextPlots, [tombstone])
+      }
+      if (nextPlan) {
+        const sourceListingIds = nextPlan.sourceListingIds
+          .map((id) => losers.get(id)?.id ?? id)
+          .filter((id) => nextListings.some((listing) => listing.id === id && !listing.deletedAt))
+        const distinctIds = [...new Set(sourceListingIds)]
+        if (JSON.stringify(nextPlan.sourceListingIds) !== JSON.stringify(distinctIds)) {
+          const timestamp = Math.max(
+            nextPlan.updatedAt + 1,
+            ...distinctIds.map(
+              (id) => nextListings.find((listing) => listing.id === id)?.updatedAt ?? 0,
+            ),
+          )
+          const replacement = { ...nextPlan, sourceListingIds: distinctIds, updatedAt: timestamp }
+          correct(nextPlan, replacement)
+          nextPlan = replacement
+        }
+      }
+
+      const winners = [...accepted, ...corrections]
+      for (const winner of winners) put(storeFor(winner), winner)
+      await transactionComplete(transaction)
+      if (!winners.length) return []
+      sourceListings = nextListings
+      candidatePlots = nextPlots
+      importInbox = nextInbox
+      visitPlan = nextPlan
       publish()
       return structuredClone(winners)
     },

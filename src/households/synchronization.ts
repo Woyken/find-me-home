@@ -64,7 +64,8 @@ export type HouseholdRoom = {
   onRecordsAcknowledgement: (listener: (value: unknown, peerId: string) => void) => () => void
   sendManifest: (value: Manifest, peerId: string) => void
   sendRequest: (value: RequestMessage, peerId: string) => void
-  sendRecords: (value: RecordMessage, peerId?: string) => void
+  /** Resolves once the transport has accepted the complete payload. */
+  sendRecords: (value: RecordMessage, peerId?: string) => Promise<void> | void
   sendRecordsAcknowledgement: (value: RecordsAcknowledgement, peerId: string) => void
   leave: () => void
 }
@@ -227,12 +228,24 @@ export const synchronizeHousehold = (options: {
   onInitialSync: (status: 'syncing' | 'connected') => Promise<void>
   onWarning?: (warning: 'refresh' | 'synchronization' | undefined) => void
   onError: (error: unknown) => void
+  acknowledgementTimeoutMs?: number
+  pendingRetryTimeoutMs?: number
+  pendingRetryAttempts?: number
+  correctionRebroadcastCap?: number
+  syncingHysteresisMs?: number
 }) => {
+  const acknowledgementTimeoutMs = options.acknowledgementTimeoutMs ?? 30_000
+  const pendingRetryTimeoutMs = options.pendingRetryTimeoutMs ?? acknowledgementTimeoutMs
+  const pendingRetryAttempts = options.pendingRetryAttempts ?? 3
+  const correctionRebroadcastCap = options.correctionRebroadcastCap ?? 5
+  const syncingHysteresisMs = options.syncingHysteresisMs ?? 0
   const peers = new Map<
     string,
     {
       pending: Map<string, number> | null
-      pendingAcknowledgements: Map<string, ReturnType<typeof setTimeout>>
+      pendingAcknowledgements: Map<string, ReturnType<typeof setTimeout> | undefined>
+      pendingRetryTimeout?: ReturnType<typeof setTimeout>
+      pendingRetryAttempts: number
       compatible: boolean
       warning?: 'refresh' | 'synchronization'
     }
@@ -241,6 +254,9 @@ export const synchronizeHousehold = (options: {
   let remoteApplications = Promise.resolve()
   let initialSyncs = Promise.resolve()
   let stopped = false
+  let reportedStatus: 'syncing' | 'connected' | 'alone' | undefined
+  let syncingStatusTimeout: ReturnType<typeof setTimeout> | undefined
+  const correctionRebroadcasts = new Map<string, number>()
   const requestId = () => `sync-${++nextRequestId}`
   const updateWarning = () =>
     options.onWarning?.([...peers.values()].find((peer) => peer.warning)?.warning)
@@ -251,26 +267,66 @@ export const synchronizeHousehold = (options: {
     for (const recipient of recipients)
       if (records.length) {
         const id = peerId ? responseId : requestId()
-        options.room.sendRecords({ requestId: id, records }, recipient)
         const peer = peers.get(recipient)
         if (!peer) continue
-        peer.pendingAcknowledgements.set(
-          id,
-          setTimeout(() => {
-            peer.pendingAcknowledgements.delete(id)
+        // Track the request before calling transport so an acknowledgement delivered by an
+        // in-memory transport in the same turn is still correlated. Its timeout is armed only
+        // after Trystero reports the payload handed off.
+        peer.pendingAcknowledgements.set(id, undefined)
+        updateStatus()
+        void Promise.resolve(options.room.sendRecords({ requestId: id, records }, recipient)).then(
+          () => {
+            if (isStopped() || !peer.pendingAcknowledgements.has(id)) return
+            peer.pendingAcknowledgements.set(
+              id,
+              setTimeout(() => {
+                peer.pendingAcknowledgements.delete(id)
+                peer.warning = 'synchronization'
+                updateWarning()
+                updateStatus()
+              }, acknowledgementTimeoutMs),
+            )
+          },
+          (error: unknown) => {
+            if (!peer.pendingAcknowledgements.delete(id) || isStopped()) return
             peer.warning = 'synchronization'
             updateWarning()
             updateStatus()
-          }, 10_000),
+            options.onError(error)
+          },
         )
-        updateStatus()
       }
   }
   const clearAcknowledgementsForPeer = (peerId: string) => {
     const peer = peers.get(peerId)
     if (!peer) return
-    peer.pendingAcknowledgements.forEach(clearTimeout)
+    peer.pendingAcknowledgements.forEach((timeout) => {
+      if (timeout !== undefined) clearTimeout(timeout)
+    })
     peer.pendingAcknowledgements.clear()
+  }
+  const clearPendingRetryForPeer = (peerId: string) => {
+    const peer = peers.get(peerId)
+    if (!peer?.pendingRetryTimeout) return
+    clearTimeout(peer.pendingRetryTimeout)
+    peer.pendingRetryTimeout = undefined
+  }
+  const schedulePendingRetry = (peerId: string) => {
+    const peer = peers.get(peerId)
+    if (!peer?.pending?.size || peer.pendingRetryTimeout) return
+    peer.pendingRetryTimeout = setTimeout(() => {
+      peer.pendingRetryTimeout = undefined
+      if (isStopped() || !peer.pending?.size) return
+      if (peer.pendingRetryAttempts >= pendingRetryAttempts) {
+        peer.warning = 'synchronization'
+        updateWarning()
+        updateStatus()
+        return
+      }
+      peer.pendingRetryAttempts += 1
+      options.room.sendManifest(makeManifest(options.repository.allRecords()), peerId)
+      schedulePendingRetry(peerId)
+    }, pendingRetryTimeoutMs)
   }
   const isStopped = () => stopped
   const status = () => {
@@ -287,7 +343,26 @@ export const synchronizeHousehold = (options: {
       : ('connected' as const)
   }
   const updateStatus = () => {
-    if (!isStopped()) options.onStatus(status())
+    if (isStopped()) return
+    const next = status()
+    if (reportedStatus === next) return
+    if (reportedStatus === 'connected' && next === 'syncing' && syncingHysteresisMs > 0) {
+      if (!syncingStatusTimeout)
+        syncingStatusTimeout = setTimeout(() => {
+          syncingStatusTimeout = undefined
+          if (status() === 'syncing') {
+            reportedStatus = 'syncing'
+            options.onStatus('syncing')
+          }
+        }, syncingHysteresisMs)
+      return
+    }
+    if (syncingStatusTimeout) {
+      clearTimeout(syncingStatusTimeout)
+      syncingStatusTimeout = undefined
+    }
+    reportedStatus = next
+    options.onStatus(next)
   }
   const completeInitialSync = (nextStatus: 'syncing' | 'connected') => {
     initialSyncs = initialSyncs
@@ -299,13 +374,19 @@ export const synchronizeHousehold = (options: {
   const unsubs = [
     options.room.onPeerJoin((peerId) => {
       if (!peers.has(peerId)) {
-        peers.set(peerId, { pending: null, pendingAcknowledgements: new Map(), compatible: false })
+        peers.set(peerId, {
+          pending: null,
+          pendingAcknowledgements: new Map(),
+          pendingRetryAttempts: 0,
+          compatible: false,
+        })
         updateStatus()
       }
       options.room.sendManifest(makeManifest(options.repository.allRecords()), peerId)
     }),
     options.room.onPeerLeave((peerId) => {
       clearAcknowledgementsForPeer(peerId)
+      clearPendingRetryForPeer(peerId)
       peers.delete(peerId)
       updateWarning()
       updateStatus()
@@ -320,9 +401,11 @@ export const synchronizeHousehold = (options: {
       }
       if (version !== syncProtocolVersion) {
         clearAcknowledgementsForPeer(peerId)
+        clearPendingRetryForPeer(peerId)
         peers.set(peerId, {
           pending: new Map(),
           pendingAcknowledgements: new Map(),
+          pendingRetryAttempts: 0,
           compatible: false,
           warning: version > syncProtocolVersion ? 'refresh' : undefined,
         })
@@ -333,9 +416,11 @@ export const synchronizeHousehold = (options: {
       const manifest = v.safeParse(manifestSchema, value)
       if (!manifest.success) {
         clearAcknowledgementsForPeer(peerId)
+        clearPendingRetryForPeer(peerId)
         peers.set(peerId, {
           pending: new Map(),
           pendingAcknowledgements: new Map(),
+          pendingRetryAttempts: 0,
           compatible: false,
           warning: 'synchronization',
         })
@@ -362,10 +447,13 @@ export const synchronizeHousehold = (options: {
         request.map((key) => [`${key.type}:${key.id}`, (manifest.output[key.type] ?? {})[key.id]]),
       )
       peer.compatible = true
+      peer.warning = undefined
       updateWarning()
       if (request.length)
         options.room.sendRequest({ requestId: requestId(), records: request }, peerId)
       sendRecords(send, peerId)
+      clearPendingRetryForPeer(peerId)
+      schedulePendingRetry(peerId)
       updateStatus()
       if (!request.length) completeInitialSync(status() as 'syncing' | 'connected')
     }),
@@ -417,11 +505,27 @@ export const synchronizeHousehold = (options: {
                   incoming.record.updatedAt === correction.record.updatedAt,
               ),
           )
-          if (generatedCorrections.length) sendRecords(generatedCorrections)
+          if (!generatedCorrections.length) correctionRebroadcasts.clear()
+          const rebroadcastableCorrections = generatedCorrections.filter((correction) => {
+            const identity = `${correction.type}:${correction.record.id}`
+            const rebroadcasts = (correctionRebroadcasts.get(identity) ?? 0) + 1
+            correctionRebroadcasts.set(identity, rebroadcasts)
+            if (rebroadcasts <= correctionRebroadcastCap) return true
+            const peer = peers.get(peerId)
+            if (peer) peer.warning = 'synchronization'
+            updateWarning()
+            options.onError(
+              new Error(
+                `Stopped rebroadcasting generated correction for ${identity}: loop detected`,
+              ),
+            )
+            return false
+          })
+          if (rebroadcastableCorrections.length) sendRecords(rebroadcastableCorrections)
           if (isStopped()) return
           const local = makeManifest(options.repository.allRecords())
           let completed = false
-          for (const peer of peers.values()) {
+          for (const [pendingPeerId, peer] of peers) {
             const pending = peer.pending
             if (!pending) continue
             const hadPending = pending.size > 0
@@ -429,13 +533,20 @@ export const synchronizeHousehold = (options: {
               const [type, id] = key.split(':') as [SharedRecord['type'], string]
               if ((local[type]?.[id] ?? -1) >= requestedAt) pending.delete(key)
             }
+            if (pending.size === 0) clearPendingRetryForPeer(pendingPeerId)
             completed ||= hadPending && pending.size === 0
           }
           updateStatus()
           if (completed) completeInitialSync(status() as 'syncing' | 'connected')
         })
         .catch((error) => {
-          if (!isStopped()) options.onError(error)
+          if (!isStopped()) {
+            options.room.sendRecordsAcknowledgement(
+              { requestId: incomingRequestId, accepted: false },
+              peerId,
+            )
+            options.onError(error)
+          }
         })
     }),
     options.room.onRecordsAcknowledgement((value, peerId) => {
@@ -443,12 +554,15 @@ export const synchronizeHousehold = (options: {
       if (!acknowledgement.success) return
       const peer = peers.get(peerId)
       if (!peer?.compatible) return
+      if (!peer.pendingAcknowledgements.has(acknowledgement.output.requestId)) return
       const timeout = peer.pendingAcknowledgements.get(acknowledgement.output.requestId)
-      if (timeout === undefined) return
-      clearTimeout(timeout)
+      if (timeout !== undefined) clearTimeout(timeout)
       peer.pendingAcknowledgements.delete(acknowledgement.output.requestId)
       if (!acknowledgement.output.accepted) {
         peer.warning = 'synchronization'
+        updateWarning()
+      } else if (peer.warning === 'synchronization') {
+        peer.warning = undefined
         updateWarning()
       }
       updateStatus()
@@ -462,6 +576,8 @@ export const synchronizeHousehold = (options: {
     if (stopped) return
     stopped = true
     peers.forEach((_, peerId) => clearAcknowledgementsForPeer(peerId))
+    peers.forEach((_, peerId) => clearPendingRetryForPeer(peerId))
+    if (syncingStatusTimeout) clearTimeout(syncingStatusTimeout)
     unsubs.forEach((unsubscribe) => unsubscribe())
     options.room.leave()
     await remoteApplications

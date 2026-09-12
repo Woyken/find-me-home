@@ -337,7 +337,7 @@ describe('Household Source Listing repository', () => {
     repository.close()
   })
 
-  it('atomically saves review edits with UUID identity and reopens them', async () => {
+  it('atomically saves review edits with source-identity IDs and reopens them', async () => {
     const prefix = `source-listings-${crypto.randomUUID()}`
     databases.push(`${prefix}-household-a`)
     let uuid = 0
@@ -418,5 +418,105 @@ describe('Household Source Listing repository', () => {
       expect.objectContaining({ id: secondPlotId, updatedAt: 102, deletedAt: 102 }),
     )
     repository.close()
+  })
+
+  it('does not correct an import-inbox tombstone a second time', async () => {
+    const prefix = `idempotent-inbox-${crypto.randomUUID()}`
+    databases.push(`${prefix}-household-a`)
+    const repository = createIndexedDbSourceListingRepository(prefix)
+    await repository.open('household-a')
+    await repository.saveReviewedImport(review, 20)
+
+    const corrections = await repository.applyRemote([
+      {
+        id: `aruodas-${imported.sourceId}`,
+        householdId: 'household-a',
+        source: 'aruodas',
+        sourceId: imported.sourceId,
+        updatedAt: 30,
+      },
+    ])
+
+    const correction = corrections.find((record) => record.deletedAt === 31)
+    expect(correction).toMatchObject({ updatedAt: 31, deletedAt: 31 })
+    if (!correction) throw new Error('Expected an inbox tombstone correction')
+    expect(await repository.applyRemote([correction])).toEqual([])
+    repository.close()
+  })
+
+  it('converges legacy duplicate listings, plots, and a Visit Plan on the smallest ID', async () => {
+    const firstPrefix = `legacy-first-${crypto.randomUUID()}`
+    const secondPrefix = `legacy-second-${crypto.randomUUID()}`
+    databases.push(`${firstPrefix}-household-a`, `${secondPrefix}-household-a`)
+    const first = createIndexedDbSourceListingRepository(firstPrefix)
+    const second = createIndexedDbSourceListingRepository(secondPrefix)
+    await Promise.all([first.open('household-a'), second.open('household-a')])
+    const created = await first.saveReviewedImport(review, 10)
+    const records = first.allRecords()
+    const listing = records.find((record) => 'url' in record)
+    const plot = records.find((record) => 'sourceListingId' in record)
+    if (!listing || !plot || !('url' in listing) || !('sourceListingId' in plot))
+      throw new Error('Expected a reviewed listing and primary plot')
+    const legacyA = { ...listing, id: 'legacy-a' }
+    const legacyB = { ...listing, id: 'legacy-b' }
+    const plotA = { ...plot, id: 'plot-a', sourceListingId: legacyA.id }
+    const plotB = { ...plot, id: 'plot-b', sourceListingId: legacyB.id }
+    const plan = {
+      id: 'plan',
+      householdId: 'household-a',
+      sourceListingIds: [legacyB.id],
+      updatedAt: 10,
+    }
+    await first.applyRemote([legacyA, plotA])
+    await second.applyRemote([legacyB, plotB, plan])
+
+    for (let exchange = 0; exchange < 3; exchange += 1) {
+      await first.applyRemote(second.allRecords())
+      await second.applyRemote(first.allRecords())
+    }
+
+    const expectedListing = first.allRecords().find((record) => record.id === 'legacy-b')
+    expect(expectedListing).toMatchObject({ deletedAt: 11, updatedAt: 11 })
+    expect(first.allRecords()).toEqual(second.allRecords())
+    expect(first.get(created.sourceListingId)?.candidatePlots).toHaveLength(1)
+    expect(first.getVisitPlan().sourceListingIds).toEqual([created.sourceListingId])
+    expect(created.sourceListingId).toBe(`aruodas-${imported.sourceId}`)
+    first.close()
+    second.close()
+  })
+
+  it('upgrades the Source Listing identity index from unique to non-unique', async () => {
+    const prefix = `source-identity-upgrade-${crypto.randomUUID()}`
+    const name = `${prefix}-household-a`
+    databases.push(name)
+    const legacy = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(name, 4)
+      request.onupgradeneeded = () => {
+        const store = request.result.createObjectStore('source-listings', { keyPath: 'id' })
+        store.createIndex('source-identity', ['householdId', 'source', 'sourceId'], {
+          unique: true,
+        })
+      }
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    legacy.close()
+
+    const repository = createIndexedDbSourceListingRepository(prefix)
+    await repository.open('household-a')
+    repository.close()
+    const upgraded = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(name)
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    expect(upgraded.version).toBe(5)
+    expect(
+      upgraded
+        .transaction('source-listings')
+        .objectStore('source-listings')
+        .index('source-identity').unique,
+    ).toBe(false)
+    upgraded.close()
   })
 })
