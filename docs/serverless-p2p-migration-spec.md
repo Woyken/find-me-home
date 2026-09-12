@@ -35,14 +35,24 @@ current backend is not kept as a compatibility layer.
 - Continuous background synchronization, offline delivery, or a guarantee that
   an offline device has the latest data.
 - Export/import backup tooling. Other Household devices are the backup.
-- Multi-tab coordination. Only one active Find Me Home tab per device is
-  supported.
 - A general-purpose API proxy, application server, server database, hosted
   signaling service, or paid infrastructure.
 - Conflict history, field-level merge, or a CRDT.
 - Service fallbacks when an upstream service is unavailable.
 
 ## Target architecture
+
+### Browser tab coordination
+
+Tabs in one browser profile coordinate per Household with a Web Lock named
+`find-me-home:household-sync:${householdId}`. The lock holder is the Leader
+Tab: only it joins the Trystero room. Follower Tabs share the Household's
+IndexedDB database, relay committed local records through a BroadcastChannel,
+and refresh their in-memory repositories after local or remote commits. They
+also display the Leader's synchronization state. Every active tab requests the
+lock, so a queued follower takes over after an orderly close or a browser crash.
+Browsers without Web Locks intentionally fall back to one leader per tab; they
+remain functional but cannot provide the single-device-peer guarantee.
 
 The deployed system has four parts:
 

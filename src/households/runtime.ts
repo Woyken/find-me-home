@@ -1,14 +1,16 @@
 import type { HouseholdCredentialSource } from './credentials'
 import type { HouseholdAccessStore, HouseholdRepository } from './indexeddb'
 import type { HouseholdAccessState, HouseholdRuntimeState } from './model'
-import { createSharedRepository, synchronizeHousehold } from './synchronization'
-import type { HouseholdRoom } from './synchronization'
+import { createSharedRepository, parseSharedRecords, synchronizeHousehold } from './synchronization'
+import type { HouseholdRoom, SharedRecord } from './synchronization'
+import { createTabCoordinator, type LockManager, type TabChannelFactory } from './tab-coordinator'
 import type { SourceListingRepository } from '../source-listings/indexeddb'
 import type { CandidatePlotUpdate, ReviewedImport } from '../source-listings/model'
 import { isLocationResolutionError, recordedLocationClues } from '../location-resolution'
 import type { LocationResolver, RegisteredParcelPreview } from '../location-resolution'
 import { automaticCheckRevision, runAutomaticChecks } from '../automatic-checks'
 import type { AutomaticCheckServices } from '../automatic-checks'
+import * as v from 'valibot'
 
 export type HouseholdRuntime = {
   state: () => HouseholdRuntimeState
@@ -83,6 +85,8 @@ export const createHouseholdRuntime = (dependencies: {
   uuid: () => string
   eraseHousehold: (householdId: string) => Promise<void>
   roomFactory?: (options: { householdId: string; roomPassword: string }) => HouseholdRoom
+  locks?: LockManager
+  createTabChannel?: TabChannelFactory
   invitationBaseUrl?: () => string
   locationResolver?: LocationResolver
   automaticCheckServices?: AutomaticCheckServices
@@ -199,7 +203,20 @@ export const createHouseholdRuntime = (dependencies: {
     for (const listener of listeners) listener()
     return entries
   }
-  const sharedRepository = createSharedRepository({
+  let coordinator: ReturnType<typeof createTabCoordinator> | undefined
+  let coordinationGeneration = 0
+  let refreshes = Promise.resolve()
+  const localMutationListeners = new Set<(records: SharedRecord[]) => void>()
+  const refreshRepositories = () => {
+    const refresh = refreshes.then(() =>
+      Promise.all([dependencies.households.refresh(), dependencies.sourceListings.refresh()]).then(
+        () => undefined,
+      ),
+    )
+    refreshes = refresh.catch(() => undefined)
+    return refresh
+  }
+  const baseSharedRepository = createSharedRepository({
     households: {
       ...dependencies.households,
       applyRemote: (records) => serializeWrite(() => dependencies.households.applyRemote(records)),
@@ -210,74 +227,207 @@ export const createHouseholdRuntime = (dependencies: {
         serializeWrite(() => dependencies.sourceListings.applyRemote(records)),
     },
   })
+  const sharedRepository = {
+    ...baseSharedRepository,
+    async applyRemote(records: SharedRecord[]) {
+      const committed = await baseSharedRepository.applyRemote(records)
+      const active = state.status === 'active' || state.status === 'waiting' ? state : undefined
+      if (committed.length && active && coordinator?.isLeader())
+        coordinator.channel.postMessage({
+          type: 'committed-remote-records',
+          householdId: active.access.householdId,
+          generation: coordinationGeneration,
+          records: committed,
+        })
+      return committed
+    },
+    subscribeLocalMutations(listener: (records: SharedRecord[]) => void) {
+      localMutationListeners.add(listener)
+      return () => localMutationListeners.delete(listener)
+    },
+  }
+  const publishLocalMutation = (records: SharedRecord[]) => {
+    const active = state.status === 'active' || state.status === 'waiting' ? state : undefined
+    if (!active || !coordinator) return
+    coordinator.channel.postMessage({
+      type: 'committed-local-records',
+      householdId: active.access.householdId,
+      generation: coordinationGeneration,
+      sourceTabId: tabId,
+      records,
+    })
+    if (coordinator.isLeader()) localMutationListeners.forEach((listener) => listener(records))
+  }
+  const unsubscribeSharedHousehold = dependencies.households.subscribeLocalMutations((records) =>
+    publishLocalMutation(records.map((record) => ({ type: 'household', record }))),
+  )
+  const unsubscribeSharedSourceListings = dependencies.sourceListings.subscribeLocalMutations(
+    (records) =>
+      publishLocalMutation(
+        records.map((record) => {
+          if ('sourceListingIds' in record) return { type: 'visit-plan' as const, record }
+          if ('sourceListingId' in record) return { type: 'candidate-plot' as const, record }
+          if ('url' in record) return { type: 'source-listing' as const, record }
+          return { type: 'import-inbox' as const, record }
+        }),
+      ),
+  )
+  const tabId = dependencies.uuid()
+  const applySyncStatus = (
+    syncStatus: 'syncing' | 'connected' | 'alone',
+    warning?: 'refresh' | 'synchronization',
+  ) => {
+    if (state.status === 'active') {
+      const syncWarning = warning
+        ? warning === 'refresh'
+          ? ('A newer version is available. Refresh to sync.' as const)
+          : ('Synchronization needs an app refresh to continue.' as const)
+        : undefined
+      const { syncWarning: _, ...withoutWarning } = state
+      setState(
+        syncWarning ? { ...state, syncStatus, syncWarning } : { ...withoutWarning, syncStatus },
+      )
+    } else if (state.status === 'waiting') {
+      setState({ ...state, syncStatus: syncStatus === 'syncing' ? 'syncing' : 'waiting' })
+    }
+  }
+  const messageSchema = v.strictObject({
+    type: v.picklist([
+      'committed-local-records',
+      'committed-remote-records',
+      'leader-status',
+      'initial-sync-complete',
+    ]),
+    householdId: v.string(),
+    generation: v.pipe(v.number(), v.integer()),
+    sourceTabId: v.optional(v.string()),
+    records: v.optional(v.array(v.unknown())),
+    syncStatus: v.optional(v.picklist(['syncing', 'connected', 'alone'])),
+    warning: v.optional(v.picklist(['refresh', 'synchronization'])),
+  })
   const connect = (
     access: Extract<HouseholdRuntimeState, { status: 'active' | 'waiting' }>['access'],
     roomPassword: string,
   ) => {
-    if (!dependencies.roomFactory) return
-    const room = dependencies.roomFactory({
-      householdId: access.householdId,
-      roomPassword,
-    })
+    coordinationGeneration += 1
+    const generation = coordinationGeneration
     const isCurrent = () =>
       (state.status === 'active' || state.status === 'waiting') &&
       state.access.householdId === access.householdId
-    stopSynchronization = synchronizeHousehold({
+    const createChannel =
+      dependencies.createTabChannel ?? (() => ({ postMessage() {}, close() {} }))
+    coordinator = createTabCoordinator({
       householdId: access.householdId,
-      room,
-      repository: sharedRepository,
-      onStatus(syncStatus) {
-        if (!isCurrent()) return
-        if (state.status === 'active') {
-          if (state.syncStatus !== syncStatus) setState({ ...state, syncStatus })
-        } else if (state.status === 'waiting') {
-          const nextSyncStatus = syncStatus === 'syncing' ? 'syncing' : 'waiting'
-          if (state.syncStatus === nextSyncStatus) return
-          setState({
-            ...state,
-            syncStatus: nextSyncStatus,
-          })
-        }
-      },
-      async onInitialSync(syncStatus) {
-        if (!isCurrent() || state.status !== 'waiting') return
-        const household = dependencies.households.get()
-        if (!household) return
-        const initializedAccess = { ...state.access, initialized: true }
-        await dependencies.accessStore.put(initializedAccess)
-        if (!isCurrent()) return
-        setState({
-          status: 'active',
-          access: initializedAccess,
-          household,
-          roomPassword: state.roomPassword,
-          syncStatus,
+      locks: dependencies.locks,
+      createChannel,
+      async startLeaderSynchronization() {
+        if (!dependencies.roomFactory) return async () => undefined
+        const room = dependencies.roomFactory({ householdId: access.householdId, roomPassword })
+        const stop = synchronizeHousehold({
+          householdId: access.householdId,
+          room,
+          repository: sharedRepository,
+          onStatus(syncStatus) {
+            if (!isCurrent()) return
+            applySyncStatus(syncStatus)
+            coordinator?.channel.postMessage({
+              type: 'leader-status',
+              householdId: access.householdId,
+              generation,
+              syncStatus,
+            })
+          },
+          async onInitialSync(syncStatus) {
+            if (!isCurrent() || state.status !== 'waiting') return
+            const household = dependencies.households.get()
+            if (!household) return
+            const initializedAccess = { ...state.access, initialized: true }
+            await dependencies.accessStore.put(initializedAccess)
+            if (!isCurrent()) return
+            setState({
+              status: 'active',
+              access: initializedAccess,
+              household,
+              roomPassword: state.roomPassword,
+              syncStatus,
+            })
+            coordinator?.channel.postMessage({
+              type: 'initial-sync-complete',
+              householdId: access.householdId,
+              generation,
+              syncStatus,
+            })
+          },
+          onWarning(warning) {
+            if (!isCurrent()) return
+            if (state.status === 'active') applySyncStatus(state.syncStatus, warning)
+            coordinator?.channel.postMessage({
+              type: 'leader-status',
+              householdId: access.householdId,
+              generation,
+              syncStatus: state.status === 'active' ? state.syncStatus : 'alone',
+              ...(warning ? { warning } : {}),
+            })
+          },
+          onError(error) {
+            if (!isCurrent()) return
+            setState({
+              status: 'error',
+              error: error instanceof Error ? error : new Error(String(error)),
+            })
+          },
+          syncingHysteresisMs: 750,
         })
+        return async () => stop()
       },
-      onWarning(warning) {
-        if (!isCurrent() || state.status !== 'active') return
-        if (!warning) {
-          const { syncWarning: _, ...next } = state
-          setState(next)
-          return
-        }
-        setState({
-          ...state,
-          syncWarning:
-            warning === 'refresh'
-              ? 'A newer version is available. Refresh to sync.'
-              : 'Synchronization needs an app refresh to continue.',
-        })
-      },
-      onError(error) {
-        if (!isCurrent()) return
-        setState({
-          status: 'error',
-          error: error instanceof Error ? error : new Error(String(error)),
-        })
-      },
-      syncingHysteresisMs: 750,
     })
+    coordinator.channel.onmessage = (event) => {
+      const parsed = v.safeParse(messageSchema, event.data)
+      if (
+        !parsed.success ||
+        parsed.output.householdId !== access.householdId ||
+        parsed.output.generation !== generation
+      )
+        return
+      if (!isCurrent()) return
+      const message = parsed.output
+      if (message.type === 'leader-status' && message.syncStatus)
+        applySyncStatus(message.syncStatus, message.warning)
+      if (
+        (message.type === 'committed-local-records' ||
+          message.type === 'committed-remote-records') &&
+        message.records
+      ) {
+        const records = parseSharedRecords(message.records, access.householdId)
+        if (!records) return
+        void refreshRepositories().then(() => {
+          if (message.type === 'committed-local-records' && coordinator?.isLeader())
+            localMutationListeners.forEach((listener) => listener(records))
+        })
+      }
+      const initialSyncStatus = message.syncStatus
+      if (message.type === 'initial-sync-complete' && initialSyncStatus)
+        void refreshRepositories().then(async () => {
+          if (!isCurrent() || state.status !== 'waiting' || !dependencies.households.get()) return
+          const initializedAccess = { ...state.access, initialized: true }
+          await dependencies.accessStore.put(initializedAccess)
+          const household = dependencies.households.get()
+          if (isCurrent() && state.status === 'waiting' && household)
+            setState({
+              status: 'active',
+              access: initializedAccess,
+              household,
+              roomPassword: state.roomPassword,
+              syncStatus: initialSyncStatus,
+            })
+        })
+    }
+    stopSynchronization = async () => {
+      const current = coordinator
+      coordinator = undefined
+      await current?.stop()
+      current?.channel.close()
+    }
   }
   const activate = async (access: HouseholdAccessState, advanceLastOpened: boolean) => {
     await stopAndDrain()
@@ -785,6 +935,8 @@ export const createHouseholdRuntime = (dependencies: {
     },
     dispose() {
       void stopSynchronization?.()
+      unsubscribeSharedHousehold()
+      unsubscribeSharedSourceListings()
       unsubscribeSourceListings()
       unsubscribeHouseholds()
       listeners.clear()

@@ -9,9 +9,16 @@ const relayEvent = 'fmh-e2e-room-message'
  */
 export class E2eSyncRelay {
   private readonly pages = new Set<Page>()
+  private readonly peers = new Set<string>()
+
+  peerCount() {
+    return this.peers.size
+  }
 
   async attach(context: BrowserContext) {
     await context.exposeBinding('__fmhE2eRelay', async ({ page }, message: E2eRoomEnvelope) => {
+      if (message.type === 'join') this.peers.add(message.peerId)
+      if (message.type === 'leave') this.peers.delete(message.peerId)
       await Promise.all(
         [...this.pages]
           .filter((candidate) => candidate !== page && !candidate.isClosed())
