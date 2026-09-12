@@ -10,6 +10,69 @@ import {
 } from './indexeddb'
 import type { ResolvedLocationData } from '../source-listings/model'
 import type { AutomaticCheckServices } from '../automatic-checks'
+import type { LockManager, TabChannel } from './tab-coordinator'
+
+class TestLocks implements LockManager {
+  private active = false
+  private readonly queued: (() => Promise<void>)[] = []
+
+  request(_name: string, _options: { mode: 'exclusive' }, callback: () => Promise<void>) {
+    return new Promise<void>((resolve, reject) => {
+      this.queued.push(async () => {
+        this.active = true
+        try {
+          await callback()
+          resolve()
+        } catch (error) {
+          reject(error)
+        } finally {
+          this.active = false
+          const next = this.queued.shift()
+          if (next) void next()
+        }
+      })
+      if (!this.active && this.queued.length === 1) {
+        const next = this.queued.shift()
+        if (next) void next()
+      }
+    })
+  }
+}
+
+class TestChannelHub {
+  private readonly channels = new Map<string, Set<TestChannel>>()
+  create = (name: string): TabChannel => {
+    const channel = new TestChannel(name, this)
+    const peers = this.channels.get(name) ?? new Set<TestChannel>()
+    this.channels.set(name, peers)
+    peers.add(channel)
+    return channel
+  }
+  send(sender: TestChannel, data: unknown) {
+    for (const channel of this.channels.get(sender.name) ?? [])
+      if (channel !== sender) channel.receive(structuredClone(data))
+  }
+  remove(channel: TestChannel) {
+    this.channels.get(channel.name)?.delete(channel)
+  }
+}
+
+class TestChannel implements TabChannel {
+  onmessage: ((event: { data: unknown }) => void) | null = null
+  constructor(
+    readonly name: string,
+    private readonly hub: TestChannelHub,
+  ) {}
+  postMessage(data: unknown) {
+    this.hub.send(this, data)
+  }
+  close() {
+    this.hub.remove(this)
+  }
+  receive(data: unknown) {
+    this.onmessage?.({ data })
+  }
+}
 
 const databasePrefixes: string[] = []
 
@@ -42,6 +105,88 @@ afterEach(async () => {
 })
 
 describe('Household runtime', () => {
+  it('uses one room peer for two tabs while forwarding edits and handing over the lock', async () => {
+    const prefix = `tab-runtime-${crypto.randomUUID()}`
+    databasePrefixes.push(prefix)
+    const network = createInMemoryRoomNetwork()
+    const locks = new TestLocks()
+    const channels = new TestChannelHub()
+    let uuid = 0
+    let rooms = 0
+    const createRuntime = (device: string, local = false) =>
+      createBrowserHouseholdRuntime({
+        accessDatabaseName: `${prefix}-${device}-access`,
+        sharedDatabasePrefix: `${prefix}-${device}`,
+        crypto,
+        now: () => 10_000,
+        uuid: () => `${device}-${++uuid}`,
+        roomFactory: (options) => {
+          rooms += 1
+          return network(options)
+        },
+        ...(local ? { locks, createTabChannel: channels.create } : {}),
+      })
+    const leader = createRuntime('local', true)
+    const follower = createRuntime('local', true)
+    const remote = createRuntime('remote')
+    try {
+      await leader.start()
+      await leader.createHousehold()
+      const leaderState = leader.state()
+      if (leaderState.status !== 'active') throw new Error('Leader did not activate')
+      await follower.start()
+      await remote.joinHousehold(leaderState.access.invitationSecret)
+      await waitFor(
+        () =>
+          follower.state().status === 'active' && remote.state().status === 'active' && rooms === 2,
+      )
+      await waitFor(() => {
+        const currentLeaderState = leader.state()
+        const currentFollowerState = follower.state()
+        return (
+          currentLeaderState.status === 'active' &&
+          currentFollowerState.status === 'active' &&
+          currentLeaderState.syncStatus === currentFollowerState.syncStatus
+        )
+      })
+
+      const saved = await follower.saveReviewedImport({
+        imported: parseAruodasImport({
+          url: 'https://www.aruodas.lt/sklypai-vilniuje-tab-forwarding-1-1/',
+          title: 'Forwarded tab edit',
+          photos: [],
+          features: [],
+        }),
+        priceEur: null,
+        areaAres: null,
+        purposeText: null,
+        notes: null,
+        parcelNumberClue: null,
+        latitudeClue: null,
+        longitudeClue: null,
+        coordinateCluePrecision: null,
+        addressClue: null,
+      })
+      await waitFor(
+        () =>
+          leader.getSourceListing(saved.sourceListingId) !== undefined &&
+          remote.getSourceListing(saved.sourceListingId) !== undefined,
+      )
+      leader.dispose()
+      await waitFor(() => rooms === 3)
+      await remote.renameActiveHousehold('Remote after handoff')
+      await waitFor(() => follower.state().status === 'active')
+      await waitFor(() => {
+        const state = follower.state()
+        return state.status === 'active' && state.household.name === 'Remote after handoff'
+      })
+    } finally {
+      leader.dispose()
+      follower.dispose()
+      remote.dispose()
+    }
+  })
+
   it('ignores malformed persisted Household Access records and validates writes', async () => {
     const name = `access-${crypto.randomUUID()}`
     databasePrefixes.push(name)
@@ -1481,6 +1626,7 @@ describe('Household runtime', () => {
         open: async (householdId) => {
           openedHouseholdId = householdId
         },
+        refresh: async () => undefined,
         getStored: async (householdId) =>
           householdId === 'first-household' ? firstHousehold : secondHousehold,
         get: () => (openedHouseholdId === 'first-household' ? firstHousehold : secondHousehold),
@@ -1496,6 +1642,7 @@ describe('Household runtime', () => {
       },
       sourceListings: {
         open: async () => undefined,
+        refresh: async () => undefined,
         list: () => [],
         get: () => undefined,
         listImportInbox: () => [],
