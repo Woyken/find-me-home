@@ -4,33 +4,48 @@ import 'leaflet/dist/leaflet.css'
 import type * as Leaflet from 'leaflet'
 import { routes } from '../paths'
 import type { SourceListingDetail } from '../source-listings/model'
-import { sourceListingMapLocation } from '../source-listings/map'
+import type { CandidatePlotMapItem } from '../source-listings/map'
+import { sourceListingMapItems, sourceListingMapLabel } from '../source-listings/map'
 import { BLUE, OSM_ATTRIBUTION, OSM_TILES, STAKE, itemsBounds, shapeLayer } from './leaflet-shapes'
 
 /** A listing that can be drawn, with whether we're going to see it. */
 export type PlotsMapStop = {
   sourceListing: SourceListingDetail
-  location: NonNullable<ReturnType<typeof sourceListingMapLocation>>
+  location: CandidatePlotMapItem
   going: boolean
 }
 
-/** The listings that have a place on the map, in the order given. */
+export type PlotsMapData = {
+  stops: Array<PlotsMapStop>
+  unlocatedListingCount: number
+}
+
+/** Every located marked area in list order, retaining its source listing's state. */
+export const plotsMapData = (
+  sourceListings: Array<SourceListingDetail>,
+  goingIds: Array<string>,
+): PlotsMapData => {
+  let unlocatedListingCount = 0
+  const stops = sourceListings.flatMap((sourceListing) => {
+    const locations = sourceListingMapItems(sourceListing)
+    if (locations.length === 0) {
+      unlocatedListingCount += 1
+      return []
+    }
+    return locations.map((location) => ({
+      sourceListing,
+      location: { ...location, label: sourceListingMapLabel(sourceListing) },
+      going: goingIds.includes(sourceListing.id),
+    }))
+  })
+  return { stops, unlocatedListingCount }
+}
+
+/** The marked areas that have a place on the map, in the order given. */
 export const plotsMapStops = (
   sourceListings: Array<SourceListingDetail>,
   goingIds: Array<string>,
-): Array<PlotsMapStop> =>
-  sourceListings.flatMap((sourceListing) => {
-    const location = sourceListingMapLocation(sourceListing)
-    return location
-      ? [
-          {
-            sourceListing,
-            location,
-            going: goingIds.includes(sourceListing.id),
-          },
-        ]
-      : []
-  })
+) => plotsMapData(sourceListings, goingIds).stops
 
 /**
  * Every listed plot on one map: blue shapes, orange for the ones we're going
@@ -46,8 +61,9 @@ export function PlotsMap(props: {
   let leaflet: typeof Leaflet | undefined
   let resizeObserver: ResizeObserver | undefined
   let disposed = false
-  const stops = createMemo(() => plotsMapStops(props.sourceListings, props.goingIds))
-  const offMap = () => props.sourceListings.length - stops().length
+  const mapData = createMemo(() => plotsMapData(props.sourceListings, props.goingIds))
+  const stops = () => mapData().stops
+  const offMap = () => mapData().unlocatedListingCount
 
   const draw = (drawn: Array<PlotsMapStop>) => {
     if (!leaflet || !map || !plotLayer) return
