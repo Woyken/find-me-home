@@ -46,4 +46,7 @@ jobs:
           if-no-files-found: ignore
       - name: Remove temporary Worker
         if: always()
-        run: pnpm exec wrangler delete --config wrangler.waze-prototype.jsonc --force
+        run: |
+          curl --fail-with-body --show-error --silent --request DELETE \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/find-me-home-waze-prototype" \
+            --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN"

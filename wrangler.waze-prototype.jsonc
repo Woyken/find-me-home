@@ -3,5 +3,6 @@
   "name": "find-me-home-waze-prototype",
   "main": "worker/prototype-waze-cloudflare.ts",
   "compatibility_date": "2026-09-13",
+  "compatibility_flags": ["global_fetch_strictly_public"],
   "workers_dev": true,
 }
