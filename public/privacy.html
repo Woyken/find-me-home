@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy · Find Me Home</title>
+    <style>
+      body {
+        max-width: 720px;
+        margin: 40px auto;
+        padding: 0 20px;
+        font:
+          17px/1.5 system-ui,
+          sans-serif;
+        color: #1b2733;
+      }
+      a {
+        color: #2a5d9f;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Find Me Home privacy notice</h1>
+      <p>Last updated: 13 September 2026</p>
+      <p>
+        Find Me Home keeps household and candidate-plot records in your browser and synchronizes
+        them only with devices that join your household. The driving-time feature is optional and
+        runs only when you press <strong>Check drive time</strong>.
+      </p>
+      <h2>Driving-time request</h2>
+      <p>
+        To calculate a fresh estimate, the app sends the selected plot's latitude and longitude to
+        the Find Me Home Cloudflare Worker. The Worker sends that origin, the fixed Vilnius
+        city-centre destination, and a future departure time to Google Maps Platform Routes API.
+        Google returns an estimated duration and distance. The app does not send household names,
+        notes, listing details, or device credentials with this request.
+      </p>
+      <p>
+        The Worker does not store the request or response. The browser displays the result for the
+        current page session and does not save or synchronize it. Cloudflare and Google may process
+        network and request data under their own policies.
+      </p>
+      <ul>
+        <li><a href="https://policies.google.com/privacy">Google Privacy Policy</a></li>
+        <li><a href="https://www.cloudflare.com/privacypolicy/">Cloudflare Privacy Policy</a></li>
+      </ul>
+      <p><a href="./">Return to Find Me Home</a></p>
+    </main>
+  </body>
+</html>

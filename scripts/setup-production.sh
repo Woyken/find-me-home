@@ -42,7 +42,7 @@ finish() { _clear; printf '\n%s%s  ✓ Setup complete%s\n' "$BOLD" "$GREEN" "$RE
 # STAGES: author this section. One stage() per step the human takes.
 # ──────────────────────────────────────────────────────────────────────────
 
-TOTAL_STAGES=4
+TOTAL_STAGES=6
 banner "Find Me Home production setup"
 
 if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
@@ -77,17 +77,34 @@ write_env CLOUDFLARE_ACCOUNT_ID "$CLOUDFLARE_ACCOUNT_ID"
 set_secret CLOUDFLARE_API_TOKEN "$CLOUDFLARE_API_TOKEN"
 set_secret CLOUDFLARE_ACCOUNT_ID "$CLOUDFLARE_ACCOUNT_ID"
 
+stage "Google Routes API"
+say "Create or select the Google Cloud project that will provide fresh traffic-aware driving estimates."
+open_url "https://console.cloud.google.com/google/maps-apis/api-list"
+step "Select the project, attach a billing account if needed, find Routes API, and enable it."
+pause "Press Enter when Routes API is enabled."
+
+stage "Google Routes key and limits"
+open_url "https://console.cloud.google.com/google/maps-apis/credentials"
+step "Choose Create credentials → API key, then edit the key."
+step "Under API restrictions choose Restrict key, select Routes API only, and save."
+note "Cloudflare Workers do not have a fixed browser referrer or egress IP, so application restrictions cannot be used here. The key stays in a Worker secret."
+open_url "https://console.cloud.google.com/apis/api/routes.googleapis.com/quotas"
+step "Set a conservative daily request quota, then configure a billing budget alert for this project. The fixed public Worker endpoint is not authentication."
+ask_secret GOOGLE_ROUTES_API_KEY "Paste the restricted Google Routes API key:"
+
 stage "Workers subdomain"
 open_url "https://dash.cloudflare.com/?to=/:account/workers-and-pages"
 step "If prompted, choose and confirm the account workers.dev subdomain. Otherwise confirm the existing subdomain is active."
 pause "Press Enter when workers.dev is active."
 
 stage "Deploy production Worker"
-say "This deploys find-me-home-operations with CORS restricted to https://woyken.github.io."
+say "This deploys find-me-home-operations with CORS restricted to https://woyken.github.io, then stores the Google key only as a Cloudflare Worker secret."
 export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
 pnpm exec wrangler whoami
 if ! confirm "Deploy the production Worker now?"; then warn "Deployment cancelled"; exit 1; fi
 pnpm deploy:worker
+printf '%s' "$GOOGLE_ROUTES_API_KEY" | pnpm exec wrangler secret put GOOGLE_ROUTES_API_KEY
+printf '  %s✓ stored%s Cloudflare Worker secret GOOGLE_ROUTES_API_KEY\n' "$GREEN" "$RESET"
 
 stage "Publish and verify endpoint"
 step "Copy Wrangler's complete Worker URL: https://find-me-home-operations.<your-subdomain>.workers.dev"

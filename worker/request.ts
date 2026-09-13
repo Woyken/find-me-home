@@ -1,5 +1,6 @@
 export interface WorkerOptions {
   productionOrigin: string
+  googleRoutesApiKey?: string
   fetch?: typeof fetch
   now?: () => Date
 }

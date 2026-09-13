@@ -9,6 +9,14 @@ describe('browser external-service client', () => {
       if (path === '/trafi/walking-directions')
         return Response.json({ durationSeconds: 120, distanceMeters: null })
       if (path === '/trafi/route-search') return Response.json([])
+      if (path === '/google/driving-time')
+        return Response.json({
+          durationSeconds: 1_800,
+          distanceMeters: 20_700,
+          arriveBy: '2026-09-07T05:00:00.000Z',
+          leaveAt: '2026-09-07T04:30:00.000Z',
+          calculatedAt: '2026-09-04T10:00:00.000Z',
+        })
       if (path === '/crime/density')
         return Response.json({
           rawCount: 0,
@@ -41,6 +49,13 @@ describe('browser external-service client', () => {
         '2026-09-07T08:00:00+03:00',
       ),
     ).resolves.toEqual([])
+    await expect(client.drivingTimeToCityCentre(54.7, 25.3)).resolves.toEqual({
+      durationSeconds: 1_800,
+      distanceMeters: 20_700,
+      arriveBy: '2026-09-07T05:00:00.000Z',
+      leaveAt: '2026-09-07T04:30:00.000Z',
+      calculatedAt: '2026-09-04T10:00:00.000Z',
+    })
     await expect(client.crimeDensity(54.7, 25.3)).resolves.toMatchObject({
       emptyResponse: true,
     })
@@ -53,9 +68,14 @@ describe('browser external-service client', () => {
       '/trafi/nearby-stops',
       '/trafi/walking-directions',
       '/trafi/route-search',
+      '/google/driving-time',
       '/crime/density',
       '/inspire/transport-noise',
     ])
+    const drivingCall = fetcher.mock.calls.find(
+      ([input]) => new URL(String(input)).pathname === '/google/driving-time',
+    )
+    expect(drivingCall?.[1]?.cache).toBe('no-store')
   })
 
   it('reports HTTP and response-schema failures as unavailable for manual retry', async () => {

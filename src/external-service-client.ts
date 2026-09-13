@@ -1,5 +1,7 @@
 import type { TrafiRoute } from '../shared/transit'
+import type { DrivingTime } from '../shared/driving'
 export type { TrafiRoute, TrafiRouteSegment } from '../shared/transit'
+export type { DrivingTime } from '../shared/driving'
 
 export interface Coordinate {
   latitude: number
@@ -27,7 +29,8 @@ export interface TransportNoise {
   majorRoadDistanceMeters: number | null
 }
 
-const number = (value: unknown) => typeof value === 'number' && Number.isFinite(value)
+const number = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value)
 const nullableNumber = (value: unknown) => value === null || number(value)
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -181,6 +184,26 @@ export const createExternalServiceClient = (workerUrl: string, fetcher: typeof f
       )
         throw invalidShape(path, value)
       return value as unknown as TrafiRoute[]
+    },
+    async drivingTimeToCityCentre(latitude: number, longitude: number): Promise<DrivingTime> {
+      const path = `/google/driving-time?${queryPoint(latitude, longitude)}`
+      const value = await request(path, { cache: 'no-store' })
+      if (
+        !record(value) ||
+        !number(value.durationSeconds) ||
+        !number(value.distanceMeters) ||
+        typeof value.arriveBy !== 'string' ||
+        typeof value.leaveAt !== 'string' ||
+        typeof value.calculatedAt !== 'string'
+      )
+        throw invalidShape(path, value)
+      return {
+        durationSeconds: value.durationSeconds,
+        distanceMeters: value.distanceMeters,
+        arriveBy: value.arriveBy,
+        leaveAt: value.leaveAt,
+        calculatedAt: value.calculatedAt,
+      }
     },
     async crimeDensity(latitude: number, longitude: number, radiusMeters = 1000, years = 3) {
       const query = queryPoint(latitude, longitude)

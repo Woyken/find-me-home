@@ -181,6 +181,9 @@
   .small {
     font-size: 14px;
   }
+  .bad {
+    color: var(--fail);
+  }
 
   /* ---------- header ---------- */
   .top {
@@ -1344,6 +1347,39 @@
   }
   .block.bare {
     padding: 0 0 4px;
+  }
+  .driving-time .sub-h > div p {
+    margin: 2px 0 0;
+  }
+  .driving-time-result {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 14px;
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    background: var(--white);
+  }
+  .driving-time-result strong {
+    font-family: var(--font-display);
+    font-size: 24px;
+  }
+  .google-maps-attribution {
+    margin-left: auto;
+    color: #5e5e5e;
+    font-family: sans-serif;
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 400;
+    letter-spacing: normal;
+    white-space: nowrap;
+  }
+  .driving-time-note {
+    margin: 10px 0 0;
+  }
+  .driving-time-policy {
+    margin: 4px 0 0;
   }
   .checklist {
     display: grid;

@@ -13,7 +13,77 @@ const options = (fetcher: typeof fetch) => ({
   now: () => new Date('2026-09-03T12:00:00Z'),
 })
 
+const googleOptions = (fetcher: typeof fetch) => ({
+  ...options(fetcher),
+  googleRoutesApiKey: 'test-google-key',
+  now: () => new Date('2026-09-04T10:00:00Z'),
+})
+
 describe('retained external-service Worker operations', () => {
+  it('returns a fresh traffic-aware Monday 08:00 drive to the fixed city centre', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({ routes: [{ duration: '1800s', distanceMeters: 20_500 }] }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ routes: [{ duration: '1800s', distanceMeters: 20_700 }] }),
+      )
+
+    const response = await handleWorkerRequest(
+      request('/google/driving-time?latitude=54.7&longitude=25.3'),
+      googleOptions(fetcher),
+    )
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      durationSeconds: 1800,
+      distanceMeters: 20_700,
+      arriveBy: '2026-09-07T05:00:00.000Z',
+      leaveAt: '2026-09-07T04:30:00.000Z',
+      calculatedAt: '2026-09-04T10:00:00.000Z',
+    })
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(String(fetcher.mock.calls[0][0])).toBe(
+      'https://routes.googleapis.com/directions/v2:computeRoutes',
+    )
+    expect(new Headers(fetcher.mock.calls[0][1]?.headers).get('X-Goog-Api-Key')).toBe(
+      'test-google-key',
+    )
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toMatchObject({
+      origin: { location: { latLng: { latitude: 54.7, longitude: 25.3 } } },
+      destination: {
+        location: { latLng: { latitude: 54.6856478, longitude: 25.2869905 } },
+      },
+      travelMode: 'DRIVE',
+      routingPreference: 'TRAFFIC_AWARE_OPTIMAL',
+      departureTime: '2026-09-07T04:00:00.000Z',
+    })
+    expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body))).toMatchObject({
+      departureTime: '2026-09-07T04:30:00.000Z',
+    })
+  })
+
+  it('uses the current Monday when its 08:00 arrival is still ahead', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({ routes: [{ duration: '1800s', distanceMeters: 20_500 }] }),
+    )
+
+    const response = await handleWorkerRequest(
+      request('/google/driving-time?latitude=54.7&longitude=25.3'),
+      {
+        ...googleOptions(fetcher),
+        now: () => new Date('2026-09-07T04:00:00Z'),
+      },
+    )
+
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+    expect(await response.json()).toMatchObject({
+      arriveBy: '2026-09-07T05:00:00.000Z',
+      leaveAt: '2026-09-07T04:30:00.000Z',
+    })
+  })
+
   it('returns normalized nearby Trafi stops without credentials', async () => {
     const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json({

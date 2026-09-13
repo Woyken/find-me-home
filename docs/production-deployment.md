@@ -7,10 +7,10 @@ The stateless Cloudflare Worker is deployed before the GitHub Pages artifact tha
 - Pages URL: `https://woyken.github.io/find-me-home/` (Worker CORS origin: `https://woyken.github.io`)
 - Worker name: `find-me-home-operations`
 - Worker endpoint: `https://find-me-home-operations.karolis-uzkuraitis.workers.dev`, also stored as GitHub Actions secret `VITE_WORKER_URL`
-- Worker binding: plaintext `PRODUCTION_ORIGIN` only
-- Worker storage: no KV, D1, Durable Objects, databases, Household data, application credentials, or durable sessions
+- Worker bindings: plaintext `PRODUCTION_ORIGIN` and encrypted secret `GOOGLE_ROUTES_API_KEY`
+- Worker storage: no KV, D1, Durable Objects, databases, Household data, or durable sessions
 
-The Worker exposes only fixed Regia, Trafi, INSPIRE, and IRD operations. CORS allows the exact Pages origin and rejects other browser origins. This origin check is not authentication: requests without an `Origin` header remain possible, and no private data or privileged credentials may be added to this boundary.
+The Worker exposes only fixed Regia, Trafi, INSPIRE, IRD, and Google driving-time operations. The Google operation accepts only a plot coordinate and always routes to the product's city-centre coordinate for the next Monday 08:00 arrival; callers cannot select an upstream URL, destination, mode, or arbitrary time. Its response is marked `no-store`, and the browser does not persist or synchronize it. CORS allows the exact Pages origin and rejects other browser origins. This origin check is not authentication: requests without an `Origin` header remain possible. Restrict the Google key to Routes API, set a conservative Google request quota and billing alert, and never expose the key to Pages or GitHub Actions.
 
 ## Release and verification
 
@@ -57,6 +57,8 @@ List deployments with `pnpm exec wrangler deployments list`, then use the rollba
 ## Credential rotation
 
 Rerun `scripts/setup-production.sh`, create a replacement least-privilege token, and let the wizard replace the GitHub secret. Trigger the workflow and confirm both jobs pass before revoking the old token in Cloudflare. The Worker endpoint and account ID are public configuration, not secrets.
+
+The same wizard enables Routes API, captures an API-restricted Google key, and writes it directly to the encrypted Cloudflare Worker secret `GOOGLE_ROUTES_API_KEY`. It does not write that key to `.env`, GitHub, or the browser bundle. After rotating it, revoke the old key in Google Cloud and re-check the project quota and billing alert.
 
 ## Worker unavailable
 

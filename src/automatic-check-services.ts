@@ -2,6 +2,7 @@ import proj4 from 'proj4'
 import type { AutomaticCheckServices } from './automatic-checks'
 import { createExternalServiceClient } from './external-service-client'
 import type { CommuteOption, TrafiRouteSegment, TransitService } from '../shared/transit'
+import { CITY_CENTRE } from '../shared/driving'
 import { createLivabilityService } from './livability-service'
 import { createNoiseService } from './noise-service'
 
@@ -268,11 +269,7 @@ export const createBrowserAutomaticCheckServices = (options?: {
     },
     async cityCentreCommute(latitude, longitude) {
       const arriveBy = nextMondayArrival()
-      const routes = await client.searchRoutes(
-        { latitude, longitude },
-        { latitude: 54.6856478, longitude: 25.2869905 },
-        arriveBy,
-      )
+      const routes = await client.searchRoutes({ latitude, longitude }, CITY_CENTRE, arriveBy)
       const classified = routes.flatMap((route) => {
         const transit = route.segments.filter(isTransitSegment)
         const service = routeService(transit)

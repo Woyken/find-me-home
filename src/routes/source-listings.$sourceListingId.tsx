@@ -17,6 +17,7 @@ import { CheckStrip, CheckSummaryText } from '../components/CheckStrip'
 import { FannedStack } from '../components/FannedStack'
 import { GoSeeButton } from '../components/GoSeeButton'
 import { DirectionsPicker } from '../components/DirectionsPicker'
+import { DrivingTimeCard } from '../components/DrivingTimeCard'
 import { CheckIcon, PinIcon } from '../components/icons'
 import { MarkAreaDialog } from '../components/MarkAreaDialog'
 import {
@@ -724,6 +725,12 @@ function CandidatePlotEditor(props: {
             </details>
           </Show>
         </section>
+
+        <DrivingTimeCard
+          origin={() =>
+            validCoordinate(props.plot().resolvedLatitude, props.plot().resolvedLongitude)
+          }
+        />
 
         <section class="panel soft block">
           <div class="sub-h">
