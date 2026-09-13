@@ -17,6 +17,8 @@
     "verify:worker-build": "node --experimental-strip-types scripts/verify-worker-build.ts",
     "generate:parcels": "node --experimental-strip-types scripts/generate-parcels.ts",
     "validate:parcels": "node --experimental-strip-types scripts/validate-parcels.ts",
+    "prototype:waze": "node --experimental-strip-types scripts/prototype-waze-route.ts",
+    "prototype:waze:cloudflare": "bash scripts/prototype-waze-cloudflare.sh",
     "typecheck": "tsc --noEmit",
     "typecheck:e2e": "tsc --project tsconfig.e2e.json --noEmit",
     "typecheck:e2e:termux": "tsc --project tsconfig.e2e.json --noEmit",
