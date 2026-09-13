@@ -1,8 +1,6 @@
 name: Probe unofficial Waze routing
 
 on:
-  push:
-    branches: [prototype/unofficial-waze-api]
   workflow_dispatch:
 
 permissions:

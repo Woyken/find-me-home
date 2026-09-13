@@ -230,8 +230,18 @@ same short coordinate pair requires validation against Waze's own UI before
 using the values. The successful host is distinct from the `user-drive`
 endpoint that returned 403 earlier. A third successful request carrying the
 production Pages `Origin` returned no `Access-Control-Allow-Origin` header, so
-a browser cannot read this API directly. Whether Waze accepts Cloudflare Worker
-egress remains a separate deployment test.
+a browser cannot read this API directly.
+
+Two isolated Cloudflare deployments then tested the same route through
+`find-me-home-waze-prototype` ([run 34750913752](https://github.com/Woyken/find-me-home/actions/runs/34750913752)
+and [run 34751014335](https://github.com/Woyken/find-me-home/actions/runs/34751014335)).
+Both returned Cloudflare error 1042 before receiving Waze route data. The
+second enabled Cloudflare's documented `global_fetch_strictly_public`
+compatibility flag, but the result did not change. Therefore the anonymous Waze
+router is usable from this development server but **not from the application's
+current Cloudflare Worker boundary**. The second workflow removed the isolated
+prototype script successfully through Cloudflare's Workers API; no prototype
+Worker remains deployed.
 
 ## Source notes
 
