@@ -12,6 +12,7 @@ export const importInboxRecordSchema = v.strictObject({
   priceEur: v.optional(v.pipe(v.number(), v.finite(), v.minValue(0))),
   areaAres: v.optional(v.pipe(v.number(), v.finite(), v.minValue(0))),
   thumbnail: v.optional(v.pipe(v.string(), v.url())),
+  notes: v.optional(v.string()),
   updatedAt: timestamp,
   deletedAt: v.optional(timestamp),
 })

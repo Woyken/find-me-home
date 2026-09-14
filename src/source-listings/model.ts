@@ -30,6 +30,7 @@ export const sourceListingRecordSchema = v.strictObject({
   roadAccessRating: nullableRating,
   areaFeelingRating: nullableRating,
   viewRating: nullableRating,
+  notes: nullableText,
   updatedAt: timestamp,
   deletedAt: v.optional(timestamp),
 })
@@ -151,7 +152,10 @@ export type ReviewedImport = {
   priceEur: number | null
   areaAres: number | null
   purposeText: string | null
-  notes: string | null
+  listingNotes?: string | null
+  plotNotes?: string | null
+  /** Legacy plot-specific import field; new callers use plotNotes. */
+  notes?: string | null
   parcelNumberClue: string | null
   latitudeClue: number | null
   longitudeClue: number | null

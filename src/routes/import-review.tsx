@@ -22,6 +22,8 @@ export const reviewedImport = (imported: AruodasImport): ReviewedImport => {
     priceEur: imported.priceEur ?? null,
     areaAres: imported.areaAres ?? null,
     purposeText: imported.purposeText?.trim() || null,
+    listingNotes: imported.notes ?? null,
+    plotNotes: null,
     notes: null,
     parcelNumberClue: clue.parcelNumberClue,
     latitudeClue: clue.latitudeClue,
@@ -172,7 +174,7 @@ export default function ImportReview() {
         priceEur: optionalNumber(price(), 'Price'),
         areaAres: optionalNumber(area(), 'Area'),
         purposeText: optionalText(purpose()),
-        notes: optionalText(notes()),
+        plotNotes: optionalText(notes()),
       })
       if (disposed || operation !== saveOperation) return
       imports.clear()
@@ -286,7 +288,7 @@ export default function ImportReview() {
                   />
                 </label>
                 <label class="f" style={{ 'margin-top': '14px' }}>
-                  Our notes{' '}
+                  Notes for this area{' '}
                   <span class="muted" style={{ 'font-weight': '400' }}>
                     (optional)
                   </span>

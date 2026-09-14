@@ -59,6 +59,11 @@ export type SourceListingRepository = {
     candidatePlotId: string,
     updatedAt: number,
   ) => Promise<void>
+  updateSourceListingNotes: (
+    sourceListingId: string,
+    notes: string | null,
+    updatedAt: number,
+  ) => Promise<void>
   updateSourceListingRatings: (
     sourceListingId: string,
     ratings: Pick<SourceListingRecord, 'roadAccessRating' | 'areaFeelingRating' | 'viewRating'>,
@@ -108,6 +113,14 @@ const transactionComplete = (transaction: IDBTransaction) =>
     transaction.onabort = () =>
       reject(transaction.error ?? new Error('IndexedDB transaction aborted'))
   })
+
+const mergedListingNotes = (existing: string | null | undefined, imported: string | undefined) => {
+  const incoming = imported?.trim()
+  if (!incoming) return existing ?? null
+  const current = existing?.trim()
+  if (!current) return incoming
+  return current.includes(incoming) ? current : `${current}\n\n${incoming}`
+}
 
 const openDatabase = (name: string) =>
   new Promise<IDBDatabase>((resolve, reject) => {
@@ -290,6 +303,7 @@ export const createIndexedDbSourceListingRepository = (
       const rewritten: Record<string, unknown> = {
         ...record,
         visitedAt: record.visitedAt ?? null,
+        notes: record.notes ?? null,
         roadAccessRating: hasListingRatings
           ? (record.roadAccessRating ?? null)
           : (selectedPlot?.roadAccessRating ?? null),
@@ -312,6 +326,29 @@ export const createIndexedDbSourceListingRepository = (
     })
   const migrationTimestamp = (value: unknown, fallback: number) =>
     typeof value === 'number' && Number.isFinite(value) ? value + 1 : fallback
+  const persistSourceListingUpdate = async (
+    sourceListingId: string,
+    updatedAt: number,
+    update: (existing: SourceListingRecord, updatedAt: number) => SourceListingRecord,
+  ) => {
+    const active = requireOpen()
+    const existing = sourceListings.find(
+      (record) =>
+        record.id === sourceListingId &&
+        record.householdId === active.householdId &&
+        !record.deletedAt,
+    )
+    if (!existing) throw new Error('Source Listing not found')
+    const sourceListing = update(existing, updatedAt)
+    const transaction = active.database.transaction('source-listings', 'readwrite')
+    put(transaction.objectStore('source-listings'), sourceListing)
+    await transactionComplete(transaction)
+    sourceListings = sourceListings.map((record) =>
+      record.id === sourceListingId ? sourceListing : record,
+    )
+    publish()
+    publishLocal([sourceListing])
+  }
 
   return {
     async open(nextHouseholdId) {
@@ -509,6 +546,7 @@ export const createIndexedDbSourceListingRepository = (
           ...(imported.priceEur === undefined ? {} : { priceEur: imported.priceEur }),
           ...(imported.areaAres === undefined ? {} : { areaAres: imported.areaAres }),
           ...(imported.photos.length ? { thumbnail: imported.photos[0] } : {}),
+          ...(imported.notes === undefined ? {} : { notes: imported.notes }),
           updatedAt,
         }
         changed.push(record)
@@ -578,6 +616,7 @@ export const createIndexedDbSourceListingRepository = (
         roadAccessRating: existing?.roadAccessRating ?? null,
         areaFeelingRating: existing?.areaFeelingRating ?? null,
         viewRating: existing?.viewRating ?? null,
+        notes: mergedListingNotes(existing?.notes, review.listingNotes ?? review.imported.notes),
         updatedAt: timestamp,
       }
       const existingPlot = existing
@@ -619,7 +658,7 @@ export const createIndexedDbSourceListingRepository = (
             registeredParcelMatch: null,
             registeredParcelAreaAres: null,
             registeredParcelPurposeText: null,
-            notes: review.notes,
+            notes: review.plotNotes ?? review.notes ?? null,
             parcelNumberClue: review.parcelNumberClue,
             latitudeClue: review.latitudeClue,
             longitudeClue: review.longitudeClue,
@@ -841,28 +880,21 @@ export const createIndexedDbSourceListingRepository = (
       publish()
       publishLocal([removedCandidatePlot])
     },
+    async updateSourceListingNotes(sourceListingId, notes, updatedAt) {
+      if (notes !== null && typeof notes !== 'string')
+        throw new Error('Listing notes must be text or empty')
+      await persistSourceListingUpdate(sourceListingId, updatedAt, (existing, timestamp) => ({
+        ...existing,
+        notes,
+        updatedAt: timestamp,
+      }))
+    },
     async updateSourceListingRatings(sourceListingId, ratings, updatedAt) {
-      const active = requireOpen()
-      const existing = sourceListings.find(
-        (record) =>
-          record.id === sourceListingId &&
-          record.householdId === active.householdId &&
-          !record.deletedAt,
-      )
-      if (!existing) throw new Error('Source Listing not found')
-      const sourceListing: SourceListingRecord = {
+      await persistSourceListingUpdate(sourceListingId, updatedAt, (existing, timestamp) => ({
         ...existing,
         ...structuredClone(ratings),
-        updatedAt,
-      }
-      const transaction = active.database.transaction('source-listings', 'readwrite')
-      put(transaction.objectStore('source-listings'), sourceListing)
-      await transactionComplete(transaction)
-      sourceListings = sourceListings.map((record) =>
-        record.id === sourceListingId ? sourceListing : record,
-      )
-      publish()
-      publishLocal([sourceListing])
+        updatedAt: timestamp,
+      }))
     },
     async applyCandidatePlotAutomaticChecks(
       sourceListingId,

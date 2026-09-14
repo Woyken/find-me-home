@@ -122,7 +122,7 @@ describe('Household synchronization', () => {
     listeners.join('peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -161,7 +161,7 @@ describe('Household synchronization', () => {
     listeners.join('peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: { 'household-record': 20 },
         'source-listing': {},
         'candidate-plot': {},
@@ -202,7 +202,7 @@ describe('Household synchronization', () => {
     listeners.join('peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -276,7 +276,7 @@ describe('Household synchronization', () => {
     listeners.join('malformed-peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -308,7 +308,7 @@ describe('Household synchronization', () => {
     listeners.join('compatible-peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -358,7 +358,7 @@ describe('Household synchronization', () => {
     listeners.join('malformed-peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -402,7 +402,7 @@ describe('Household synchronization', () => {
     )
 
     expect(sent.records).toEqual([])
-    expect(sent.manifests[0].value.protocolVersion).toBe(2)
+    expect(sent.manifests[0].value.protocolVersion).toBe(3)
     expect(sent.manifests[0].value['import-inbox']).toEqual({
       'inbox-record': 20,
     })
@@ -427,7 +427,7 @@ describe('Household synchronization', () => {
     listeners.join('incomplete-v2-peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -459,7 +459,7 @@ describe('Household synchronization', () => {
     listeners.join('unknown-field-peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -504,7 +504,7 @@ describe('Household synchronization', () => {
     listeners.join('newest-peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -516,7 +516,7 @@ describe('Household synchronization', () => {
     listeners.join('older-peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -558,7 +558,7 @@ describe('Household synchronization', () => {
     listeners.join('first-peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -570,7 +570,7 @@ describe('Household synchronization', () => {
     listeners.join('second-peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -655,7 +655,7 @@ describe('Household synchronization', () => {
     listeners.join('peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: { 'household-record': 30, 'remote-only': 40 },
         'source-listing': {},
         'candidate-plot': {},
@@ -739,7 +739,7 @@ describe('Household synchronization', () => {
     listeners.join('peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: { 'household-record': 10 },
         'source-listing': {},
         'candidate-plot': {},
@@ -787,7 +787,7 @@ describe('Household synchronization', () => {
       onError: () => undefined,
     })
     const manifest = {
-      protocolVersion: 2,
+      protocolVersion: 3,
       household: {},
       'source-listing': {},
       'candidate-plot': {},
@@ -841,7 +841,7 @@ describe('Household synchronization', () => {
     listeners.join('peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -883,7 +883,7 @@ describe('Household synchronization', () => {
     listeners.join('first')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: { 'household-record': 20 },
         'source-listing': {},
         'candidate-plot': {},
@@ -895,7 +895,7 @@ describe('Household synchronization', () => {
     listeners.join('second')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: { 'household-record': 10 },
         'source-listing': {},
         'candidate-plot': {},
@@ -936,7 +936,7 @@ describe('Household synchronization', () => {
     listeners.join('peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: { 'household-record': 30 },
         'source-listing': {},
         'candidate-plot': {},
@@ -976,7 +976,7 @@ describe('Household synchronization', () => {
     listeners.join('pending-peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: { 'household-record': 20 },
         'source-listing': {},
         'candidate-plot': {},
@@ -988,7 +988,7 @@ describe('Household synchronization', () => {
     listeners.join('complete-peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: { 'household-record': 10 },
         'source-listing': {},
         'candidate-plot': {},
@@ -1027,7 +1027,7 @@ describe('Household synchronization', () => {
     listeners.join('newer')
     listeners.manifest(
       {
-        protocolVersion: 3,
+        protocolVersion: 4,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -1066,7 +1066,7 @@ describe('Household synchronization', () => {
     listeners.join('peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -1145,7 +1145,7 @@ describe('Household synchronization', () => {
     listeners.join('peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -1192,7 +1192,7 @@ describe('Household synchronization', () => {
     listeners.join('peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -1236,7 +1236,7 @@ describe('Household synchronization', () => {
     listeners.join('peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -1270,7 +1270,7 @@ describe('Household synchronization', () => {
     listeners.join('peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -1313,7 +1313,7 @@ describe('Household synchronization', () => {
     listeners.join('peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -1362,7 +1362,7 @@ describe('Household synchronization', () => {
     listeners.join('peer')
     listeners.manifest(
       {
-        protocolVersion: 2,
+        protocolVersion: 3,
         household: {},
         'source-listing': {},
         'candidate-plot': {},
@@ -1405,7 +1405,7 @@ describe('Household synchronization', () => {
     })
 
     const manifest = {
-      protocolVersion: 2,
+      protocolVersion: 3,
       household: {},
       'source-listing': {},
       'candidate-plot': {},

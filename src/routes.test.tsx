@@ -65,6 +65,7 @@ const listing = (
   roadAccessRating: null,
   areaFeelingRating: null,
   viewRating: null,
+  notes: null,
   updatedAt,
   candidatePlots: [
     candidatePlot(`${id}-plot`, id, {

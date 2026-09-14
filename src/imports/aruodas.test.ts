@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   decodeImportFragment,
+  encodeBase64UrlText,
   decodeImportTransportFragment,
   encodeImportFragment,
   parseAruodasImport,
   restoreImportTransport,
 } from './aruodas'
 import { createAruodasBookmarklet } from './bookmarklet'
+import { reviewedImport } from '../routes/import-review'
 import { bookmarkletSource } from 'virtual:aruodas-bookmarklet'
 import {
   filteredLandFavoritesPage,
@@ -98,6 +100,16 @@ describe('Aruodas import fragment', () => {
     })
   })
 
+  it('preserves a card-scoped multiline Unicode favorite note', () => {
+    const transport = runBookmarklet(
+      `<div class="list-row-container"><a href="/11-1476517/">Land</a><div class="saved-advert-extras"><span class="note-text" data-uniqueid="1"><textarea name="note">  Žąžuolai\nŠalia upės  </textarea></span></div></div>`,
+      'https://www.aruodas.lt/isiminti-skelbimai/',
+    )
+    expect(transport).toMatchObject({
+      kind: 'favorites',
+      items: [{ sourceId: '11-1476517', notes: 'Žąžuolai\nŠalia upės' }],
+    })
+  })
   it('captures the favorites page of the mobile site (m.aruodas.lt)', () => {
     const transport = runBookmarklet(
       `
@@ -411,6 +423,36 @@ describe('Aruodas import fragment', () => {
     expect(document.body.textContent).toContain('Find Me Home could not import this page')
     expect(document.body.textContent).toContain('Copy details')
     expect(document.body.textContent).not.toContain('Find Me Home: working…')
+  })
+
+  it('carries a private inbox note through an advert bookmarklet payload', () => {
+    const carried = encodeBase64UrlText('  Žąžuolai\nŠalia upės  ')
+    const transport = runBookmarklet(
+      '',
+      `https://www.aruodas.lt/11-1476517/#find-me-home-return=import-inbox&find-me-home-notes=${carried}`,
+    )
+    expect(transport).toMatchObject({
+      kind: 'listing',
+      returnTo: 'import-inbox',
+      imported: { sourceId: '11-1476517', notes: 'Žąžuolai\nŠalia upės' },
+    })
+    if (transport.kind !== 'listing') throw new Error('Expected listing transport')
+    expect(reviewedImport(transport.imported).listingNotes).toBe('Žąžuolai\nŠalia upės')
+  })
+
+  it('shows the bookmarklet failure panel for malformed carried notes', () => {
+    document.title = 'Aruodas advert'
+    document.body.innerHTML = ''
+    const location = {
+      href: 'https://www.aruodas.lt/11-1476517/#find-me-home-notes=%%%invalid',
+    }
+    new Function('window', 'document', bookmarkletSource.replace(/[\r\n\t]/g, ''))(
+      { location, alert: () => undefined, __fmhAppUrl: 'https://example.test/' },
+      document,
+    )
+    expect(location.href).toContain('find-me-home-notes')
+    expect(document.body.textContent).toContain('Find Me Home could not import this page')
+    expect(document.querySelector('textarea')?.value).toContain('carried listing notes are invalid')
   })
 
   it('carries the inbox return marker only from the opened advert', () => {

@@ -87,6 +87,7 @@ const createTestRuntime = () => {
     start: async () => publish({ status: 'no-household' }),
     createHousehold: async () => publish(active('Our home search')),
     joinHousehold: async () => undefined,
+    updateSourceListingNotes: async () => undefined,
     updateSourceListingRatings: async () => undefined,
     listHouseholds: () =>
       state.status === 'active'
@@ -189,6 +190,7 @@ describe('App Household boundary', () => {
       roadAccessRating: null,
       areaFeelingRating: null,
       viewRating: null,
+      notes: 'Plot-wide note',
       updatedAt: 100,
       candidatePlots: [
         {
@@ -238,6 +240,33 @@ describe('App Household boundary', () => {
       expect(runtime.resolveCandidatePlotLocation).toHaveBeenCalledTimes(1)
       expect(runtime.runCandidatePlotAutomaticChecks).toHaveBeenCalledTimes(1)
     })
+
+    const plotNotesPanel = document.querySelector<HTMLElement>('[aria-label="Plot notes"]')
+    const ratingsPanel = document.querySelector<HTMLElement>('[aria-label="Our ratings"]')
+    if (!plotNotesPanel || !ratingsPanel) throw new Error('Plot notes panel is missing')
+    expect(plotNotesPanel.previousElementSibling).toBe(ratingsPanel)
+    const plotNotes = plotNotesPanel.querySelector<HTMLTextAreaElement>('textarea')
+    const areaNotes = document.querySelector<HTMLTextAreaElement>('article.area textarea')
+    if (!plotNotes || !areaNotes) throw new Error('Notes editors are missing')
+    areaNotes.value = 'Area-only note'
+    areaNotes.dispatchEvent(new Event('input', { bubbles: true }))
+    expect(plotNotes.value).toBe('Plot-wide note')
+    let settlePlotNotes: (() => void) | undefined
+    runtime.updateSourceListingNotes = vi.fn(
+      () => new Promise<void>((resolve) => (settlePlotNotes = resolve)),
+    )
+    const savePlotNotes = findButton('Save notes')
+    if (!savePlotNotes) throw new Error('Plot notes save button is missing')
+    savePlotNotes.click()
+    await waitFor(() => {
+      expect(runtime.updateSourceListingNotes).toHaveBeenCalledWith('listing-id', 'Plot-wide note')
+      expect(savePlotNotes.disabled).toBe(true)
+    })
+    savePlotNotes.click()
+    expect(runtime.updateSourceListingNotes).toHaveBeenCalledTimes(1)
+    settlePlotNotes?.()
+    await waitFor(() => expect(savePlotNotes.disabled).toBe(false))
+    expect(areaNotes.value).toBe('Area-only note')
 
     let settleRating: (() => void) | undefined
     runtime.updateSourceListingRatings = vi.fn(
@@ -412,6 +441,7 @@ describe('App Household boundary', () => {
       roadAccessRating: null,
       areaFeelingRating: null,
       viewRating: null,
+      notes: null,
       updatedAt: 100,
       candidatePlots: [
         {
@@ -519,6 +549,7 @@ describe('App Household boundary', () => {
       roadAccessRating: null,
       areaFeelingRating: null,
       viewRating: null,
+      notes: null,
       updatedAt: 100,
       candidatePlots: [],
     }
@@ -564,6 +595,7 @@ describe('App Household boundary', () => {
       roadAccessRating: null,
       areaFeelingRating: null,
       viewRating: null,
+      notes: null,
       updatedAt: 100,
       candidatePlots: [],
     }
