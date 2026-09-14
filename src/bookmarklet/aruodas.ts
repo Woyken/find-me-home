@@ -79,7 +79,20 @@ const isLandAdvertPath = (pathname: string) => {
   if (!id) return false
   return pathname.startsWith('/sklypai') || id.startsWith('11-')
 }
-const returnTo = url.hash === '#find-me-home-return=import-inbox' ? 'import-inbox' : undefined
+const carriedFragment = new URLSearchParams(url.hash.slice(1))
+const returnTo =
+  carriedFragment.get('find-me-home-return') === 'import-inbox' ? 'import-inbox' : undefined
+const carriedNotes = () => {
+  const encoded = carriedFragment.get('find-me-home-notes')
+  if (encoded === null) return undefined
+  if (!/^[A-Za-z0-9_-]+$/.test(encoded)) throw new Error('The carried listing notes are invalid')
+  const binary = atob(encoded.replace(/-/g, '+').replace(/_/g, '/'))
+  return (
+    new TextDecoder('utf-8', { fatal: true })
+      .decode(Uint8Array.from(binary, (character) => character.charCodeAt(0)))
+      .trim() || undefined
+  )
+}
 url.search = ''
 url.hash = ''
 
@@ -189,6 +202,7 @@ const run = () => {
       priceEur?: number
       areaAres?: number
       thumbnail?: string
+      notes?: string
     }> = []
     const readPage = (page: Document) => {
       const cards = page.querySelectorAll<HTMLElement>(
@@ -242,6 +256,12 @@ const run = () => {
             ),
           ),
           thumbnail: thumbnail && allowedPhoto(thumbnail) ? thumbnail : undefined,
+          notes:
+            card
+              .querySelector<HTMLTextAreaElement>(
+                '.saved-advert-extras .note-text[data-uniqueid] textarea[name="note"]',
+              )
+              ?.value.trim() || undefined,
         })
       }
     }
@@ -334,6 +354,7 @@ const run = () => {
       listedAddress && plotNumber && !/\d/.test(listedAddress)
         ? `${listedAddress} ${plotNumber}`
         : listedAddress
+    const notes = carriedNotes()
     const payload = {
       url: url.toString(),
       title:
@@ -349,6 +370,7 @@ const run = () => {
       lng: coordinates ? Number(coordinates[2]) : undefined,
       locationConfidence: coordinates ? (hasExactMapPoint() ? 'exact' : 'approx') : 'unknown',
       description,
+      ...(notes ? { notes } : {}),
       photos: [...document.images]
         .map((image) => image.currentSrc || image.src || image.dataset.src)
         .filter((source): source is string => typeof source === 'string' && allowedPhoto(source))

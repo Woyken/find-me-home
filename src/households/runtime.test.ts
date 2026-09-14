@@ -1665,6 +1665,7 @@ describe('Household runtime', () => {
         removeCandidatePlot: async () => {
           throw new Error('Not used')
         },
+        updateSourceListingNotes: async () => undefined,
         updateSourceListingRatings: async () => undefined,
         applyCandidatePlotResolution: async () => false,
         applyCandidatePlotAutomaticChecks: async () => false,

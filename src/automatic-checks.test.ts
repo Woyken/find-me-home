@@ -19,6 +19,7 @@ const sourceListing = {
   roadAccessRating: null,
   areaFeelingRating: null,
   viewRating: null,
+  notes: null,
   updatedAt: 1,
 } as SourceListingRecord
 

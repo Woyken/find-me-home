@@ -20,7 +20,7 @@ export type SharedRecord =
   | { type: 'visit-plan'; record: VisitPlanRecord }
   | { type: 'import-inbox'; record: ImportInboxRecord }
 
-export const syncProtocolVersion = 2
+export const syncProtocolVersion = 3
 export type Manifest = { protocolVersion: number } & Partial<
   Record<SharedRecord['type'], Record<string, number>>
 >

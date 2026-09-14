@@ -35,6 +35,7 @@ const payloadSchema = v.strictObject({
     [],
   ),
   features: v.optional(v.pipe(v.array(v.pipe(v.string(), v.maxLength(500))), v.maxLength(100)), []),
+  notes: optionalText,
   utilities: v.optional(
     v.strictObject({
       electricity: optionalText,
@@ -57,6 +58,7 @@ const favoriteSchema = v.strictObject({
   priceEur: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(100_000_000))),
   areaAres: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(100_000))),
   thumbnail: v.optional(photo),
+  notes: optionalText,
 })
 
 const transportEnvelopeSchema = v.variant('kind', [
@@ -92,6 +94,7 @@ export type AruodasImport = {
   lng?: number
   locationConfidence: 'exact' | 'approx' | 'unknown'
   description?: string
+  notes?: string
   photos: string[]
   utilities?: {
     electricity?: string
@@ -130,6 +133,7 @@ const storedAruodasImportSchema = v.strictObject({
   lng: v.optional(v.pipe(v.number(), v.minValue(23), v.maxValue(27))),
   locationConfidence: v.picklist(['exact', 'approx', 'unknown']),
   description: optionalText,
+  notes: optionalText,
   photos: v.pipe(v.array(photo), v.maxLength(50, 'Import photos are limited to 50')),
   utilities: v.optional(
     v.strictObject({
@@ -173,6 +177,7 @@ const restoreStoredAruodasImport = (stored: v.InferOutput<typeof storedAruodasIm
     lng: stored.lng,
     locationConfidence: stored.locationConfidence,
     description: stored.description,
+    notes: stored.notes,
     photos: stored.photos,
     features: stored.raw.features,
     utilities: stored.utilities,
@@ -232,6 +237,7 @@ export const parseAruodasImport = (input: unknown): AruodasImport => {
     ...(payload.lat === undefined ? {} : { lat: payload.lat, lng: payload.lng }),
     locationConfidence: payload.locationConfidence,
     ...(payload.description === undefined ? {} : { description: payload.description.trim() }),
+    ...(payload.notes === undefined ? {} : { notes: payload.notes.trim() || undefined }),
     photos: [...new Set(payload.photos)],
     ...(payload.utilities === undefined ? {} : { utilities: payload.utilities }),
     raw: {
@@ -241,14 +247,14 @@ export const parseAruodasImport = (input: unknown): AruodasImport => {
   }
 }
 
-const toBase64Url = (text: string) => {
+export const encodeBase64UrlText = (text: string) => {
   const bytes = new TextEncoder().encode(text)
   let binary = ''
   for (const byte of bytes) binary += String.fromCharCode(byte)
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-const fromBase64Url = (value: string) => {
+export const decodeBase64UrlText = (value: string) => {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error('Invalid import fragment')
   const binary = atob(value.replace(/-/g, '+').replace(/_/g, '/'))
   return new TextDecoder('utf-8', { fatal: true }).decode(
@@ -265,7 +271,7 @@ export const encodeImportFragment = (input: unknown) => {
   if (text.length > MAX_IMPORT_TEXT_LENGTH) {
     throw new Error('Import payload must not exceed 100,000 characters')
   }
-  return toBase64Url(text)
+  return encodeBase64UrlText(text)
 }
 
 export const decodeImportFragment = (fragment: string) => {
@@ -276,7 +282,7 @@ export const decodeImportFragment = (fragment: string) => {
 
 export const decodeImportTransportFragment = (fragment: string): ImportTransport => {
   try {
-    const text = fromBase64Url(fragment)
+    const text = decodeBase64UrlText(fragment)
     if (text.length > MAX_IMPORT_TEXT_LENGTH) {
       throw new Error('Import payload must not exceed 100,000 characters')
     }
@@ -303,6 +309,7 @@ export const decodeImportTransportFragment = (fragment: string): ImportTransport
           url: `https://www.aruodas.lt/${item.sourceId}/`,
           title: item.title,
           description: item.description,
+          notes: item.notes,
           priceEur: item.priceEur,
           areaAres: item.areaAres,
           photos: item.thumbnail ? [item.thumbnail] : [],

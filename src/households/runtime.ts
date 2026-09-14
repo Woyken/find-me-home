@@ -46,6 +46,7 @@ export type HouseholdRuntime = {
     update: CandidatePlotUpdate,
   ) => Promise<void>
   removeCandidatePlot: (sourceListingId: string, candidatePlotId: string) => Promise<void>
+  updateSourceListingNotes: (sourceListingId: string, notes: string | null) => Promise<void>
   updateSourceListingRatings: (
     sourceListingId: string,
     ratings: Parameters<SourceListingRepository['updateSourceListingRatings']>[1],
@@ -871,6 +872,17 @@ export const createHouseholdRuntime = (dependencies: {
           sourceListingId,
           candidatePlotId,
           updatedAt,
+        ),
+      )
+    },
+    updateSourceListingNotes: (sourceListingId, notes) => {
+      if (notes !== null && typeof notes !== 'string')
+        throw new Error('Listing notes must be text or empty')
+      return serializeWrite(() =>
+        dependencies.sourceListings.updateSourceListingNotes(
+          sourceListingId,
+          notes,
+          mutationTime(),
         ),
       )
     },

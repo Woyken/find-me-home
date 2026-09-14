@@ -54,6 +54,7 @@ const listing = (candidatePlots: CandidatePlotRecord[]): SourceListingDetail => 
   roadAccessRating: null,
   areaFeelingRating: null,
   viewRating: null,
+  notes: null,
   updatedAt: 0,
   candidatePlots,
 })

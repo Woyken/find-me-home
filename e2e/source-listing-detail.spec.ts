@@ -89,7 +89,7 @@ test('presents complete listing details, gallery, marked areas, edits and listin
   await area.getByLabel('Area (ares)').fill('12,5')
   await area.getByRole('button', { name: 'Ours: Namų valda — edit' }).click()
   await area.getByRole('textbox', { name: 'Land purpose' }).fill('Namų valda')
-  await area.getByLabel('Our notes').fill('Sunny after lunch')
+  await area.getByLabel('Notes for this area').fill('Sunny after lunch')
   const ratings = page.getByRole('region', { name: 'Our ratings' })
   await ratings
     .getByRole('group', { name: 'Road & access' })
@@ -138,7 +138,7 @@ test('keeps marked areas compact and expands one editor at a time', async ({ pag
   await expect(firstArea.locator('.area-summary-figs')).toContainText('12,5 a')
   await expect(firstArea.locator('.area-summary .strip')).toBeVisible()
 
-  await firstArea.getByLabel('Our notes').fill('Keep this unsaved')
+  await firstArea.getByLabel('Notes for this area').fill('Keep this unsaved')
   await markByHand(page)
 
   const secondArea = page.locator('article.area').nth(1)
@@ -146,7 +146,7 @@ test('keeps marked areas compact and expands one editor at a time', async ({ pag
     'aria-expanded',
     'false',
   )
-  await expect(firstArea.getByLabel('Our notes')).toBeHidden()
+  await expect(firstArea.getByLabel('Notes for this area')).toBeHidden()
   await expect(secondArea.getByRole('button', { name: 'Collapse Marked area 2' })).toHaveAttribute(
     'aria-expanded',
     'true',
@@ -155,7 +155,7 @@ test('keeps marked areas compact and expands one editor at a time', async ({ pag
   await secondArea.getByRole('button', { name: 'Collapse Marked area 2' }).click()
   await expect(secondArea.getByLabel('Price (€)')).toBeHidden()
   await firstArea.getByRole('button', { name: 'Expand Marked area 1' }).click()
-  await expect(firstArea.getByLabel('Our notes')).toHaveValue('Keep this unsaved')
+  await expect(firstArea.getByLabel('Notes for this area')).toHaveValue('Keep this unsaved')
   await expect(secondArea.getByLabel('Price (€)')).toBeHidden()
 })
 
