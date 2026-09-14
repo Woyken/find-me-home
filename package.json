@@ -25,8 +25,8 @@
     "check": "oxfmt --check ."
   },
   "dependencies": {
-    "@solidjs/router": "2.0.0-next.21",
-    "@solidjs/web": "2.0.0-rc.6",
+    "@solidjs/router": "2.0.0-next.24",
+    "@solidjs/web": "2.0.0-rc.8",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/db": "^0.8.7",
     "@types/proj4": "^2.5.6",
@@ -41,7 +41,7 @@
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@solidjs/testing-library": "^0.8.10",
-    "@solidjs/vite-plugin": "3.0.0-next.39",
+    "@solidjs/vite-plugin": "3.0.0-next.43",
     "@types/geojson": "^7946.0.16",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^26.4.1",
