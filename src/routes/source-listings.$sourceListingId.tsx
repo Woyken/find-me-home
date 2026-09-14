@@ -379,6 +379,7 @@ export default function SourceListingPage(props: { params: Record<string, string
                 </button>
               </div>
               <ListingRatings sourceListing={listing()!} />
+              <ListingNotes sourceListing={listing} />
               <ListingRemoval class="listing-removal-aside" busy={busy} onRemove={remove} />
             </aside>
           </div>
@@ -798,7 +799,7 @@ function CandidatePlotEditor(props: {
             />
           </div>
           <label class="f" style={{ 'margin-top': '14px' }}>
-            Our notes
+            Notes for this area
             <textarea value={notes()} onInput={(event) => setNotes(event.currentTarget.value)} />
           </label>
         </section>
@@ -981,6 +982,75 @@ function RegistryBackedField(props: {
         </button>
       </div>
     </Show>
+  )
+}
+
+function ListingNotes(props: { sourceListing: () => SourceListingDetail | undefined }) {
+  const household = useHousehold()
+  const sourceListing = props.sourceListing
+  const [draft, setDraft] = createSignal('')
+  const [dirty, setDirty] = createSignal(false)
+  const [error, setError] = createSignal('')
+  const [listingNotes, setListingNotes] = createOptimistic(() => sourceListing()?.notes ?? null, {
+    loadingValue: null,
+  })
+  createEffect(
+    () => ({ notes: sourceListing()?.notes ?? null, dirty: dirty() }),
+    ({ notes, dirty: isDirty }) => {
+      if (!isDirty) setDraft(notes ?? '')
+    },
+  )
+  const save = action(function* () {
+    affects(sourceListing)
+    setError('')
+    try {
+      const next = optionalText(draft())
+      setListingNotes(next)
+      const current = sourceListing()
+      if (!current) throw new Error('Plot not found')
+      yield household.updateSourceListingNotes(current.id, next)
+      setDirty(false)
+    } catch (caught) {
+      setError(errorMessage(caught))
+      throw caught
+    }
+  })
+  const saving = () => isPending(sourceListing)
+  return (
+    <section class="panel soft" style={{ 'margin-top': '14px' }} aria-label="Plot notes">
+      <div class="sub-h">
+        <h3>Notes for this plot</h3>
+        <span class="small muted">Shared across all marked areas</span>
+      </div>
+      <label class="f" style={{ 'margin-top': '8px' }}>
+        Plot notes
+        <textarea
+          value={draft()}
+          onInput={(event) => {
+            setDirty(true)
+            setDraft(event.currentTarget.value)
+          }}
+        />
+      </label>
+      <Show when={listingNotes() !== null && !dirty()}>
+        <span class="small muted">Saved</span>
+      </Show>
+      <div class="rowline" style={{ 'margin-top': '10px' }}>
+        <button
+          class="btn"
+          type="button"
+          disabled={saving()}
+          onClick={() => void save().catch(() => undefined)}
+        >
+          {saving() ? 'Saving…' : 'Save notes'}
+        </button>
+        <Show when={error()}>
+          <span class="small bad" role="alert">
+            Couldn't save notes. {error()}
+          </span>
+        </Show>
+      </div>
+    </section>
   )
 }
 

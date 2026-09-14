@@ -13,6 +13,7 @@ import {
 import { CheckIcon } from '../components/icons'
 import { useHousehold } from '../households/context'
 import type { ImportInboxRecord } from '../imports/inbox-model'
+import { encodeBase64UrlText } from '../imports/aruodas'
 import { useImport } from '../imports/context'
 import { paths } from '../paths'
 import { formatAres, formatEur, formatPerAre, orDash } from '../format'
@@ -312,8 +313,11 @@ function Clipping(props: {
   onDrop: () => void
   dropDisabled: boolean
 }) {
-  const advertUrl = () =>
-    `https://www.aruodas.lt/${encodeURIComponent(props.item.sourceId)}/#find-me-home-return=import-inbox`
+  const advertUrl = () => {
+    const fragment = new URLSearchParams({ 'find-me-home-return': 'import-inbox' })
+    if (props.item.notes) fragment.set('find-me-home-notes', encodeBase64UrlText(props.item.notes))
+    return `https://www.aruodas.lt/${encodeURIComponent(props.item.sourceId)}/#${fragment}`
+  }
   const missing = () =>
     [
       props.item.title ? null : 'no title',

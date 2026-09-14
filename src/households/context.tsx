@@ -23,6 +23,7 @@ type HouseholdContextValue = {
   previewRegisteredParcel: HouseholdRuntime['previewRegisteredParcel']
   updateCandidatePlot: HouseholdRuntime['updateCandidatePlot']
   removeCandidatePlot: HouseholdRuntime['removeCandidatePlot']
+  updateSourceListingNotes: HouseholdRuntime['updateSourceListingNotes']
   updateSourceListingRatings: HouseholdRuntime['updateSourceListingRatings']
   resolveCandidatePlotLocation: HouseholdRuntime['resolveCandidatePlotLocation']
   isCandidatePlotLocationRunning: HouseholdRuntime['isCandidatePlotLocationRunning']
@@ -93,6 +94,8 @@ export function HouseholdProvider(props: ParentProps<{ runtime: HouseholdRuntime
           props.runtime.updateCandidatePlot(sourceListingId, candidatePlotId, update),
         removeCandidatePlot: (sourceListingId, candidatePlotId) =>
           props.runtime.removeCandidatePlot(sourceListingId, candidatePlotId),
+        updateSourceListingNotes: (sourceListingId, notes) =>
+          props.runtime.updateSourceListingNotes(sourceListingId, notes),
         updateSourceListingRatings: (sourceListingId, ratings) =>
           props.runtime.updateSourceListingRatings(sourceListingId, ratings),
         resolveCandidatePlotLocation: (sourceListingId, candidatePlotId) =>

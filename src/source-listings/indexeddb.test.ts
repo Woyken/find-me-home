@@ -560,3 +560,49 @@ describe('Household Source Listing repository', () => {
     upgraded.close()
   })
 })
+
+describe('imported listing notes', () => {
+  const noteReview = (listingNotes: string | null) => ({ ...review, listingNotes, plotNotes: null })
+
+  it('stores a normalized imported note on a new listing', async () => {
+    const repository = createIndexedDbSourceListingRepository('listing-note-new', {
+      now: () => 1,
+      uuid: () => 'plot',
+    })
+    await repository.open('household')
+    const result = await repository.saveReviewedImport(noteReview('  Pirma\neilutė  '), 1)
+    expect(repository.get(result.sourceListingId)?.notes).toBe('Pirma\neilutė')
+  })
+
+  it('does not duplicate an already imported listing note on re-import', async () => {
+    const repository = createIndexedDbSourceListingRepository('listing-note-duplicate', {
+      now: () => 1,
+      uuid: () => 'plot',
+    })
+    await repository.open('household')
+    const result = await repository.saveReviewedImport(noteReview('Pastaba'), 1)
+    await repository.saveReviewedImport(noteReview(' Pastaba '), 2)
+    expect(repository.get(result.sourceListingId)?.notes).toBe('Pastaba')
+  })
+
+  it('appends a distinct imported note without replacing existing listing notes', async () => {
+    const repository = createIndexedDbSourceListingRepository('listing-note-append', {
+      now: () => 1,
+      uuid: () => 'plot',
+    })
+    await repository.open('household')
+    const result = await repository.saveReviewedImport(noteReview('Pirma'), 1)
+    await repository.saveReviewedImport(noteReview('Antra'), 2)
+    expect(repository.get(result.sourceListingId)?.notes).toBe('Pirma\n\nAntra')
+  })
+
+  it('leaves an existing empty listing note unchanged when the import has no note', async () => {
+    const repository = createIndexedDbSourceListingRepository('listing-note-empty', {
+      now: () => 1,
+      uuid: () => 'plot',
+    })
+    await repository.open('household')
+    const result = await repository.saveReviewedImport(noteReview(null), 1)
+    expect(repository.get(result.sourceListingId)?.notes).toBeNull()
+  })
+})
